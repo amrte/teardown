@@ -7,7 +7,8 @@
 // windings warm, the PT100 controller starts the fans at 100 °C, the rating moves from AN to AF. A pure function of t.
 import {runSim} from '../kit/runtime.js';
 import {CUTS, createConsole, OVERLAYS, S_MAX} from './console.js';
-import {airSpeed, bLimb, bPeak, G, GRID, hotSpot, PHASES, R, stepHeat, TAP0, windRise} from './kin.js';
+import {airSpeed, bLimb, bPeak, CUR, designFor, G, GRID, hotSpot, PHASES, R, setDesign, stepHeat, TAP0, windRise} from './kin.js';
+import {DEFAULT_ORDER} from './catalog.js';
 import {createStage} from './stage.js';
 
 export const SCRIPT = [
@@ -20,11 +21,11 @@ export const SCRIPT = [
   {t: 12.8, ov: 'airflow'},
   {t: 15.2, cut: 'solid'},
   {t: 15.8, cam: 'taps'},
-  {t: 17.0, grid: [10000, 10250, 0.8]},
+  {t: 17.0, grid: [1, 1.025, 0.8]}, // × the rated HV voltage
   {t: 18.8, tap: 3},
   {t: 21.8, cam: 'hero'},
   {t: 22.5, ov: 'heat'},
-  {t: 23.3, load: [600e3, 1400e3, 1.6]},
+  {t: 23.3, load: [0.6, 1.4, 1.6]}, // × the AN rating
   {t: 26.5, cam: 'side'},
   {t: 30.3, cam: 'hero'},
 ];
@@ -46,9 +47,9 @@ const ss = (a, b, t) => smoother((t - a) / (b - a));
 export const thetaAt = (t) => 40 + (R.f * 360 * t) / PLAY;
 const LOAD_EV = SCRIPT.filter((e) => e.load);
 export const loadAt = (t) => {
-  let S = LOAD_EV[0].load[0];
-  for (const e of LOAD_EV) S = e.load[0] + (e.load[1] - e.load[0]) * ss(e.t, e.t + e.load[2], t);
-  return S;
+  let k = LOAD_EV[0].load[0];
+  for (const e of LOAD_EV) k = e.load[0] + (e.load[1] - e.load[0]) * ss(e.t, e.t + e.load[2], t);
+  return k * R.S;
 };
 export const tapAt = (t) => {
   let v = TAP0;
@@ -58,9 +59,9 @@ export const tapAt = (t) => {
 export const energisedAt = (t) => !SCRIPT.some((e) => e.tap !== undefined && t >= e.t && t < e.t + RELINK.close);
 const GRID_EV = SCRIPT.filter((e) => e.grid);
 export const gridAt = (t) => {
-  let U = R.U1;
-  for (const e of GRID_EV) U = e.grid[0] + (e.grid[1] - e.grid[0]) * ss(e.t, e.t + e.grid[2], t);
-  return U;
+  let k = 1;
+  for (const e of GRID_EV) k = e.grid[0] + (e.grid[1] - e.grid[0]) * ss(e.t, e.t + e.grid[2], t);
+  return k * R.U1;
 };
 export const cutAt = (t) => SCRIPT.filter((e) => e.cut && e.t <= t).pop()?.cut ?? 'solid';
 export const overlaysAt = (t) => {
@@ -80,9 +81,18 @@ export const ovLevel = (t, key) => {
   return k;
 };
 
-// heat, fans, air and fan rotors are integrated once at load, then read by t
+// heat, fans, air and fan rotors are integrated once per design, then read by t
 const DT = 1 / 120;
-const TAB = (() => {
+let TAB = null;
+let TAB_KEY = '';
+const tab = () => {
+  if (TAB_KEY !== CUR.key) {
+    TAB = integrate();
+    TAB_KEY = CUR.key;
+  }
+  return TAB;
+};
+const integrate = () => {
   const n = Math.ceil((DURATION + 1) / DT) + 2;
   const hs = new Float32Array(n);
   const fan = new Float32Array(n);
@@ -103,26 +113,33 @@ const TAB = (() => {
     sp += st.fan * 22 * DT;
   }
   return {hs, fan, fanOn, air, spin};
-})();
+};
 const read = (arr, t) => {
   const u = Math.max(0, Math.min(arr.length - 2, t / DT));
   const i = Math.floor(u);
   return arr[i] + (arr[i + 1] - arr[i]) * (u - i);
 };
-export const heatAt = (t) => ({hs: read(TAB.hs, t), fan: read(TAB.fan, t), fanOn: TAB.fanOn[Math.min(TAB.fanOn.length - 1, Math.round(t / DT))] === 1, air: read(TAB.air, t), spin: read(TAB.spin, t)});
+export const heatAt = (t) => {
+  const T = tab();
+  return {hs: read(T.hs, t), fan: read(T.fan, t), fanOn: T.fanOn[Math.min(T.fanOn.length - 1, Math.round(t / DT))] === 1, air: read(T.air, t), spin: read(T.spin, t)};
+};
 
 // ------------------------------------------------------------ views: metres and degrees, functions of u (s since on)
 const mx = (k) => G.limbX[k] * 0.001;
 // fixed views: the camera glides from one to the next and holds still
+// the views were framed on the 1000 kVA unit; other sizes scale the distance and height with the frame
+const REF = designFor(DEFAULT_ORDER).G;
+const sk = () => Math.max(0.6, G.frameLen / REF.frameLen, G.floor / REF.floor);
+const v = (o) => ({...o, d: o.d * sk(), ty: o.ty * sk()});
 export const VIEW_FN = {
-  open: () => ({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
-  hero: () => ({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
-  front: () => ({tx: 0, ty: -0.05, tz: 0, az: 5, el: 5, d: 4.8, sx: 0, sy: -18}),
-  top: () => ({tx: 0, ty: 0.0, tz: 0, az: 26, el: 44, d: 4.8, sx: 0, sy: -14}),
-  side: () => ({tx: 0.05, ty: -0.1, tz: 0.05, az: 58, el: 7, d: 5.0, sx: 0, sy: -20}),
-  limb: (u, k) => ({tx: mx(k), ty: -0.02, tz: 0, az: 11, el: 5, d: 2.8, sx: 0, sy: -18}),
+  open: () => v({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
+  hero: () => v({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
+  front: () => v({tx: 0, ty: -0.05, tz: 0, az: 5, el: 5, d: 4.8, sx: 0, sy: -18}),
+  top: () => v({tx: 0, ty: 0.0, tz: 0, az: 26, el: 44, d: 4.8, sx: 0, sy: -14}),
+  side: () => v({tx: 0.05, ty: -0.1, tz: 0.05, az: 58, el: 7, d: 5.0, sx: 0, sy: -20}),
+  limb: (u, k) => ({...v({tx: 0, ty: -0.02, tz: 0, az: 11, el: 5, d: 2.8, sx: 0, sy: -18}), tx: mx(k)}),
   // close on the tracked coil's tapping panel
-  taps: (u, k) => ({tx: mx(k), ty: 0.02, tz: (G.hv.ro + 20) * 0.001, az: -8, el: 4, d: 1.7, sx: 0, sy: -30}),
+  taps: (u, k) => ({tx: mx(k), ty: 0.02, tz: (G.hv.ro + 20) * 0.001, az: -8, el: 4, d: 1.7 * Math.pow(G.hv.h / REF.hv.h, 0.6), sx: 0, sy: -30}),
 };
 const VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
 export const camAt = (t, list = VIEWS, k = TRACK) => {
@@ -153,9 +170,9 @@ export const gridK = (U) => (U - GRID[0]) / (GRID[1] - GRID[0]);
 const REST = [[820, 470], [700, 430], [900, 520], [760, 380]];
 export function makeCursor(ui) {
   const EV = SCRIPT.filter((e) => e.t > 0).map((e) => {
-    if (e.load) return {t: e.t, spot: ui.loadKnob(e.load[0] / S_MAX), to: ui.loadKnob(e.load[1] / S_MAX), drag: e.load[2], knob: (tt) => ui.loadKnob(loadAt(tt) / S_MAX)};
+    if (e.load) return {t: e.t, spot: ui.loadKnob(e.load[0] / 1.5), to: ui.loadKnob(e.load[1] / 1.5), drag: e.load[2], knob: (tt) => ui.loadKnob(loadAt(tt) / R.S_AF)};
     if (e.tap !== undefined) return {t: e.t, spot: ui.tapSpot(e.tap), drag: 0};
-    if (e.grid) return {t: e.t, spot: ui.gridKnob(gridK(e.grid[0])), to: ui.gridKnob(gridK(e.grid[1])), drag: e.grid[2], knob: (tt) => ui.gridKnob(gridK(gridAt(tt)))};
+    if (e.grid) return {t: e.t, spot: ui.gridKnob((e.grid[0] - 0.95) / 0.1), to: ui.gridKnob((e.grid[1] - 0.95) / 0.1), drag: e.grid[2], knob: (tt) => ui.gridKnob(gridK(gridAt(tt)))};
     if (e.cut) return {t: e.t, spot: ui.spots[e.cut], drag: 0};
     if (e.ov) return {t: e.t, spot: ui.spots[e.ov], drag: 0};
     return {t: e.t, spot: ui.spots[e.cam], drag: 0};
@@ -202,7 +219,7 @@ export function makeCursor(ui) {
 // ------------------------------------------------------------ callouts per view
 const CALL = {
   hero: [
-    {a: 'hv', name: 'Cast-resin HV winding', sub: `${R.N1} TURNS · ${R.discs} DISCS`, l: [1168, 318], w: 140},
+    {a: 'hv', name: 'Cast-resin HV winding', sub: () => `${R.N1} TURNS · ${R.discs} DISCS`, l: [1168, 318], w: 140},
     {a: 'tap', name: 'Tap links', sub: 'OFF-CIRCUIT · ALL 3 PHASES', l: [440, 420], w: -140, hide: 'section'},
     {a: 'fan', name: 'Cross-flow fans', sub: 'AN → AF · +50 %', l: [1168, 690], w: 120},
     {a: 'lvBar', name: 'LV busbars', sub: '2U 2V 2W · 2N', l: [1190, 160], w: 100},
@@ -211,17 +228,17 @@ const CALL = {
     {a: 'delta', name: 'Delta tubes', sub: 'UPPER U-V-W · LOWER V-W-U', l: [440, 520], w: -150, hide: 'section'},
     {a: 'ptc', name: 'PT100 sensors', sub: 'IN ALL THREE WINDINGS', l: [1180, 150], w: 130},
     {a: 'earth', name: 'Earth terminal', sub: 'LOWER CLAMPING', l: [440, 680], w: -120, hide: 'section'},
-    {a: 'plate', name: 'Rating plate', sub: `${R.mass} KG · IEC 60076-11`, l: [440, 160], w: -126},
+    {a: 'plate', name: 'Rating plate', sub: () => `${R.mass} KG · IEC 60076-11`, l: [440, 160], w: -126},
   ],
   limb: [
-    {a: 'lvFaceL', name: 'LV foil winding', sub: `${R.N2} TURNS · 2 LAYERS`, l: [470, 200], w: -130, cut: 'section'},
+    {a: 'lvFaceL', name: 'LV foil winding', sub: () => `${R.N2} TURNS · ${G.lv.t.toFixed(1)} MM FOIL`, l: [470, 200], w: -130, cut: 'section'},
     {a: 'ductFace', name: 'Cooling duct', sub: '30 MM · AIR RISES', l: [1150, 200], w: 118, cut: 'section'},
-    {a: 'hvFace', name: 'HV disc winding', sub: `${R.discs} DISCS CAST IN RESIN`, l: [1150, 470], w: 136, cut: 'section'},
-    {a: 'coreFront', name: 'Stepped core', sub: `${Math.round(G.rc * 2)} MM · 7 STEPS · 1.6 T`, l: [470, 620], w: -140},
+    {a: 'hvFace', name: 'HV disc winding', sub: () => `${R.discs} DISCS CAST IN RESIN`, l: [1150, 470], w: 136, cut: 'section'},
+    {a: 'coreFront', name: 'Stepped core', sub: () => `${Math.round(G.rc * 2)} MM · 7 STEPS · ${R.Bpk.toFixed(2)} T`, l: [470, 620], w: -140},
   ],
   taps: [
     {a: 'tapPanel', name: 'Tap link', sub: 'STUDS 3 4 5 OVER 8 7 6', l: [1110, 560], w: 140},
-    {a: 'hvLead', name: 'HV cable', sub: `CLEARANCE ≥ ${R.clearance} MM · LI 75`, l: [1110, 170], w: 150},
+    {a: 'hvLead', name: 'HV cable', sub: () => `CLEARANCE ≥ ${R.clearance} MM · Um ${R.um} kV`, l: [1110, 170], w: 150},
   ],
   top: [
     {a: 'ductTop', name: 'Axial ducts', sub: 'THREE PER LIMB', l: [1170, 250], w: 110},
@@ -235,13 +252,16 @@ const CALL = {
 
 // ------------------------------------------------------------ the overlay's data for a frame
 export function makeConsoleFrame(ui, st) {
-  const A = st.unit.A;
-  const at = (a, k) => (typeof A[a] === 'function' ? A[a](k) : A[a]);
+  const at = (a, k) => {
+    const A = st.unit.A;
+    return typeof A[a] === 'function' ? A[a](k) : A[a];
+  };
   // live: the page's own state (overlays, cut, playback, pause); absent in the film
   return (t, {th, cam, k, S, tap, heat, cut, ov, cursor, since, live, Ug = R.U1, energised = true, relink = false}) => {
     const vis = ss(1.1, 1.8, since) * (ov.callouts ? 1 : 0) * (live && live.freeCam ? 0 : 1);
     const callouts = [];
-    for (const c of CALL[cam] || []) {
+    for (const c0 of CALL[cam] || []) {
+      const c = {...c0, sub: typeof c0.sub === 'function' ? c0.sub() : c0.sub};
       if ((c.cut && c.cut !== cut) || c.hide === cut) continue;
       const p = st.project(at(c.a, k));
       // a point under a panel or off the free middle of the screen gets no leader at all
@@ -301,6 +321,9 @@ export const unitState = ({th, tap, heat, cut, ovl, energised = true, Ug = R.U1}
 
 export function makeFilm() {
   return async ({canvas, capture}) => {
+    // the unit: ?config {design, group} from the capture, or the page's #order-no[-dyn11]
+    const pick = parseDesign(window.__SIM_CONFIG?.design ? `${window.__SIM_CONFIG.design}-${window.__SIM_CONFIG.group ?? 'dyn5'}` : location.hash);
+    setDesign(designFor(pick.order, pick.group));
     const st = createStage({canvas});
     const resize = () => st.resize(1600, 900, capture ? devicePixelRatio || 1 : Math.min(devicePixelRatio || 1, 2));
     resize();
@@ -331,5 +354,12 @@ export function makeFilm() {
   };
 }
 void PHASES;
+
+/** '#4GB6044-3DY05-0AA0-dyn11' → {order, group}; anything unknown falls back to the default unit, Dyn5 */
+export function parseDesign(h = '') {
+  const m = /(4GB[0-9A-Z]{4}-[0-9A-Z]{5}-[0-9A-Z]{4})(?:-(dyn5|dyn11))?/i.exec(h);
+  return {order: m ? m[1].toUpperCase() : DEFAULT_ORDER, group: m && /11/.test(m[2] ?? '') ? 'Dyn11' : 'Dyn5'};
+}
+export const designHash = () => `${R.order}${R.group === 'Dyn11' ? '-dyn11' : ''}`;
 
 export const run = () => runSim(DEFAULTS, makeFilm());

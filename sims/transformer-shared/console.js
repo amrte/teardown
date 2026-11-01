@@ -3,14 +3,16 @@
 // and winding temperature on the right, camera / cutaway / overlay toggles bottom right, the phase and HV tap pickers
 // bottom centre, and callouts with thin leaders into the unit. Fixed 1600 x 900 CSS layout; update(s) redraws every
 // live part from the frame's state, every number from kin.js.
-import {bLimb, CORE_D, GRID, hotSpot, operating, PHASES, R, tapName, TAPS, tapTurns} from './kin.js';
+import {bLimb, coreD, CUR, GRID, hotSpot, lvShift, operating, PHASES, R, tapName, TAPS, tapTurns} from './kin.js';
+import {CATALOG, reducedLoss, variantLabel} from './catalog.js';
 import {ACCENT} from './unit.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', acc: ACCENT, red: '#d6182b', blue: '#3d8fe0', warm: '#f07818', grey: '#5d6670'};
 export const CAMS = ['hero', 'front', 'top', 'side', 'limb', 'taps'];
 export const CUTS = ['solid', 'section', 'xray'];
 export const OVERLAYS = ['callouts', 'flux', 'airflow', 'heat', 'charts'];
-export const S_MAX = R.S_AF * 1.0;
+/** the load scale: the forced-air rating, 1.5 × AN */
+export const sMax = () => R.S_AF;
 const CSS = `
 #app{font-family:Inter,system-ui,sans-serif;color:${C.ink};-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
 .ui{position:absolute;inset:0;pointer-events:none}
@@ -24,6 +26,13 @@ const CSS = `
 .row{display:flex;justify-content:space-between;align-items:baseline;height:17px;font-size:9.4px;letter-spacing:1.2px;text-transform:uppercase;color:${C.mute};font-weight:500}
 .row b{color:${C.ink};font-weight:600;letter-spacing:.4px;font-size:10.5px;text-transform:none}
 .nt{text-transform:none}
+.card{position:absolute;left:334px;top:22px;width:612px;background:rgba(250,250,251,.98);border:1px solid ${C.line};box-shadow:0 8px 28px rgba(20,22,26,.12);pointer-events:auto;display:none;z-index:40;padding:14px 16px 12px}
+.card select{font:500 11px Inter,sans-serif;color:${C.ink};border:1px solid ${C.faint};background:#fff;height:24px;padding:0 4px;margin-right:6px}
+.card table{border-collapse:collapse;width:100%}
+.card td{font-size:10px;padding:2.5px 0;border-bottom:1px solid ${C.line};color:${C.mute};letter-spacing:.3px}
+.card td b{color:${C.ink};font-weight:600}
+.card td.n{text-align:right;color:${C.ink};font-variant-numeric:tabular-nums}
+.card .x{position:absolute;right:12px;top:10px;cursor:pointer;font-size:16px;color:${C.mute}}
 .cur{position:absolute;left:0;top:0;z-index:50;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
 .ring{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1.5px solid ${C.acc};opacity:0;z-index:49}
 `;
@@ -49,25 +58,29 @@ export function createConsole(app) {
     return n;
   };
 
+  const btn = {};
   // ------------------------------------------------------------ title and load
-  add(`<div class="pn" style="left:24px;top:22px;width:270px;height:238px"></div>`);
+  add(`<div class="pn" style="left:24px;top:22px;width:296px;height:246px"></div>`);
   add(`<div style="position:absolute;left:35px;top:33px;width:43px;height:3px;background:${C.acc}"></div>`);
   add(`<div style="position:absolute;left:35px;top:47px;font-size:24px;font-weight:700;letter-spacing:-.2px">Cast-Resin <span style="color:${C.acc}">·</span> Transformer</div>`);
-  add(`<div class="cp" style="position:absolute;left:35px;top:81px;font-weight:500;letter-spacing:1.7px;font-size:9.4px">1000 kVA AN / 1500 AF &nbsp;•&nbsp; 10 / 0.69 kV &nbsp;•&nbsp; ${R.group.toUpperCase()}</div>`);
-  const loadBig = add(`<div style="position:absolute;left:33px;top:103px;font-size:56px;font-weight:800;letter-spacing:-3.2px;color:${C.acc};line-height:1"></div>`);
-  const loadUnit = add(`<div style="position:absolute;top:141px;font-size:11px;font-weight:600;letter-spacing:1px">kVA</div>`);
+  const subLbl = add(`<div class="cp" style="position:absolute;left:35px;top:81px;font-weight:500;letter-spacing:1.2px;font-size:9px"></div>`);
+  // the catalog unit shown, and the button that opens the selector
+  const orderLbl = add(`<div class="cp" style="position:absolute;left:35px;top:96px;font-weight:600;letter-spacing:1px;font-size:9px;color:${C.mute}"></div>`);
+  btn.model = add(`<div class="tb" style="left:226px;top:91px;width:84px;height:19px;background:${C.ink};color:#fff;border-color:${C.ink}">CATALOG ▾</div>`);
+  const loadBig = add(`<div style="position:absolute;left:33px;top:117px;font-size:56px;font-weight:800;letter-spacing:-3.2px;color:${C.acc};line-height:1"></div>`);
+  const loadUnit = add(`<div style="position:absolute;top:155px;font-size:11px;font-weight:600;letter-spacing:1px">kVA</div>`);
   const BW = 247;
-  const bx = (S) => 35 + (S / S_MAX) * BW;
-  add(`<div style="position:absolute;left:35px;top:174px;width:${BW}px;height:9px;background:#e6e7e9"></div>`);
-  const afZone = add(`<div style="position:absolute;left:${bx(R.S)}px;top:174px;width:${bx(R.S_AF) - bx(R.S)}px;height:9px;background:repeating-linear-gradient(135deg,#d9dbde 0 3px,#e6e7e9 3px 6px)"></div>`);
-  const loadFill = add(`<div style="position:absolute;left:35px;top:174px;height:9px;background:${C.acc}"></div>`);
-  add(`<div style="position:absolute;left:${bx(R.S)}px;top:168px;width:1px;height:21px;background:${C.ink}"></div>`);
-  add(`<div class="cp mu" style="position:absolute;left:35px;top:191px;font-size:9px;font-weight:500">0</div>`);
-  add(`<div class="cp" style="position:absolute;right:${1600 - bx(R.S) + 5}px;top:191px;font-size:9px;font-weight:600">AN 1000</div>`);
-  const afLbl = add(`<div class="cp" style="position:absolute;right:${1600 - 282}px;top:191px;font-size:9px;font-weight:500">AF 1500</div>`);
-  add(`<div style="position:absolute;left:35px;top:209px;width:${BW}px;height:1px;background:${C.faint}"></div>`);
-  const loadLine = add(`<div style="position:absolute;left:35px;top:216px;font-size:12.5px;font-weight:500"></div>`);
-  const loadSub = add(`<div class="cp mu" style="position:absolute;left:35px;top:236px;font-size:9px;font-weight:500"></div>`);
+  const bx = (S) => 35 + (S / 1.5) * BW; // S per unit of the AN rating
+  add(`<div style="position:absolute;left:35px;top:188px;width:${BW}px;height:9px;background:#e6e7e9"></div>`);
+  const afZone = add(`<div style="position:absolute;left:${bx(1)}px;top:188px;width:${bx(1.5) - bx(1)}px;height:9px;background:repeating-linear-gradient(135deg,#d9dbde 0 3px,#e6e7e9 3px 6px)"></div>`);
+  const loadFill = add(`<div style="position:absolute;left:35px;top:188px;height:9px;background:${C.acc}"></div>`);
+  add(`<div style="position:absolute;left:${bx(1)}px;top:182px;width:1px;height:21px;background:${C.ink}"></div>`);
+  add(`<div class="cp mu" style="position:absolute;left:35px;top:205px;font-size:9px;font-weight:500">0</div>`);
+  const anLbl = add(`<div class="cp" style="position:absolute;right:${1600 - bx(1) + 5}px;top:205px;font-size:9px;font-weight:600"></div>`);
+  const afLbl = add(`<div class="cp" style="position:absolute;right:${1600 - 282}px;top:205px;font-size:9px;font-weight:500"></div>`);
+  add(`<div style="position:absolute;left:35px;top:223px;width:${BW}px;height:1px;background:${C.faint}"></div>`);
+  const loadLine = add(`<div style="position:absolute;left:35px;top:230px;font-size:12.5px;font-weight:500"></div>`);
+  const loadSub = add(`<div class="cp mu" style="position:absolute;left:35px;top:250px;font-size:9px;font-weight:500"></div>`);
 
   // ------------------------------------------------------------ phasors
   add(`<div class="pn" data-g="charts" style="left:35px;top:274px;width:247px;height:208px"></div>`);
@@ -89,7 +102,6 @@ export function createConsole(app) {
 
   // ------------------------------------------------------------ transport
   add(`<div class="pn" style="left:35px;top:742px;width:259px;height:143px"></div>`);
-  const btn = {};
   btn.pause = add(`<div class="tb" style="left:45px;top:750px;width:99px;height:26px;background:${C.acc};color:#fff;border-color:${C.acc};font-size:9.6px">❚❚ &nbsp;PAUSE</div>`);
   btn.back = add(`<div class="tb" style="left:149px;top:750px;width:66px;height:26px;font-size:9.6px">−30°</div>`);
   btn.fwd = add(`<div class="tb" style="left:219px;top:750px;width:66px;height:26px;font-size:9.6px">+30°</div>`);
@@ -174,6 +186,72 @@ export function createConsole(app) {
   // ------------------------------------------------------------ callouts, the pointer
   const callSvg = add(`<svg data-callouts style="position:absolute;inset:0;overflow:visible" width="1600" height="900"></svg>`);
   const callG = add(`<div data-callouts style="position:absolute;inset:0"></div>`);
+  // ------------------------------------------------------------ the catalog card
+  const card = add(`<div class="card">
+    <div class="x">×</div>
+    <div class="cp" style="font-weight:700">SELECT FROM CATALOG <span class="mu">— SIEMENS TV1 · 2013 · GEAFOL 100 TO 3150 kVA</span></div>
+    <div style="margin:9px 0 10px;display:flex;align-items:center"><select data-k="S"></select><select data-k="v" style="width:372px"></select><select data-k="g"><option value="Dyn5">Dyn5 · catalog</option><option value="Dyn11">Dyn11 · on request</option></select></div>
+    <div style="display:flex;gap:22px"><table data-k="fit"></table><table data-k="des"></table></div>
+    <div data-k="flags" style="font-size:9.5px;color:${C.red};margin-top:7px"></div>
+    <div style="font-size:9.2px;color:${C.mute};margin-top:6px;line-height:1.45">Outside: the catalog row (ratings, losses, uk, noise, weight, dimensions). Inside: a design generated to reproduce it
+    (turns, core, windings, ducts); catalogs do not publish these, so they are not the maker's drawings. The page title and nameplate use a fictional maker.</div>
+  </div>`);
+  const q = (k) => card.querySelector(`[data-k="${k}"]`);
+  const ratings = [...new Set(CATALOG.map((r) => r.S))];
+  q('S').innerHTML = ratings.map((S) => `<option value="${S}">${S} kVA${CATALOG.find((r) => r.S === S).std ? '' : ' (n.s.)'}</option>`).join('');
+  const fillVariants = (S, order) => {
+    q('v').innerHTML = CATALOG.filter((r) => r.S === S).map((r) => `<option value="${r.order}"${r.order === order ? ' selected' : ''}>${variantLabel(r)}</option>`).join('');
+  };
+  let onSelect = () => {};
+  const emit = () => onSelect(q('v').value, q('g').value);
+  q('S').addEventListener('change', () => {
+    const S = Number(q('S').value);
+    // keep HV voltage and uk where the new rating has them
+    const cur = CATALOG.find((r) => r.order === q('v').value);
+    const rows = CATALOG.filter((r) => r.S === S);
+    const pick = rows.find((r) => r.U1 === cur?.U1 && r.uk === cur?.uk && reducedLoss(r) === reducedLoss(cur)) ?? rows.find((r) => r.U1 === cur?.U1) ?? rows[0];
+    fillVariants(S, pick.order);
+    emit();
+  });
+  q('v').addEventListener('change', emit);
+  q('g').addEventListener('change', emit);
+  card.querySelector('.x').addEventListener('click', () => (card.style.display = 'none'));
+  for (const e of ['pointerdown', 'wheel', 'keydown']) card.addEventListener(e, (ev) => ev.stopPropagation());
+  const refreshCard = () => {
+    const D = CUR.D;
+    const {fit, R: r, G: g} = D;
+    q('S').value = String(r.kva);
+    fillVariants(r.kva, r.order);
+    q('g').value = r.group;
+    const pct = (a, b) => `${b >= a ? '+' : '−'}${Math.abs(((b - a) / a) * 100).toFixed(0)} %`;
+    const tr = (l, c, m, d) => `<tr><td>${l}</td><td class="n">${c}</td><td class="n">${m}</td><td class="n" style="color:${C.mute};width:44px">${d}</td></tr>`;
+    q('fit').innerHTML =
+      `<tr><td></td><td class="n mu" style="color:${C.mute}">CATALOG</td><td class="n" style="color:${C.mute}">MODEL</td><td></td></tr>` +
+      tr('No-load losses P0', `${r.P0} W`, `${f0(fit.P0[1])} W`, pct(fit.P0[0], fit.P0[1])) +
+      tr('Load losses Pk 120 °C', `${r.Pk} W`, `${f0(fit.Pk[1])} W`, '±0 %') +
+      tr('Impedance uk', `${r.uk} %`, `${fit.uk[1].toFixed(2)} %`, pct(fit.uk[0], fit.uk[1])) +
+      tr('Total weight', `${r.mass} kg`, `${f0(fit.mass[1])} kg`, pct(fit.mass[0], fit.mass[1])) +
+      tr('Length a', `${fit.length[0]} mm`, `${f0(fit.length[1])} mm`, pct(fit.length[0], fit.length[1])) +
+      tr('Height h', `${fit.height[0]} mm`, `${f0(fit.height[1])} mm`, pct(fit.height[0], fit.height[1])) +
+      tr('Width b · truck', `${g.width} mm`, `e ${g.truck.e} · ⌀${g.truck.f}`, '') +
+      tr('Noise LWA', `${r.LWA} dB`, '—', '') +
+      tr('Insulation HV / LV', r.insulation, '', '');
+    const dr = (l, v) => `<tr><td>${l}</td><td class="n"><b>${v}</b></td></tr>`;
+    const m = fit.masses;
+    q('des').innerHTML =
+      `<tr><td style="color:${C.ink};font-weight:600;letter-spacing:1px;font-size:9px">GENERATED DESIGN</td><td></td></tr>` +
+      dr('Turns HV : LV', `${r.N1} : ${r.N2} · ${fit.et.toFixed(2)} V/turn`) +
+      dr('Core', `⌀ ${f0(2 * g.rc)} mm · ${r.Bpk.toFixed(2)} T · ${f0(m.core)} kg`) +
+      dr('LV foil · HV discs', `${g.lv.t.toFixed(2)} mm · ${r.discs} × ${Math.round(r.N1 / r.discs)} turns`) +
+      dr('Current density LV / HV', `${fit.J2.toFixed(2)} / ${fit.J1.toFixed(2)} A/mm²`) +
+      dr('Main duct · limb pitch', `${f0(g.mainDuct)} · ${f0(g.pitch)} mm`) +
+      dr('Aluminium · resin · frame', `${f0(m.lv + m.hv)} · ${f0(m.resin)} · ${f0(m.frame)} kg`) +
+      dr('No-load current I0', `${fit.I0.A.toFixed(2)} A · ${fit.I0.pct.toFixed(2)} % (loss ${fit.I0.fe.toFixed(2)} A)`) +
+      dr('Inrush, worst case', `${f0(fit.inrush.peak)} A peak · ${fit.inrush.ratio.toFixed(1)} × In · τ ${fit.inrush.tau.toFixed(2)} s`);
+    q('flags').textContent = fit.flags.length ? `Fit limits: ${fit.flags.join(' · ')}` : '';
+  };
+  let cardKey = '';
+
   const ring = add(`<div class="ring"></div>`);
   const cur = add(`<div class="cur"><svg width="22" height="22" viewBox="0 0 34 34"><path d="M4 3 L30 13.5 L17.5 17.5 L13.5 30 Z" fill="#111" stroke="#fff" stroke-width="2.2" stroke-linejoin="round"/></svg></div>`);
   const centre = (n) => {
@@ -206,6 +284,14 @@ export function createConsole(app) {
     playKnob: (v) => [knobX(v), sPlay.y],
     btn,
     root: ui,
+    card,
+    set onSelect(fn) {
+      onSelect = fn;
+    },
+    toggleCard: () => {
+      card.style.display = card.style.display === 'block' ? 'none' : 'block';
+      cardKey = '';
+    },
     /**
      * s: {S (VA), th (deg), k (tracked limb), tap (index), tapF (float, animating), hs, fan, fanOn, trip, energised,
      *     cam, cut, overlays, callouts, cursor, playText, playK, paused}
@@ -220,7 +306,11 @@ export function createConsole(app) {
       // ---- load
       loadBig.textContent = f0(s.S / 1000);
       loadUnit.style.left = `${40 + loadBig.offsetWidth + 6}px`;
-      loadFill.style.width = `${((s.S / S_MAX) * BW).toFixed(1)}px`;
+      loadFill.style.width = `${((s.S / sMax()) * BW).toFixed(1)}px`;
+      subLbl.innerHTML = `${R.kva} kVA AN / ${R.kva * 1.5} AF &nbsp;•&nbsp; ${R.U1 / 1000} / ${R.U2 / 1000} <span class="nt">kV</span> &nbsp;•&nbsp; ${R.group.toUpperCase()}`;
+      orderLbl.innerHTML = `${R.order}${R.std ? '' : ' · NOT STANDARDISED'}`;
+      anLbl.textContent = `AN ${R.kva}`;
+      afLbl.textContent = `AF ${R.kva * 1.5}`;
       loadFill.style.background = s.S > R.S ? `linear-gradient(90deg, ${C.acc} ${((R.S / s.S) * 100).toFixed(1)}%, ${s.fanOn ? C.acc : C.red} 0)` : C.acc;
       afZone.style.opacity = s.fan > 0.5 ? '0.35' : '1';
       afLbl.style.color = s.fan > 0.5 ? C.ink : C.mute;
@@ -231,14 +321,15 @@ export function createConsole(app) {
           : `<span style="color:${C.red}">Tripped · breaker open</span>`;
       loadSub.innerHTML = `LV <b style="color:${C.ink}">${f0(o.U2 * on)} V</b> &nbsp;·&nbsp; HV <b style="color:${C.ink}">${f1(o.I1 * on)} A</b> &nbsp;·&nbsp; <span class="nt">η</span> <b style="color:${C.ink}">${(o.eta * 100).toFixed(2)} %</b>`;
       sLoad.val.textContent = `${f0(s.S / 1000)} kVA`;
-      sLoad.knob.style.left = `${knobX(s.S / S_MAX).toFixed(1)}px`;
+      sLoad.knob.style.left = `${knobX(s.S / sMax()).toFixed(1)}px`;
       sGrid.val.innerHTML = `${(s.Ug / 1000).toFixed(2)} <span class="nt">kV</span>`;
       sGrid.knob.style.left = `${knobX(gridK(s.Ug)).toFixed(1)}px`;
       sPlay.val.textContent = s.playText;
       sPlay.knob.style.left = `${knobX(s.playK).toFixed(1)}px`;
       btn.pause.innerHTML = s.paused ? '▶ &nbsp;PLAY' : '❚❚ &nbsp;PAUSE';
 
-      // ---- phasors: HV phase voltages (ink) and LV phase voltages (accent), rotating with θ; Dyn11 puts LV 30° ahead
+      // ---- phasors: HV phase voltages (ink) and LV phase voltages (accent), rotating with θ; Dyn11 puts LV 30° ahead,
+      // Dyn5 150° behind
       {
         const a0 = ((s.th % 360) + 360) % 360;
         phAng.innerHTML = `<span class="nt">θ</span> <b style="color:${C.ink}">${Math.round(a0)}°</b>`;
@@ -253,15 +344,16 @@ export function createConsole(app) {
           return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${col}" stroke-width="${w}"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${bold ? 2.6 : 1.8}" fill="${col}"/><text x="${lx.toFixed(1)}" y="${(ly + 3).toFixed(1)}" font-size="8" text-anchor="middle" fill="${col}" font-weight="${bold ? 700 : 500}">${lbl}</text>`;
         };
         for (let i = 0; i < 3; i++) h += vec(a0 - i * 120, 54, i === k ? C.ink : C.faint, i === k ? 1.6 : 1, ['A', 'B', 'C'][i], i === k);
-        for (let i = 0; i < 3; i++) h += vec(a0 + 30 - i * 120, 34 * (o.U2 / o.U2nl) * on + 0.01, i === k ? C.acc : '#f5c27a', i === k ? 2 : 1.2, ['a', 'b', 'c'][i], i === k);
+        const sh = lvShift();
+        for (let i = 0; i < 3; i++) h += vec(a0 + sh - i * 120, 34 * (o.U2 / o.U2nl) * on + 0.01, i === k ? C.acc : '#f5c27a', i === k ? 2 : 1.2, ['a', 'b', 'c'][i], i === k);
         // the 30° arc between the tracked pair
         const r = 22;
         const p0 = a0 - k * 120;
-        const p1 = p0 + 30;
+        const p1 = p0 + sh;
         const ax = (a) => (cx + r * Math.cos(a * D2R)).toFixed(1);
         const ay = (a) => (cy - r * Math.sin(a * D2R)).toFixed(1);
-        h += `<path d="M${ax(p0)} ${ay(p0)} A${r} ${r} 0 0 0 ${ax(p1)} ${ay(p1)}" fill="none" stroke="${C.acc}" stroke-width="1"/>`;
-        h += `<text x="4" y="12" font-size="7.4" letter-spacing="1" fill="${C.mute}">HV A B C</text><text x="4" y="22" font-size="7.4" letter-spacing="1" fill="${C.acc}">LV a b c</text><text x="222" y="12" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">LV LEADS 30°</text><text x="222" y="128" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">CLOCK 11</text>`;
+        h += `<path d="M${ax(p0)} ${ay(p0)} A${r} ${r} 0 0 ${sh > 0 ? 0 : 1} ${ax(p1)} ${ay(p1)}" fill="none" stroke="${C.acc}" stroke-width="1"/>`;
+        h += `<text x="4" y="12" font-size="7.4" letter-spacing="1" fill="${C.mute}">HV A B C</text><text x="4" y="22" font-size="7.4" letter-spacing="1" fill="${C.acc}">LV a b c</text><text x="222" y="12" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">${sh > 0 ? 'LV LEADS 30°' : 'LV LAGS 150°'}</text><text x="222" y="128" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">${R.group.toUpperCase()} · CLOCK ${R.clock}</text>`;
         ph.innerHTML = h;
         phFoot.innerHTML = `<b style="color:${C.ink}">${(Ug / 1000).toFixed(2)}</b> kV · √3 · ${R.N2} / <b style="color:${C.ink}">${o.N1}</b> = <b style="color:${C.ink}">${f0(o.U2nl)}</b> V no load`;
       }
@@ -301,7 +393,7 @@ export function createConsole(app) {
         row('LV phase voltage', `${f0(o.U2ph * on)} V`) +
         row('Flux density peak', `${f2(o.B * on)} T`) +
         row('Volts per turn', `${f1((R.U1 / o.N1) * on)} V`) +
-        row('Core · step fill', `${Math.round(CORE_D)} mm · 7 steps`);
+        row('No-load current', `${f1((CUR.D.fit.I0.A * (o.B / R.Bpk) ** 2) * on)} A · ${CUR.D.fit.I0.pct.toFixed(2)} %`);
 
       // ---- losses: iron constant, copper with K², the efficiency curve over load with the dot at S
       {
@@ -311,22 +403,28 @@ export function createConsole(app) {
         let h = '';
         // stacked bar of the two losses, out of 25 kW
         const bw = W - 24;
-        const sc = (p) => (p / 25000) * bw;
+        const pMax = Math.ceil((R.P0 + 2.25 * R.Pk) / 5000) * 5000;
+        const sc = (p) => (p / pMax) * bw;
         h += `<rect x="12" y="2" width="${bw}" height="9" fill="#e6e7e9"/><rect x="12" y="2" width="${sc(o.P0 * on).toFixed(1)}" height="9" fill="${C.grey}"/><rect x="${(12 + sc(o.P0 * on)).toFixed(1)}" y="2" width="${sc(o.Pcu * on).toFixed(1)}" height="9" fill="${C.acc}"/>`;
-        h += `<text x="12" y="21" font-size="6.5" fill="${C.mute}">0</text><text x="${12 + bw}" y="21" font-size="6.5" text-anchor="end" fill="${C.mute}">25 kW</text>`;
+        h += `<text x="12" y="21" font-size="6.5" fill="${C.mute}">0</text><text x="${12 + bw}" y="21" font-size="6.5" text-anchor="end" fill="${C.mute}">${pMax / 1000} kW</text>`;
         // η over load
-        const X = (S) => 22 + (S / S_MAX) * (W - 32);
-        const Y = (e) => 112 - ((e - 0.975) / (0.992 - 0.975)) * 80;
-        for (const [e, l] of [[0.99, '99.0'], [0.98, '98.0']]) h += `<line x1="${X(0)}" x2="${X(S_MAX)}" y1="${Y(e)}" y2="${Y(e)}" stroke="${C.line}" stroke-width=".8"/><text x="18" y="${Y(e) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${l}</text>`;
+        const SM = sMax();
+        const X = (S) => 22 + (S / SM) * (W - 32);
+        const etas = [];
+        for (let i = 2; i <= 50; i++) etas.push([(i / 50) * SM, operating((i / 50) * SM, 0.9, tapI, Ug).eta]);
+        const eLo = Math.floor(Math.min(...etas.map((e) => e[1])) * 200) / 200;
+        const eHi = Math.ceil(Math.max(...etas.map((e) => e[1])) * 1000 + 1) / 1000;
+        const Y = (e) => 112 - ((e - eLo) / (eHi - eLo)) * 80;
+        for (const e of [eLo + (eHi - eLo) * 0.25, eLo + (eHi - eLo) * 0.75].map((x) => Math.round(x * 1000) / 1000)) h += `<line x1="${X(0)}" x2="${X(SM)}" y1="${Y(e)}" y2="${Y(e)}" stroke="${C.line}" stroke-width=".8"/><text x="18" y="${Y(e) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${(e * 100).toFixed(1)}</text>`;
         let p = '';
-        for (let S = 60e3; S <= S_MAX; S += 30e3) p += `${p ? 'L' : 'M'}${X(S).toFixed(1)} ${Y(Math.max(0.975, operating(S, 0.9, tapI, Ug).eta)).toFixed(1)}`;
+        for (const [S, e] of etas) p += `${p ? 'L' : 'M'}${X(S).toFixed(1)} ${Y(Math.max(eLo, e)).toFixed(1)}`;
         h += `<path d="${p}" fill="none" stroke="${C.ink}" stroke-width="1.3"/>`;
         // peak efficiency where copper = iron losses
         const Sopt = R.S * Math.sqrt(o.P0 / R.Pk);
-        h += `<line x1="${X(Sopt)}" x2="${X(Sopt)}" y1="${Y(0.992)}" y2="${Y(0.975)}" stroke="${C.faint}" stroke-dasharray="2 2"/><text x="${X(Sopt) + 3}" y="${Y(0.9915)}" font-size="6.2" letter-spacing=".8" fill="${C.mute}">PEAK η · P<tspan font-size="5" dy="1">CU</tspan><tspan dy="-1"> = P</tspan><tspan font-size="5" dy="1">FE</tspan></text>`;
-        if (on && s.S > 30e3) h += `<circle cx="${X(s.S).toFixed(1)}" cy="${Y(Math.max(0.975, o.eta)).toFixed(1)}" r="3.2" fill="${C.acc}"/>`;
-        for (const S of [0, 500e3, 1000e3, 1500e3]) h += `<text x="${X(S)}" y="124" font-size="6.5" text-anchor="middle" fill="${C.mute}">${S / 1000}</text>`;
-        h += `<text x="${X(S_MAX)}" y="133" font-size="6.2" letter-spacing="1" text-anchor="end" fill="${C.mute}">LOAD kVA · ROOM AIR ${f0(o.air * on)} m³/h</text>`;
+        h += `<line x1="${X(Sopt)}" x2="${X(Sopt)}" y1="${Y(eHi)}" y2="${Y(eLo)}" stroke="${C.faint}" stroke-dasharray="2 2"/><text x="${X(Sopt) + 3}" y="${Y(eHi) + 6}" font-size="6.2" letter-spacing=".8" fill="${C.mute}">PEAK η · P<tspan font-size="5" dy="1">CU</tspan><tspan dy="-1"> = P</tspan><tspan font-size="5" dy="1">FE</tspan></text>`;
+        if (on && s.S > 30e3) h += `<circle cx="${X(s.S).toFixed(1)}" cy="${Y(Math.max(eLo, o.eta)).toFixed(1)}" r="3.2" fill="${C.acc}"/>`;
+        for (const f of [0, 1 / 3, 2 / 3, 1]) h += `<text x="${X(f * SM)}" y="124" font-size="6.5" text-anchor="middle" fill="${C.mute}">${Math.round((f * SM) / 1000)}</text>`;
+        h += `<text x="${X(SM)}" y="133" font-size="6.2" letter-spacing="1" text-anchor="end" fill="${C.mute}">LOAD kVA · ROOM AIR ${f0(o.air * on)} m³/h</text>`;
         ef.innerHTML = h;
       }
 
@@ -350,7 +448,7 @@ export function createConsole(app) {
         tRows.innerHTML =
           row('Hot spot (est.) · ambient', `${Math.round(hotSpot(t))} · ${R.amb} °C`) +
           row('Fans', fanTxt) +
-          row('Rating now', s.fan > 0.5 ? '1500 kVA' : '1000 kVA') +
+          row('Rating now', `${s.fan > 0.5 ? R.kva * 1.5 : R.kva} kVA`) +
           row('Stray field at 3 m', `${f1(o.stray * on)} µT`) +
           row('Thermal time', `τ ${R.tau} min · ×800`);
         btn.reset.style.display = s.trip ? 'flex' : 'none';
@@ -372,8 +470,13 @@ export function createConsole(app) {
           h += `<text x="${x}" y="41" font-size="7" text-anchor="middle" fill="${t ? C.ink : C.mute}" letter-spacing=".5">${(p.V / 1000).toFixed(p.V % 500 ? 2 : 1)}</text>`;
         });
         pk.innerHTML = h;
-        const match = Math.abs(o.U2nl - R.U2) < 6;
+        const match = Math.abs(o.U2nl - R.U2) < R.U2 * 0.012;
         tapSub.innerHTML = `LINK <b style="color:${C.ink}">${tapName(tapI)}</b> · <b style="color:${C.ink}">${TAPS[tapI].V}</b> V TAP · <b style="color:${C.ink}">${tapTurns(tapI)}</b> TURNS &nbsp;·&nbsp; GRID <b style="color:${C.ink}">${(Ug / 1000).toFixed(2)} kV</b> → LV <b style="color:${match ? C.ink : C.red}">${f0(o.U2nl)} V</b>${match ? '' : ` · <span style="color:${C.red}">RELINK</span>`}`;
+      }
+
+      if (card.style.display === 'block' && cardKey !== CUR.key) {
+        refreshCard();
+        cardKey = CUR.key;
       }
 
       // ---- toggles

@@ -6,9 +6,9 @@
 // with the operator's cursor, looped; a click, drag, wheel or key hands control to the visitor, 25 s of quiet hands
 // it back.
 import {warmComposer} from '../kit/warm.js';
-import {CAMS, createConsole, CUTS, OVERLAYS, S_MAX} from './console.js';
-import {camAt, camName, cutAt, DURATION, energisedAt, gridAt, gridK, heatAt, loadAt, makeConsoleFrame, makeCursor, overlaysAt, ovLevel, PLAY, RELINK, SCRIPT, tapAt, TAU_S, TRACK, unitState, VIEW_FN, viewStart} from './film.js';
-import {airSpeed, GRID, PHASES, R, stepHeat, TAP0, TAPS, windRise} from './kin.js';
+import {CAMS, createConsole, CUTS, OVERLAYS, sMax} from './console.js';
+import {camAt, camName, cutAt, designHash, DURATION, parseDesign, energisedAt, gridAt, gridK, heatAt, loadAt, makeConsoleFrame, makeCursor, overlaysAt, ovLevel, PLAY, RELINK, SCRIPT, tapAt, TAU_S, TRACK, unitState, VIEW_FN, viewStart} from './film.js';
+import {airSpeed, designFor, GRID, PHASES, R, setDesign, stepHeat, TAP0, TAPS, windRise} from './kin.js';
 import {createStage} from './stage.js';
 
 const W = 1600;
@@ -51,6 +51,11 @@ export function runLive() {
   const canvas = document.createElement('canvas');
   canvas.id = 'gl';
   app.appendChild(canvas);
+  // the unit from the page's #order-no[-dyn11], or the default
+  {
+    const p = parseDesign(location.hash);
+    setDesign(designFor(p.order, p.group));
+  }
   const st = createStage({canvas});
   const ui = createConsole(app);
   const tourCursor = makeCursor(ui);
@@ -198,6 +203,32 @@ export function runLive() {
       paused = true;
       th += d;
     });
+  // the catalog: a new unit rebuilds the model and starts it at its own rated values
+  const choose = (order, group) => {
+    st.selectDesign(order, group);
+    tap = tapF = TAP0;
+    Ug = UgTarget = R.U1;
+    S = Starget = 0.6 * R.S;
+    relink = null;
+    energised = true;
+    Object.assign(heat, {hs: R.amb + windRise(S, 0), fan: 0, fanOn: false, trip: false});
+    const h = `#${designHash()}`;
+    if (location.hash !== h) history.replaceState(null, '', h);
+  };
+  ui.onSelect = (order, group) => {
+    takeOver();
+    choose(order, group);
+  };
+  ui.btn.model.addEventListener('click', () => {
+    takeOver();
+    pulseBtn('model');
+    ui.toggleCard();
+  });
+  addEventListener('hashchange', () => {
+    const p = parseDesign(location.hash);
+    takeOver();
+    choose(p.order, p.group);
+  });
   ui.btn.reset.addEventListener('click', () => {
     takeOver();
     if (heat.hs < R.tc.alarm && !relink) {
@@ -255,7 +286,7 @@ export function runLive() {
     });
     ui.root.appendChild(d);
   };
-  slider(ui.loadKnob, (v) => (Starget = Math.round((v * S_MAX) / 10e3) * 10e3));
+  slider(ui.loadKnob, (v) => (Starget = Math.round((v * sMax()) / 1e3) * 1e3));
   slider(ui.gridKnob, (v) => (UgTarget = Math.round((GRID[0] + v * (GRID[1] - GRID[0])) / 10) * 10));
   void gridK;
   slider(ui.playKnob, (v) => (playI = Math.round(v * (PLAYS.length - 1))));
@@ -273,8 +304,8 @@ export function runLive() {
     } else if (key === 'arrowright') {
       paused = true;
       th += 30;
-    } else if (key === 'arrowup') Starget = clamp(Starget + 100e3, 0, S_MAX);
-    else if (key === 'arrowdown') Starget = clamp(Starget - 100e3, 0, S_MAX);
+    } else if (key === 'arrowup') Starget = clamp(Starget + 0.1 * R.S, 0, sMax());
+    else if (key === 'arrowdown') Starget = clamp(Starget - 0.1 * R.S, 0, sMax());
     else return;
     e.preventDefault();
   });
@@ -419,7 +450,7 @@ export function runLive() {
       cursor,
       since,
       Ug,
-      live: {freeCam: !AP.on && (Math.abs(off.az) > 2 || Math.abs(off.el) > 2 || Math.abs(off.k - 1) > 0.04), trip: heat.trip, energised, relink: AP.on ? !energised : !!relink, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
+      live: {freeCam: ui.card.style.display === 'block' || !AP.on && (Math.abs(off.az) > 2 || Math.abs(off.el) > 2 || Math.abs(off.k - 1) > 0.04), trip: heat.trip, energised, relink: AP.on ? !energised : !!relink, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
     });
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);

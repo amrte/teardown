@@ -43,7 +43,7 @@ node sims/build.mjs strandbeest-live
 node sims/build.mjs transformer-live
 ```
 
-`transformer-*` is a 1000 kVA, 10 / 0.69 kV, Dyn11 cast-resin dry-type transformer built from the figures in Siemens' GEAFOL planning guidelines (losses, AN → AF fan rating, ventilation) and its cast-resin operating manual (tap links 3 4 5 over 8 7 6 changed off-circuit, delta tubes, PT100 controller settings, nameplate). It is driven by the electrical angle and the load: flux in every limb and yoke, phasors, currents, losses, efficiency, the hot spot and the fans all come from `transformer-shared/kin.js`.
+`transformer-*` covers every unit from 100 to 3150 kVA in Siemens' GEAFOL cast-resin catalog (TV1 · 2013, 122 order numbers), in Dyn5 or Dyn11. Pick one with the CATALOG button or open `transformer-live.html#4GB6044-3DY05-0AA0` (add `-dyn11` for Dyn11). The catalog row sets the ratings, losses, uk, noise, weight and dimensions; `transformer-shared/design.js` generates the inside (turns, core, windings, ducts) so the model reproduces them, and the card shows catalog against model. Tap links, delta tubes and the PT100 controller follow the operating manual; ventilation and stray field follow the planning guidelines.
 
 ## What is inside
 

@@ -7,7 +7,7 @@ import {GTAOPass} from 'three/addons/postprocessing/GTAOPass.js';
 import {OutputPass} from 'three/addons/postprocessing/OutputPass.js';
 import {Pass} from 'three/addons/postprocessing/Pass.js';
 import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
-import {G} from './kin.js';
+import {CUR, designFor, G, setDesign} from './kin.js';
 import {buildUnit} from './unit.js';
 
 const V3 = THREE.Vector3;
@@ -99,7 +99,7 @@ export function createStage({canvas}) {
   scene.add(sun, sun.target);
   scene.add(new THREE.HemisphereLight('#ffffff', '#cfd0d3', 0.75));
 
-  const FLOOR_Y = G.floor * 0.001;
+  const FLOOR_Y = -0.9;
   const shade = new THREE.Mesh(
     new THREE.PlaneGeometry(30, 30),
     new THREE.ShadowMaterial({color: '#5d636c', opacity: 0.3, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8}),
@@ -109,10 +109,41 @@ export function createStage({canvas}) {
   shade.receiveShadow = true;
   scene.add(shade);
 
-  const unit = buildUnit();
+  let unit = buildUnit();
   scene.add(unit.root);
+  // size the shadow and the floor to the current design
+  const fitScene = () => {
+    shade.position.y = G.floor * 0.001;
+    const r = Math.max(G.frameLen, -G.floor * 2) * 0.001 * 0.75;
+    Object.assign(sun.shadow.camera, {left: -r, right: r, top: r, bottom: -r});
+    sun.shadow.camera.updateProjectionMatrix();
+  };
+  fitScene();
 
   const size = {w: 1600, h: 900, pr: 1};
+  const dispose = (o) =>
+    o.traverse((n) => {
+      n.geometry?.dispose();
+      for (const m of [n.material].flat()) {
+        if (!m) continue;
+        m.map?.dispose();
+        m.dispose();
+      }
+    });
+  /** switch to catalog order no. order with vector group group: rebuild the unit around the new design */
+  const selectDesign = (order, group) => {
+    const D = designFor(order, group);
+    if (CUR.key === `${D.R.order}-${D.R.group}` && st.unit) return D;
+    setDesign(D);
+    scene.remove(unit.root);
+    dispose(unit.root);
+    unit = buildUnit();
+    scene.add(unit.root);
+    st.unit = unit;
+    fitScene();
+    unit.setPointScale(size.pr * (size.h / 900));
+    return D;
+  };
   const resize = (w, h, pr) => {
     size.w = w;
     size.h = h;
@@ -157,5 +188,6 @@ export function createStage({canvas}) {
       sun.shadow.map = null;
     }
   };
-  return {renderer, scene, camera, unit, composer, gtao, sun, resize, frame, project, size, FLOOR_Y, setQuality};
+  const st = {renderer, scene, camera, unit, composer, gtao, sun, resize, frame, project, size, FLOOR_Y, setQuality, selectDesign};
+  return st;
 }

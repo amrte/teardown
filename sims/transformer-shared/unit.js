@@ -270,6 +270,12 @@ export function buildUnit() {
   const yc = win / 2 + a1 * rc; // yoke centre height
   const yokeTop = yc + a1 * rc;
   const zFace = bn * rc; // core front face
+  const fm = G.frameMargin; // frame channel beyond the yoke
+  // terminal studs sit 70 mm in from the coil ends (less on short coils); the tap panel scales to fit between them
+  const tOff = Math.min(70, hv.h * 0.14);
+  const sp = Math.min(1, Math.max(0.45, (hv.h / 2 - tOff - 34) / 75));
+  // the gap between the HV coil top and the frame flange: busbars and sensor wires run through it
+  const yGap = (hv.h / 2 + G.win / 2 - fm) / 2;
 
   // ------------------------------------------------------------ core: 3 limbs, top and bottom yokes in halves
   const shape = stepShape(rc);
@@ -343,7 +349,7 @@ export function buildUnit() {
     }
     // rubber pads between the coil ends and the frames' flanges, at 45° off the axes
     const pads = [];
-    const padTop = G.win / 2 - 15;
+    const padTop = G.win / 2 - fm;
     for (const sy of [1, -1]) {
       for (let i = 0; i < 4; i++) {
         const a = Math.PI / 4 + (i * Math.PI) / 2;
@@ -359,7 +365,7 @@ export function buildUnit() {
     const front = new THREE.Group();
     grp.add(front);
     const bossR = hv.ro + 8;
-    for (const y of [hv.h / 2 - 70, -hv.h / 2 + 70]) {
+    for (const y of [hv.h / 2 - tOff, -hv.h / 2 + tOff]) {
       const b = add(front, new THREE.CylinderGeometry(22, 26, 30, 32), M.resin, [0, y, bossR]);
       b.rotation.x = Math.PI / 2;
       ghostable.push([b, M.resin, M.resinGhost]);
@@ -368,21 +374,23 @@ export function buildUnit() {
     }
     // the tapping panel (manual 8.1): brass studs 3 4 5 over 8 7 6 cast into a resin boss, number plates above and
     // below, one bolted link from a top stud to a bottom stud
-    const zp = hv.ro + 4;
-    const panel = add(front, new THREE.BoxGeometry(104, 150, 22), M.resin, [0, 0, zp]);
+    const tapG = new THREE.Group();
+    tapG.position.z = hv.ro + 4;
+    tapG.scale.setScalar(sp);
+    front.add(tapG);
+    const panel = add(tapG, new THREE.BoxGeometry(104, 150, 22), M.resin);
     ghostable.push([panel, M.resin, M.resinGhost]);
     for (const [y, nums] of [[52, '3   4   5'], [-52, '8   7   6']]) {
-      const pl = add(front, new THREE.PlaneGeometry(84, 18), new THREE.MeshStandardMaterial({map: numTex(nums), roughness: 0.5}), [0, y, zp + 11.5]);
+      const pl = add(tapG, new THREE.PlaneGeometry(84, 18), new THREE.MeshStandardMaterial({map: numTex(nums), roughness: 0.5}), [0, y, 11.5]);
       pl.castShadow = false;
     }
-    for (const [n, p] of Object.entries(STUD)) {
-      const b = add(front, new THREE.CylinderGeometry(9, 9, 6, 24), M.brass, [p[0], p[1], zp + 13]);
+    for (const p of Object.values(STUD)) {
+      const b = add(tapG, new THREE.CylinderGeometry(9, 9, 6, 24), M.brass, [p[0], p[1], 13]);
       b.rotation.x = Math.PI / 2;
-      void n;
     }
     // the link and its two bolts; update() places it between the studs of the current tap
     const link = new THREE.Group();
-    front.add(link);
+    tapG.add(link);
     const bar = add(link, new THREE.BoxGeometry(1, 18, 5), M.tin);
     const bolts = [0, 1].map(() => {
       const h = add(link, new THREE.CylinderGeometry(8, 8, 7, 6), M.steel);
@@ -390,12 +398,13 @@ export function buildUnit() {
       return h;
     });
     const studs = STUD;
+    const zp = 0;
     return {grp, full, cut, front, sticks, pads, link, bar, bolts, studs, zp, x, phase: PHASES[k]};
   });
 
   // ------------------------------------------------------------ frames
   const frames = [];
-  const chH = 2 * a1 * rc + 30;
+  const chH = 2 * a1 * rc + 2 * fm;
   const flange = 70;
   const chT = 8;
   const chZ = zFace + 6;
@@ -417,7 +426,7 @@ export function buildUnit() {
     g.rotateY(Math.PI / 2); // extrusion → x, shape x (z depth) → −z
     return g;
   };
-  const chLen = G.len + 70;
+  const chLen = Math.max(G.len + 70, G.frameLen); // the catalog length is over the frame
   for (const sy of [1, -1]) {
     for (const sz of [1, -1]) {
       const m = add(root, channel(chLen), M.frame, [0, sy * yc, sz * chZ]);
@@ -445,18 +454,22 @@ export function buildUnit() {
       sh.holes.push(hole);
       const g = new THREE.ExtrudeGeometry(sh, {depth: 14, bevelEnabled: false, curveSegments: 16});
       g.translate(0, 0, -7);
-      frames.push(add(root, g, M.frame, [sx * (chLen / 2 - 90), yokeTop + 15, sz * (chZ + flange - 20)]));
+      frames.push(add(root, g, M.frame, [sx * (chLen / 2 - 90), yokeTop + fm, sz * (chZ + flange - 20)]));
     }
   // skids under the bottom frame, wheels at their ends
-  const skidY = -yokeTop - 15 - 60;
-  const skidLen = 2 * (chZ + flange) + 160;
+  // the truck (catalog p. 15): two skids e apart, wheels f in diameter and g wide, the skids k deep; width b over all
+  const tr = G.truck;
+  const skidY = G.floor + tr.f + tr.k / 2;
+  const skidLen = Math.max(G.width, 2 * (chZ + flange) + 120);
   for (const sx of [-1, 1]) {
-    const x = sx * pitch * 0.82;
-    add(root, new THREE.BoxGeometry(110, 120, skidLen), M.frame, [x, skidY, 0]);
+    const x = (sx * tr.e) / 2;
+    add(root, new THREE.BoxGeometry(Math.max(80, tr.g + 50), tr.k, skidLen), M.frame, [x, skidY, 0]);
+    // a post from the skid up to the bottom frame
+    add(root, new THREE.BoxGeometry(Math.max(80, tr.g + 50), 30, 2 * chZ + 40), M.frame, [x, skidY + tr.k / 2 + 15, 0]);
     for (const sz of [-1, 1]) {
-      const w = add(root, new THREE.CylinderGeometry(62, 62, 44, 40), M.dark, [x, G.floor + 62, sz * (skidLen / 2 - 90)]);
+      const w = add(root, new THREE.CylinderGeometry(tr.f / 2, tr.f / 2, tr.g, 40), M.dark, [x, G.floor + tr.f / 2, sz * (skidLen / 2 - tr.f / 2 - 30)]);
       w.rotation.z = Math.PI / 2;
-      const hub = add(root, new THREE.CylinderGeometry(24, 24, 52, 20), M.steel, [x, G.floor + 62, sz * (skidLen / 2 - 90)]);
+      const hub = add(root, new THREE.CylinderGeometry(tr.f / 5, tr.f / 5, tr.g + 8, 20), M.steel, [x, G.floor + tr.f / 2, sz * (skidLen / 2 - tr.f / 2 - 30)]);
       hub.rotation.z = Math.PI / 2;
     }
   }
@@ -469,8 +482,8 @@ export function buildUnit() {
   const zr = hv.ro + 62;
   const z2 = hv.ro + 100;
   const zc = hv.ro + 140;
-  const yT = hv.h / 2 - 70;
-  const yB = -hv.h / 2 + 70;
+  const yT = hv.h / 2 - tOff;
+  const yB = -hv.h / 2 + tOff;
   const rods = [];
   const frontHW = new THREE.Group(); // everything in front of the coils: hidden by the section
   root.add(frontHW);
@@ -478,7 +491,7 @@ export function buildUnit() {
   rods.push(rodPath([[X[0], yB, z0], [X[0], yB, zr], [X[1], yT, zr], [X[1], yT, z0]], 11, M.tube, 16));
   rods.push(rodPath([[X[1], yB, z0], [X[1], yB, zr], [X[2], yT, zr], [X[2], yT, z0]], 11, M.tube, 16));
   // the long one dips under the middle coil's tapping panel so the links stay reachable
-  rods.push(rodPath([[X[2], yB, z0], [X[2], yB, z2], [X[1] + 60, -135, z2], [X[1] - 60, -105, z2], [X[0], yT, z2], [X[0], yT, z0]], 11, M.tube, 40));
+  rods.push(rodPath([[X[2], yB, z0], [X[2], yB, z2], [X[1] + 60, -(75 * sp + 60), z2], [X[1] - 60, -(75 * sp + 30), z2], [X[0], yT, z2], [X[0], yT, z0]], 11, M.tube, 40));
   // flat lugs where the tubes land on the terminal studs
   for (let k = 0; k < 3; k++)
     for (const y of [yT, yB]) {
@@ -526,7 +539,7 @@ export function buildUnit() {
       g.font = 'bold 40px Inter, sans-serif';
       g.textAlign = 'center';
       g.fillText('✋', 64, 78);
-    }), roughness: 0.4}), [X[1] + (hv.ro + 1) * Math.sin(a), 200, (hv.ro + 1) * Math.cos(a)]);
+    }), roughness: 0.4}), [X[1] + (hv.ro + 1) * Math.sin(a), yT - 75, (hv.ro + 1) * Math.cos(a)]);
     sign.rotation.y = a;
     sign.castShadow = false;
   }
@@ -542,8 +555,8 @@ export function buildUnit() {
     for (const [dx, top, z] of [[-42, barTop, barOut], [42, nY, nZ]]) {
       const pts = [
         [X[k] + dx, lv.h / 2 - 10, -r],
-        [X[k] + dx, G.win / 2 - 22, -r],
-        [X[k] + dx, G.win / 2 - 22, z],
+        [X[k] + dx, yGap, -r],
+        [X[k] + dx, yGap, z],
         [X[k] + dx, top, z],
       ];
       const path = new THREE.CurvePath();
@@ -572,7 +585,7 @@ export function buildUnit() {
   const fans = [];
   const fanY = -hv.h / 2 - 95;
   const fanZ = hv.ro + 70;
-  const fanLen = 400;
+  const fanLen = Math.min(400, 1.4 * hv.ro);
   const housing = (() => {
     // a scroll in (z, y) open at the top inner corner, extruded along x
     const sh = new THREE.Shape();
@@ -632,7 +645,7 @@ export function buildUnit() {
     const bead = add(frontHW, new THREE.SphereGeometry(9, 16, 12), M.dark.clone(), [bx, lv.h / 2 - 6, bz]);
     ptc.push(bead);
     const wx = X[1] + (k - 1) * 30;
-    frontHW.add(rodPath([[bx, lv.h / 2 - 6, bz], [bx, G.win / 2 - 20, bz], [bx, G.win / 2 - 20, wireZ], [bx, 430, wireZ], [wx, 430, wireZ], [wx, 430, boxZ], [wx, boxY - 40, boxZ]], 3, M.wire, 6));
+    frontHW.add(rodPath([[bx, lv.h / 2 - 6, bz], [bx, yGap, bz], [bx, yGap, wireZ], [bx, G.win / 2 + 30, wireZ], [wx, G.win / 2 + 30, wireZ], [wx, G.win / 2 + 30, boxZ], [wx, boxY - 40, boxZ]], 3, M.wire, 6));
   }
   add(root, new THREE.BoxGeometry(150, 110, 56), M.box, [X[1], boxY, boxZ]);
   add(root, new THREE.BoxGeometry(152, 8, 58), M.dark, [X[1], boxY + 38, boxZ]);
@@ -646,9 +659,9 @@ export function buildUnit() {
     g.strokeRect(6, 6, w - 12, h - 12);
     g.fillStyle = '#1b1c1f';
     g.font = 'bold 40px Inter, sans-serif';
-    g.fillText('HALVARD  CR-1000', 26, 58);
+    g.fillText(`HALVARD  CR-${R.kva}`, 26, 58);
     g.font = '26px Inter, sans-serif';
-    const L = [`CAST-RESIN DRY TYPE · IEC 60076-11`, `1000 / 1500 kVA · AN/AF · F/F`, `10 000 ±2×2.5 % / 690 V · ${R.group}`, `${R.insulation} · uk 6 % · 50 Hz`, `E2 C2 F1 · ${R.mass} kg`];
+    const L = [`CAST-RESIN DRY TYPE · IEC 60076-11`, `${R.kva} / ${R.kva * 1.5} kVA · AN/AF · F/F`, `${R.U1} ±2×2.5 % / ${R.U2} V · ${R.group}`, `${R.insulation} · uk ${R.uk} % · 50 Hz`, `E2 C2 F1 · ${R.mass} kg`];
     L.forEach((s, i) => g.fillText(s, 26, 106 + i * 38));
   });
   const plate = add(root, new THREE.PlaneGeometry(220, 129), new THREE.MeshStandardMaterial({map: plateTex, roughness: 0.4, metalness: 0.3}), [-pitch * 0.55, yc, chZ + chT + 2]);
@@ -827,7 +840,7 @@ export function buildUnit() {
       const len = Math.hypot(bx - ax, by - ay);
       const lift = Math.sin(Math.PI * f) * 26;
       for (const c of coils) {
-        c.link.position.set((ax + bx) / 2, (ay + by) / 2, c.zp + 18 + lift);
+        c.link.position.set((ax + bx) / 2, (ay + by) / 2, 18 + lift);
         c.bar.scale.x = len + 24;
         c.bar.rotation.z = Math.atan2(by - ay, bx - ax);
         c.bolts[0].position.set(((ax - bx) / 2), (ay - by) / 2, 5);
@@ -843,7 +856,7 @@ export function buildUnit() {
     hv: [G.limbX[2] + hv.ro * 0.7, hv.h * 0.25, hv.ro * 0.7],
     lv: [G.limbX[1] + lv.ro * 0.7, lv.h / 2 - 20, lv.ro * 0.5],
     tap: [G.limbX[0], 0, hv.ro + 36],
-    tapPanel: (k) => [G.limbX[k] + 30, -26, hv.ro + 30],
+    tapPanel: (k) => [G.limbX[k] + 30 * sp, -26 * sp, hv.ro + 30],
     delta: [(X[0] + X[1]) / 2, 0, zr],
     deltaLong: [X[1], 0, z2],
     fan: [G.limbX[2], fanY, fanZ + 60],
@@ -866,7 +879,7 @@ export function buildUnit() {
     coreFront: (k) => [G.limbX[k], -win * 0.25, zFace],
     coilFront: (k) => [G.limbX[k], hv.h * 0.32, hv.ro],
     ductTop: (k) => [G.limbX[k] + ((lv.ro + hv.ri) / 2) * 0.7, lv.h / 2, ((lv.ro + hv.ri) / 2) * 0.7],
-    pad: [G.limbX[2] + 172, hv.h / 2 + 20, 172],
+    pad: [G.limbX[2] + ((hv.ri + hv.ro) / 2) * 0.707, hv.h / 2 + 20, ((hv.ri + hv.ro) / 2) * 0.707],
   };
   root.scale.setScalar(0.001);
   const setPointScale = (k) => (air.material.uniforms.uSize.value = 26 * k);
