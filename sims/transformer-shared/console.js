@@ -27,7 +27,7 @@ const CSS = `
 .row b{color:${C.ink};font-weight:600;letter-spacing:.4px;font-size:10.5px;text-transform:none}
 .nt{text-transform:none}
 .card{position:absolute;left:334px;top:22px;width:612px;background:rgba(250,250,251,.98);border:1px solid ${C.line};box-shadow:0 8px 28px rgba(20,22,26,.12);pointer-events:auto;display:none;z-index:40;padding:14px 16px 12px}
-.card select{font:500 11px Inter,sans-serif;color:${C.ink};border:1px solid ${C.faint};background:#fff;height:24px;padding:0 4px;margin-right:6px}
+.card select{font:500 11px Inter,sans-serif;color:${C.ink};border:1px solid ${C.faint};background:#fff;height:24px;padding:0 4px;margin:0;box-sizing:border-box}
 .card table{border-collapse:collapse;width:100%}
 .card td{font-size:10px;padding:2.5px 0;border-bottom:1px solid ${C.line};color:${C.mute};letter-spacing:.3px}
 .card td b{color:${C.ink};font-weight:600}
@@ -190,7 +190,7 @@ export function createConsole(app) {
   const card = add(`<div class="card">
     <div class="x">×</div>
     <div class="cp" style="font-weight:700">SELECT FROM CATALOG <span class="mu">— SIEMENS TV1 · 2013 · GEAFOL 100 TO 3150 kVA</span></div>
-    <div style="margin:9px 0 10px;display:flex;align-items:center"><select data-k="S"></select><select data-k="v" style="width:372px"></select><select data-k="g"><option value="Dyn5">Dyn5 · catalog</option><option value="Dyn11">Dyn11 · on request</option></select></div>
+    <div style="margin:9px 0 10px;display:flex;align-items:center;gap:6px"><select data-k="S" style="width:104px;flex:none"></select><select data-k="v" style="flex:1;min-width:0"></select><select data-k="g" style="width:132px;flex:none"><option value="Dyn5">Dyn5 · catalog</option><option value="Dyn11">Dyn11 · on request</option></select></div>
     <div style="display:flex;gap:22px"><table data-k="fit"></table><table data-k="des"></table></div>
     <div data-k="flags" style="font-size:9.5px;color:${C.red};margin-top:7px"></div>
     <div style="font-size:9.2px;color:${C.mute};margin-top:6px;line-height:1.45">Outside: the catalog row (ratings, losses, uk, noise, weight, dimensions). Inside: a design generated to reproduce it
