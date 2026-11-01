@@ -5,7 +5,7 @@
 // with their wires and box, and a rating plate. Overlays: the flux in every core segment (tint plus chevrons), the
 // air through the ducts (points), a heat map on the windings. update(s) poses it all.
 import * as THREE from 'three';
-import {G, PHASES, R, STEP, TAPS} from './kin.js';
+import {G, PHASES, R, STEP, TAPS, TAP0} from './kin.js';
 
 const V3 = THREE.Vector3;
 const V2 = THREE.Vector2;
@@ -138,6 +138,19 @@ function rodPath(points, r, mat, bend = 30) {
   return new THREE.Mesh(new THREE.TubeGeometry(path, 24 * P.length, r, 10, false), mat);
 }
 
+// tap studs on the panel, mm from its centre: top row 3 4 5, bottom row 8 7 6
+const STUD = {3: [-30, 26], 4: [0, 26], 5: [30, 26], 8: [-30, -26], 7: [0, -26], 6: [30, -26]};
+const numTex = (txt) =>
+  canvasTex(256, 56, (g, w, h) => {
+    g.fillStyle = '#f1f1ee';
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1b1c1f';
+    g.font = 'bold 40px Inter, sans-serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    txt.split(/\s+/).forEach((t, i) => g.fillText(t, w / 2 + (i - 1) * 91, h / 2 + 2));
+  });
+
 // ------------------------------------------------------------ materials
 function materials() {
   const M = {
@@ -156,6 +169,10 @@ function materials() {
     dark: new THREE.MeshStandardMaterial({color: '#18191b', roughness: 0.6, metalness: 0.1}),
     box: new THREE.MeshStandardMaterial({color: '#d6d8db', roughness: 0.5, metalness: 0.05}),
     wire: new THREE.MeshStandardMaterial({color: '#e2ad17', roughness: 0.5, metalness: 0}),
+    brass: new THREE.MeshStandardMaterial({color: '#c9a250', roughness: 0.3, metalness: 1, envMapIntensity: 0.7}),
+    tin: new THREE.MeshStandardMaterial({color: '#d9dcdf', roughness: 0.28, metalness: 1, envMapIntensity: 0.7}),
+    tube: new THREE.MeshPhysicalMaterial({color: '#1d1e21', roughness: 0.38, metalness: 0, clearcoat: 0.4}),
+    barrier: new THREE.MeshStandardMaterial({color: '#ece5d3', roughness: 0.55, metalness: 0, side: THREE.DoubleSide}),
     lvFace: new THREE.MeshStandardMaterial({map: lvFaceTex(), roughness: 0.6, metalness: 0.2, side: THREE.DoubleSide}),
     hvFace: new THREE.MeshStandardMaterial({map: hvFaceTex(), roughness: 0.45, metalness: 0.1, side: THREE.DoubleSide}),
   };
@@ -296,6 +313,9 @@ export function buildUnit() {
           }
         }
       }
+      // the insulating cylinder between LV and HV, standing proud of the HV winding (manual 4.1, item 7)
+      const bar = add(g, ring(hv.ri - 9, hv.ri - 6, lv.h + 40, 1, isCut), M.barrier);
+      ghostable.push([bar, M.barrier, M.lvGhost]);
       const hvm = add(g, ring(hv.ri, hv.ro, hv.h, 10, isCut), M.resin);
       ghostable.push([hvm, M.resin, M.resinGhost]);
       heatable.push([hvm, M.resin, heatHV]);
@@ -346,20 +366,31 @@ export function buildUnit() {
       const s = add(front, new THREE.CylinderGeometry(9, 9, 34, 16), M.steel, [0, y, bossR + 28]);
       s.rotation.x = Math.PI / 2;
     }
-    const panel = add(front, new THREE.BoxGeometry(76, 172, 24), M.resin, [0, 0, hv.ro + 4]);
+    // the tapping panel (manual 8.1): brass studs 3 4 5 over 8 7 6 cast into a resin boss, number plates above and
+    // below, one bolted link from a top stud to a bottom stud
+    const zp = hv.ro + 4;
+    const panel = add(front, new THREE.BoxGeometry(104, 150, 22), M.resin, [0, 0, zp]);
     ghostable.push([panel, M.resin, M.resinGhost]);
-    const studs = [];
-    for (let i = 0; i < 6; i++) {
-      const y = (i - 2.5) * 26;
-      const s = add(front, new THREE.CylinderGeometry(6.5, 6.5, 22, 16), M.steel, [-16, y, hv.ro + 24]);
-      s.rotation.x = Math.PI / 2;
-      const n = add(front, new THREE.CylinderGeometry(10, 10, 6, 6), M.steel, [16, y, hv.ro + 18]);
-      n.rotation.x = Math.PI / 2;
-      studs.push(y);
+    for (const [y, nums] of [[52, '3   4   5'], [-52, '8   7   6']]) {
+      const pl = add(front, new THREE.PlaneGeometry(84, 18), new THREE.MeshStandardMaterial({map: numTex(nums), roughness: 0.5}), [0, y, zp + 11.5]);
+      pl.castShadow = false;
     }
-    const link = add(front, new THREE.BoxGeometry(22, 26 + 22, 6), M.copper, [-16, 0, hv.ro + 33]);
-    void panel;
-    return {grp, full, cut, front, sticks, pads, link, studs, x, phase: PHASES[k]};
+    for (const [n, p] of Object.entries(STUD)) {
+      const b = add(front, new THREE.CylinderGeometry(9, 9, 6, 24), M.brass, [p[0], p[1], zp + 13]);
+      b.rotation.x = Math.PI / 2;
+      void n;
+    }
+    // the link and its two bolts; update() places it between the studs of the current tap
+    const link = new THREE.Group();
+    front.add(link);
+    const bar = add(link, new THREE.BoxGeometry(1, 18, 5), M.tin);
+    const bolts = [0, 1].map(() => {
+      const h = add(link, new THREE.CylinderGeometry(8, 8, 7, 6), M.steel);
+      h.rotation.x = Math.PI / 2;
+      return h;
+    });
+    const studs = STUD;
+    return {grp, full, cut, front, sticks, pads, link, bar, bolts, studs, zp, x, phase: PHASES[k]};
   });
 
   // ------------------------------------------------------------ frames
@@ -431,29 +462,73 @@ export function buildUnit() {
   }
   const frameMeshes = frames;
 
-  // ------------------------------------------------------------ HV connections: delta rods on the front, line leads up
+  // ------------------------------------------------------------ HV connections: delta tubes on the front, cables in
+  // Manual 6.2: the upper terminals carry U-V-W, the lower ones V-W-U, so each coil's lower terminal is tied to the next
+  // coil's upper terminal by an insulated tube; the long one runs from W's lower terminal back to U's upper terminal.
   const z0 = hv.ro + 22;
   const zr = hv.ro + 62;
   const z2 = hv.ro + 100;
+  const zc = hv.ro + 140;
   const yT = hv.h / 2 - 70;
   const yB = -hv.h / 2 + 70;
   const rods = [];
   const frontHW = new THREE.Group(); // everything in front of the coils: hidden by the section
   root.add(frontHW);
   const X = G.limbX;
-  // winding k's top joins winding k+1's bottom: U→V and V→W on one plane, the long W→U one further out
-  rods.push(rodPath([[X[0], yT, z0], [X[0], yT, zr], [X[1], yB, zr], [X[1], yB, z0]], 9, M.copper, 16));
-  rods.push(rodPath([[X[1], yT, z0], [X[1], yT, zr], [X[2], yB, zr], [X[2], yB, z0]], 9, M.copper, 16));
-  rods.push(rodPath([[X[2], yT, z0], [X[2], yT, z2], [X[0], yB, z2], [X[0], yB, z0]], 9, M.copper, 16));
-  const leadTop = yokeTop + 90;
+  rods.push(rodPath([[X[0], yB, z0], [X[0], yB, zr], [X[1], yT, zr], [X[1], yT, z0]], 11, M.tube, 16));
+  rods.push(rodPath([[X[1], yB, z0], [X[1], yB, zr], [X[2], yT, zr], [X[2], yT, z0]], 11, M.tube, 16));
+  // the long one dips under the middle coil's tapping panel so the links stay reachable
+  rods.push(rodPath([[X[2], yB, z0], [X[2], yB, z2], [X[1] + 60, -135, z2], [X[1] - 60, -105, z2], [X[0], yT, z2], [X[0], yT, z0]], 11, M.tube, 40));
+  // flat lugs where the tubes land on the terminal studs
+  for (let k = 0; k < 3; k++)
+    for (const y of [yT, yB]) {
+      const lug = add(frontHW, new THREE.BoxGeometry(30, 24, 6), M.tin, [X[k], y, hv.ro + 38]);
+      lug.castShadow = false;
+    }
+  // the HV cables from the top tray onto the upper terminals (U-V-W), cut off above the frame
+  const leadTop = yokeTop + 150;
   for (let k = 0; k < 3; k++) {
-    const z = k === 2 ? z2 : zr;
-    rods.push(rodPath([[X[k], yT, z], [X[k], leadTop, z]], 9, M.copper, 10));
-    add(frontHW, new THREE.BoxGeometry(44, 14, 44), M.copper, [X[k], leadTop + 4, z]);
+    rods.push(rodPath([[X[k], yT, hv.ro + 40], [X[k], yT, zc], [X[k], leadTop, zc]], 14, M.tube, 30));
+    const end = add(frontHW, new THREE.CylinderGeometry(9, 9, 6, 16), M.copper, [X[k], leadTop + 2, zc]);
+    end.castShadow = false;
   }
   for (const r of rods) {
     r.castShadow = true;
     frontHW.add(r);
+  }
+  // earth terminal on the lower clamping, front left, with its green-yellow tag (manual 4.1, item 11)
+  const earth = add(frontHW, new THREE.CylinderGeometry(12, 12, 24, 6), M.steel, [-G.len / 2 + 90, -G.win / 2 - 2 * a1 * rc * 0.3, zFace + 30]);
+  earth.rotation.x = Math.PI / 2;
+  add(frontHW, new THREE.PlaneGeometry(26, 60), new THREE.MeshStandardMaterial({map: canvasTex(16, 64, (g) => {
+    for (let i = 0; i < 8; i++) {
+      g.fillStyle = i % 2 ? '#e4c21a' : '#2f9a3c';
+      g.fillRect(0, i * 8, 16, 8);
+    }
+  }), roughness: 0.6}), [-G.len / 2 + 90, -G.win / 2 - 2 * a1 * rc * 0.3 - 46, zFace + 44]);
+  // a "do not touch" sign on the middle coil (manual 4.1, item 8)
+  {
+    const a = -0.42;
+    const sign = add(frontHW, new THREE.CircleGeometry(30, 32), new THREE.MeshStandardMaterial({map: canvasTex(128, 128, (g) => {
+      g.fillStyle = '#ffffff';
+      g.beginPath();
+      g.arc(64, 64, 62, 0, 7);
+      g.fill();
+      g.strokeStyle = '#d6182b';
+      g.lineWidth = 14;
+      g.beginPath();
+      g.arc(64, 64, 52, 0, 7);
+      g.stroke();
+      g.beginPath();
+      g.moveTo(28, 28);
+      g.lineTo(100, 100);
+      g.stroke();
+      g.fillStyle = '#1b1c1f';
+      g.font = 'bold 40px Inter, sans-serif';
+      g.textAlign = 'center';
+      g.fillText('✋', 64, 78);
+    }), roughness: 0.4}), [X[1] + (hv.ro + 1) * Math.sin(a), 200, (hv.ro + 1) * Math.cos(a)]);
+    sign.rotation.y = a;
+    sign.castShadow = false;
   }
 
   // ------------------------------------------------------------ LV busbars and neutral at the back
@@ -573,7 +648,7 @@ export function buildUnit() {
     g.font = 'bold 40px Inter, sans-serif';
     g.fillText('HALVARD  CR-1000', 26, 58);
     g.font = '26px Inter, sans-serif';
-    const L = [`CAST-RESIN DRY TYPE · IEC 60076-11`, `1000 kVA AN · 1500 kVA AF`, `10 000 V / 690 V · ${R.group} · 50 Hz`, `uk 6 % · E2 C2 F1 · ${R.mass} kg`, `HV TAPS ±2 × 2.5 %`];
+    const L = [`CAST-RESIN DRY TYPE · IEC 60076-11`, `1000 / 1500 kVA · AN/AF · F/F`, `10 000 ±2×2.5 % / 690 V · ${R.group}`, `${R.insulation} · uk 6 % · 50 Hz`, `E2 C2 F1 · ${R.mass} kg`];
     L.forEach((s, i) => g.fillText(s, 26, 106 + i * 38));
   });
   const plate = add(root, new THREE.PlaneGeometry(220, 129), new THREE.MeshStandardMaterial({map: plateTex, roughness: 0.4, metalness: 0.3}), [-pitch * 0.55, yc, chZ + chT + 2]);
@@ -736,10 +811,28 @@ export function buildUnit() {
     air.material.uniforms.uSection.value = s.cut === 'section' ? 1 : 0;
     // fans, tap links, PTC beads
     for (const f of fans) f.rotor.rotation.x = s.fanSpin;
-    for (const c of coils) {
-      const i = Math.max(0, Math.min(4, s.tap));
-      // link bridges studs i and i+1: tap 0 (−5 %) at the bottom
-      c.link.position.y = (c.studs[Math.floor(i)] + c.studs[Math.min(5, Math.floor(i) + 1)]) / 2 + (i - Math.floor(i)) * 26;
+    // the tap link: between the studs of tap i; between two taps it lifts off the panel, moves and re-seats
+    {
+      const i = Math.max(0, Math.min(TAPS.length - 1, s.tap));
+      const i0 = Math.floor(i);
+      const i1 = Math.min(TAPS.length - 1, i0 + 1);
+      const f = i - i0;
+      const ends = (j) => TAPS[j].link.map((n) => STUD[n]);
+      const [a0, b0] = ends(i0);
+      const [a1_, b1_] = ends(i1);
+      const ax = a0[0] + (a1_[0] - a0[0]) * f;
+      const ay = a0[1] + (a1_[1] - a0[1]) * f;
+      const bx = b0[0] + (b1_[0] - b0[0]) * f;
+      const by = b0[1] + (b1_[1] - b0[1]) * f;
+      const len = Math.hypot(bx - ax, by - ay);
+      const lift = Math.sin(Math.PI * f) * 26;
+      for (const c of coils) {
+        c.link.position.set((ax + bx) / 2, (ay + by) / 2, c.zp + 18 + lift);
+        c.bar.scale.x = len + 24;
+        c.bar.rotation.z = Math.atan2(by - ay, bx - ax);
+        c.bolts[0].position.set(((ax - bx) / 2), (ay - by) / 2, 5);
+        c.bolts[1].position.set(((bx - ax) / 2), (by - ay) / 2, 5);
+      }
     }
     for (const b of ptc) b.material.emissive.set(s.ptcLit > 0.01 ? '#ff3b1f' : '#000000').multiplyScalar(s.ptcLit);
   };
@@ -750,6 +843,7 @@ export function buildUnit() {
     hv: [G.limbX[2] + hv.ro * 0.7, hv.h * 0.25, hv.ro * 0.7],
     lv: [G.limbX[1] + lv.ro * 0.7, lv.h / 2 - 20, lv.ro * 0.5],
     tap: [G.limbX[0], 0, hv.ro + 36],
+    tapPanel: (k) => [G.limbX[k] + 30, -26, hv.ro + 30],
     delta: [(X[0] + X[1]) / 2, 0, zr],
     deltaLong: [X[1], 0, z2],
     fan: [G.limbX[2], fanY, fanZ + 60],
@@ -759,7 +853,8 @@ export function buildUnit() {
     duct: (k) => [G.limbX[k] + (lv.ro + hv.ri) / 2 * 0.7, lv.h / 2 + 30, ((lv.ro + hv.ri) / 2) * 0.7],
     lvBar: [X[2] - 42, barTop, barOut],
     neutral: [nEnd, barTop, nZ],
-    hvLead: [X[0], leadTop, zr],
+    hvLead: [X[0], leadTop, zc],
+    earth: [-G.len / 2 + 90, -G.win / 2 - 2 * a1 * rc * 0.3, zFace + 30],
     plate: [-pitch * 0.55, yc, chZ + chT + 2],
     limb: (k) => [G.limbX[k], 0, zFace],
     yokeTop: yokeTop,

@@ -3,11 +3,11 @@
 // and winding temperature on the right, camera / cutaway / overlay toggles bottom right, the phase and HV tap pickers
 // bottom centre, and callouts with thin leaders into the unit. Fixed 1600 x 900 CSS layout; update(s) redraws every
 // live part from the frame's state, every number from kin.js.
-import {bLimb, operating, PHASES, R, TAPS, tapTurns, VPT, CORE_D} from './kin.js';
+import {bLimb, CORE_D, GRID, hotSpot, operating, PHASES, R, tapName, TAPS, tapTurns} from './kin.js';
 import {ACCENT} from './unit.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', acc: ACCENT, red: '#d6182b', blue: '#3d8fe0', warm: '#f07818', grey: '#5d6670'};
-export const CAMS = ['hero', 'front', 'top', 'side', 'limb'];
+export const CAMS = ['hero', 'front', 'top', 'side', 'limb', 'taps'];
 export const CUTS = ['solid', 'section', 'xray'];
 export const OVERLAYS = ['callouts', 'flux', 'airflow', 'heat', 'charts'];
 export const S_MAX = R.S_AF * 1.0;
@@ -50,6 +50,7 @@ export function createConsole(app) {
   };
 
   // ------------------------------------------------------------ title and load
+  add(`<div class="pn" style="left:24px;top:22px;width:270px;height:238px"></div>`);
   add(`<div style="position:absolute;left:35px;top:33px;width:43px;height:3px;background:${C.acc}"></div>`);
   add(`<div style="position:absolute;left:35px;top:47px;font-size:24px;font-weight:700;letter-spacing:-.2px">Cast-Resin <span style="color:${C.acc}">·</span> Transformer</div>`);
   add(`<div class="cp" style="position:absolute;left:35px;top:81px;font-weight:500;letter-spacing:1.7px;font-size:9.4px">1000 kVA AN / 1500 AF &nbsp;•&nbsp; 10 / 0.69 kV &nbsp;•&nbsp; ${R.group.toUpperCase()}</div>`);
@@ -87,20 +88,23 @@ export function createConsole(app) {
   add(`<div data-g="charts" style="position:absolute;left:46px;top:661px;font-size:9.5px;color:${C.mute}">B<sub>U</sub> + B<sub>V</sub> + B<sub>W</sub> = 0 &nbsp;·&nbsp; the yokes carry the return</div>`);
 
   // ------------------------------------------------------------ transport
-  add(`<div class="pn" style="left:35px;top:774px;width:259px;height:111px"></div>`);
+  add(`<div class="pn" style="left:35px;top:742px;width:259px;height:143px"></div>`);
   const btn = {};
-  btn.pause = add(`<div class="tb" style="left:45px;top:782px;width:99px;height:26px;background:${C.acc};color:#fff;border-color:${C.acc};font-size:9.6px">❚❚ &nbsp;PAUSE</div>`);
-  btn.back = add(`<div class="tb" style="left:149px;top:782px;width:66px;height:26px;font-size:9.6px">−30°</div>`);
-  btn.fwd = add(`<div class="tb" style="left:219px;top:782px;width:66px;height:26px;font-size:9.6px">+30°</div>`);
-  add(`<div class="cp" style="position:absolute;left:45px;top:818px;font-weight:500">LOAD · COS <span class="nt">φ</span> 0.9</div>`);
-  const loadVal = add(`<div class="cp" style="position:absolute;right:${1600 - 284}px;top:818px;font-weight:700"></div>`);
+  btn.pause = add(`<div class="tb" style="left:45px;top:750px;width:99px;height:26px;background:${C.acc};color:#fff;border-color:${C.acc};font-size:9.6px">❚❚ &nbsp;PAUSE</div>`);
+  btn.back = add(`<div class="tb" style="left:149px;top:750px;width:66px;height:26px;font-size:9.6px">−30°</div>`);
+  btn.fwd = add(`<div class="tb" style="left:219px;top:750px;width:66px;height:26px;font-size:9.6px">+30°</div>`);
   const SL = {x: 46, w: 238};
-  add(`<div style="position:absolute;left:${SL.x}px;top:836px;width:${SL.w}px;height:2px;background:#e1e3e6"></div>`);
-  const loadKnob = add(`<div style="position:absolute;top:831px;width:9px;height:11px;margin-left:-4.5px;background:${C.acc}"></div>`);
-  add(`<div class="cp" style="position:absolute;left:45px;top:851px;font-weight:500">PLAYBACK</div>`);
-  const playVal = add(`<div class="cp" style="position:absolute;right:${1600 - 284}px;top:851px;font-weight:700"></div>`);
-  add(`<div style="position:absolute;left:${SL.x}px;top:869px;width:${SL.w}px;height:2px;background:#e1e3e6"></div>`);
-  const playKnob = add(`<div style="position:absolute;top:864px;width:9px;height:11px;margin-left:-4.5px;background:${C.acc}"></div>`);
+  const slider = (label, y) => {
+    add(`<div class="cp" style="position:absolute;left:45px;top:${y}px;font-weight:500">${label}</div>`);
+    const val = add(`<div class="cp" style="position:absolute;right:${1600 - 284}px;top:${y}px;font-weight:700"></div>`);
+    add(`<div style="position:absolute;left:${SL.x}px;top:${y + 18}px;width:${SL.w}px;height:2px;background:#e1e3e6"></div>`);
+    const knob = add(`<div style="position:absolute;top:${y + 13}px;width:9px;height:11px;margin-left:-4.5px;background:${C.acc}"></div>`);
+    return {val, knob, y: y + 18};
+  };
+  const sLoad = slider('LOAD · COS <span class="nt">φ</span> 0.9', 786);
+  const sGrid = slider('HV GRID VOLTAGE', 819);
+  const sPlay = slider('PLAYBACK', 852);
+  const gridK = (U) => (U - GRID[0]) / (GRID[1] - GRID[0]);
 
   // ------------------------------------------------------------ legend
   add(`<div class="cp" style="position:absolute;left:0;right:0;top:36px;display:flex;justify-content:center;gap:16px;font-weight:500;font-size:9.6px">
@@ -125,9 +129,9 @@ export function createConsole(app) {
   // ------------------------------------------------------------ temperature
   add(`<div class="pn" style="left:1318px;top:443px;width:245px;height:262px"></div>`);
   add(`<div class="cp" style="position:absolute;left:1329px;top:455px;font-weight:700">WINDING TEMPERATURE</div>`);
-  add(`<div class="cp mu" style="position:absolute;right:${1600 - 1552}px;top:455px;font-weight:500">PTC · LV</div>`);
+  add(`<div class="cp mu" style="position:absolute;right:${1600 - 1552}px;top:455px;font-weight:500">PT100</div>`);
   const tBig = add(`<div style="position:absolute;left:1328px;top:473px;font-size:36px;font-weight:800;letter-spacing:-1.6px;line-height:1"></div>`);
-  const tUnit = add(`<div style="position:absolute;top:479px;font-size:10.5px;font-weight:500;letter-spacing:1px;line-height:1.35">°C<br><span style="color:${C.mute};letter-spacing:1.5px">HOT SPOT</span></div>`);
+  const tUnit = add(`<div style="position:absolute;top:479px;font-size:10.5px;font-weight:500;letter-spacing:1px;line-height:1.35">°C<br><span style="color:${C.mute};letter-spacing:1.5px">WINDING · PT100</span></div>`);
   const th = add(`<svg style="position:absolute;left:1326px;top:516px" width="232" height="66"></svg>`);
   const tRows = add(`<div style="position:absolute;left:1329px;top:588px;width:224px"></div>`);
   btn.reset = add(`<div class="tb" style="left:1329px;top:676px;width:224px;height:22px;background:${C.red};color:#fff;border-color:${C.red};display:none">TRIPPED · CLICK TO RESET</div>`);
@@ -140,7 +144,7 @@ export function createConsole(app) {
     let yy = y + 15;
     keys.forEach((k) => {
       const w = Math.round(labels[k].length * 6.2 + 14);
-      if (x + w > 1556) {
+      if (x + w > 1561) {
         x = 1305;
         yy += 23;
       }
@@ -155,14 +159,15 @@ export function createConsole(app) {
   group('OVERLAYS', OVERLAYS, 815, L);
 
   // ------------------------------------------------------------ phase and tap pickers
+  add(`<div class="pn" style="left:556px;top:787px;width:488px;height:107px"></div>`);
   const PX = (i) => 588 + i * 36;
   const TX = (i) => 744 + i * 52;
   add(`<div class="cp" style="position:absolute;left:${PX(0) - 12}px;top:795px;font-weight:500">PHASE</div>`);
-  add(`<div class="cp" style="position:absolute;left:${TX(0) - 20}px;top:795px;font-weight:500">HV TAPPING <span class="mu">— CLICK TO RELINK</span></div>`);
+  add(`<div class="cp" style="position:absolute;left:${TX(0) - 20}px;top:795px;font-weight:500">HV TAP LINK <span class="mu">— OFF-CIRCUIT, ALL 3 PHASES</span></div>`);
   add(`<div style="position:absolute;left:${PX(2) + 34}px;top:816px;width:1px;height:30px;background:${C.line}"></div>`);
   const pk = add(`<svg style="position:absolute;left:0;top:815px;overflow:visible" width="1600" height="34"></svg>`);
-  const tapSub = add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:856px;text-align:center;font-weight:500"></div>`);
-  add(`<div class="cp" style="position:absolute;left:0;right:0;top:876px;text-align:center;font-weight:500;color:${C.faint}">DRAG TO ORBIT &nbsp;·&nbsp; SCROLL TO ZOOM &nbsp;·&nbsp; H HIDES THE OVERLAY</div>`);
+  const tapSub = add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:864px;text-align:center;font-weight:500"></div>`);
+  add(`<div class="cp" style="position:absolute;left:0;right:0;top:883px;text-align:center;font-weight:500;font-size:8.6px;color:${C.faint}">DRAG TO ORBIT &nbsp;·&nbsp; SCROLL TO ZOOM &nbsp;·&nbsp; H HIDES THE OVERLAY</div>`);
   const phSpot = (i) => [PX(i), 815 + 17];
   const tapSpot = (i) => [TX(i), 815 + 17];
 
@@ -196,8 +201,9 @@ export function createConsole(app) {
     spots,
     phSpot,
     tapSpot,
-    loadKnob: (v) => [knobX(v), 836],
-    playKnob: (v) => [knobX(v), 869],
+    loadKnob: (v) => [knobX(v), sLoad.y],
+    gridKnob: (v) => [knobX(v), sGrid.y],
+    playKnob: (v) => [knobX(v), sPlay.y],
     btn,
     root: ui,
     /**
@@ -206,7 +212,8 @@ export function createConsole(app) {
      */
     update(s) {
       const tapI = Math.round(s.tap);
-      const o = operating(s.S, 0.9, tapI);
+      const Ug = s.Ug ?? R.U1;
+      const o = operating(s.S, 0.9, tapI, Ug);
       const k = s.k;
       const on = s.energised ? 1 : 0;
 
@@ -217,12 +224,18 @@ export function createConsole(app) {
       loadFill.style.background = s.S > R.S ? `linear-gradient(90deg, ${C.acc} ${((R.S / s.S) * 100).toFixed(1)}%, ${s.fanOn ? C.acc : C.red} 0)` : C.acc;
       afZone.style.opacity = s.fan > 0.5 ? '0.35' : '1';
       afLbl.style.color = s.fan > 0.5 ? C.ink : C.mute;
-      loadLine.innerHTML = s.energised ? `${(o.K * 100).toFixed(0)} % of AN rating` : `<span style="color:${C.red}">De-energised · breaker open</span>`;
+      loadLine.innerHTML = s.energised
+        ? `${(o.K * 100).toFixed(0)} % of AN rating`
+        : s.relink
+          ? `<span style="color:${C.red}">Breaker open · relinking taps</span>`
+          : `<span style="color:${C.red}">Tripped · breaker open</span>`;
       loadSub.innerHTML = `LV <b style="color:${C.ink}">${f0(o.U2 * on)} V</b> &nbsp;·&nbsp; HV <b style="color:${C.ink}">${f1(o.I1 * on)} A</b> &nbsp;·&nbsp; <span class="nt">η</span> <b style="color:${C.ink}">${(o.eta * 100).toFixed(2)} %</b>`;
-      loadVal.textContent = `${f0(s.S / 1000)} kVA`;
-      loadKnob.style.left = `${knobX(s.S / S_MAX).toFixed(1)}px`;
-      playVal.textContent = s.playText;
-      playKnob.style.left = `${knobX(s.playK).toFixed(1)}px`;
+      sLoad.val.textContent = `${f0(s.S / 1000)} kVA`;
+      sLoad.knob.style.left = `${knobX(s.S / S_MAX).toFixed(1)}px`;
+      sGrid.val.innerHTML = `${(s.Ug / 1000).toFixed(2)} <span class="nt">kV</span>`;
+      sGrid.knob.style.left = `${knobX(gridK(s.Ug)).toFixed(1)}px`;
+      sPlay.val.textContent = s.playText;
+      sPlay.knob.style.left = `${knobX(s.playK).toFixed(1)}px`;
       btn.pause.innerHTML = s.paused ? '▶ &nbsp;PLAY' : '❚❚ &nbsp;PAUSE';
 
       // ---- phasors: HV phase voltages (ink) and LV phase voltages (accent), rotating with θ; Dyn11 puts LV 30° ahead
@@ -250,7 +263,7 @@ export function createConsole(app) {
         h += `<path d="M${ax(p0)} ${ay(p0)} A${r} ${r} 0 0 0 ${ax(p1)} ${ay(p1)}" fill="none" stroke="${C.acc}" stroke-width="1"/>`;
         h += `<text x="4" y="12" font-size="7.4" letter-spacing="1" fill="${C.mute}">HV A B C</text><text x="4" y="22" font-size="7.4" letter-spacing="1" fill="${C.acc}">LV a b c</text><text x="222" y="12" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">LV LEADS 30°</text><text x="222" y="128" font-size="7.4" letter-spacing="1" text-anchor="end" fill="${C.mute}">CLOCK 11</text>`;
         ph.innerHTML = h;
-        phFoot.innerHTML = `${(R.U1 / 1000).toFixed(0)} kV · √3 · ${R.N2} / <b style="color:${C.ink}">${o.N1}</b> = <b style="color:${C.ink}">${f0(o.U2nl)}</b> V no load`;
+        phFoot.innerHTML = `<b style="color:${C.ink}">${(Ug / 1000).toFixed(2)}</b> kV · √3 · ${R.N2} / <b style="color:${C.ink}">${o.N1}</b> = <b style="color:${C.ink}">${f0(o.U2nl)}</b> V no load`;
       }
 
       // ---- flux: B in the three limbs over one cycle, the cursor at θ
@@ -262,17 +275,17 @@ export function createConsole(app) {
         for (const [v, l] of [[1.6, '1.6'], [0, '0'], [-1.6, '−1.6']]) h += `<text x="15" y="${Y(v) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${l}</text><line x1="${X(0)}" x2="${X(360)}" y1="${Y(v)}" y2="${Y(v)}" stroke="${v ? C.line : C.faint}" stroke-width=".8"/>`;
         const curve = (i, col, w) => {
           let p = '';
-          for (let d = 0; d <= 360; d += 6) p += `${d ? 'L' : 'M'}${X(d).toFixed(1)} ${Y(bLimb(d, i, tapI) * on).toFixed(1)}`;
+          for (let d = 0; d <= 360; d += 6) p += `${d ? 'L' : 'M'}${X(d).toFixed(1)} ${Y(bLimb(d, i, tapI, Ug) * on).toFixed(1)}`;
           return `<path d="${p}" fill="none" stroke="${col}" stroke-width="${w}"/>`;
         };
         for (let i = 0; i < 3; i++) if (i !== k) h += curve(i, C.faint, 1.1);
         h += curve(k, C.acc, 1.8);
         const a0 = ((s.th % 360) + 360) % 360;
         h += `<line x1="${X(a0)}" x2="${X(a0)}" y1="${Y(1.8)}" y2="${Y(-1.8)}" stroke="${C.ink}" stroke-width="1"/>`;
-        for (let i = 0; i < 3; i++) h += `<circle cx="${X(a0).toFixed(1)}" cy="${Y(bLimb(a0, i, tapI) * on).toFixed(1)}" r="${i === k ? 3 : 2}" fill="${i === k ? C.acc : C.grey}"/>`;
+        for (let i = 0; i < 3; i++) h += `<circle cx="${X(a0).toFixed(1)}" cy="${Y(bLimb(a0, i, tapI, Ug) * on).toFixed(1)}" r="${i === k ? 3 : 2}" fill="${i === k ? C.acc : C.grey}"/>`;
         for (const d of [0, 90, 180, 270, 360]) h += `<text x="${X(d)}" y="${Y(-1.8) + 10}" font-size="6.5" text-anchor="middle" fill="${C.mute}">${d}°</text>`;
         fx.innerHTML = h;
-        fxLeg.innerHTML = PHASES.map((p, i) => `<span style="color:${i === k ? C.acc : C.mute}">${p}</span> <b style="color:${i === k ? C.ink : C.mute}">${(bLimb(s.th, i, tapI) * on >= 0 ? '+' : '−') + Math.abs(bLimb(s.th, i, tapI) * on).toFixed(2)}</b>`).join(' &nbsp; ');
+        fxLeg.innerHTML = PHASES.map((p, i) => `<span style="color:${i === k ? C.acc : C.mute}">${p}</span> <b style="color:${i === k ? C.ink : C.mute}">${(bLimb(s.th, i, tapI, Ug) * on >= 0 ? '+' : '−') + Math.abs(bLimb(s.th, i, tapI, Ug) * on).toFixed(2)}</b>`).join(' &nbsp; ');
       }
 
       // ---- tracked phase
@@ -306,7 +319,7 @@ export function createConsole(app) {
         const Y = (e) => 112 - ((e - 0.975) / (0.992 - 0.975)) * 80;
         for (const [e, l] of [[0.99, '99.0'], [0.98, '98.0']]) h += `<line x1="${X(0)}" x2="${X(S_MAX)}" y1="${Y(e)}" y2="${Y(e)}" stroke="${C.line}" stroke-width=".8"/><text x="18" y="${Y(e) + 2.5}" font-size="6.5" text-anchor="end" fill="${C.mute}">${l}</text>`;
         let p = '';
-        for (let S = 60e3; S <= S_MAX; S += 30e3) p += `${p ? 'L' : 'M'}${X(S).toFixed(1)} ${Y(Math.max(0.975, operating(S, 0.9, tapI).eta)).toFixed(1)}`;
+        for (let S = 60e3; S <= S_MAX; S += 30e3) p += `${p ? 'L' : 'M'}${X(S).toFixed(1)} ${Y(Math.max(0.975, operating(S, 0.9, tapI, Ug).eta)).toFixed(1)}`;
         h += `<path d="${p}" fill="none" stroke="${C.ink}" stroke-width="1.3"/>`;
         // peak efficiency where copper = iron losses
         const Sopt = R.S * Math.sqrt(o.P0 / R.Pk);
@@ -320,22 +333,22 @@ export function createConsole(app) {
       // ---- temperature: hot spot against the PTC thresholds, fans, trip
       {
         const t = s.hs;
-        const hot = s.trip ? C.red : t >= R.ptc.alarm ? C.red : t >= R.ptc.fan ? C.acc : C.ink;
+        const T = R.tc;
+        const hot = s.trip ? C.red : t >= T.alarm ? C.red : t >= T.fanOn ? C.acc : C.ink;
         tBig.textContent = Math.round(t);
         tBig.style.color = hot;
         tUnit.style.left = `${1334 + tBig.offsetWidth + 8}px`;
         const W = 232;
-        const X = (v) => 8 + ((Math.max(60, v) - 60) / 125) * (W - 16);
-        let h = `<rect x="${X(60)}" y="22" width="${X(185) - X(60)}" height="8" fill="#e6e7e9"/>`;
-        h += `<rect x="${X(60)}" y="22" width="${Math.max(0, X(Math.min(185, t)) - X(60)).toFixed(1)}" height="8" fill="${hot}"/>`;
-        const mark = (v, l, col) => `<line x1="${X(v)}" x2="${X(v)}" y1="14" y2="38" stroke="${col}" stroke-width="1"/><text x="${X(v)}" y="10" font-size="6.6" letter-spacing=".9" text-anchor="middle" fill="${col}" font-weight="600">${l}</text><text x="${X(v)}" y="48" font-size="6.5" text-anchor="middle" fill="${C.mute}">${v}</text>`;
-        h += mark(R.ptc.fan, 'FANS', C.ink) + mark(R.ptc.alarm, 'ALARM', C.ink) + mark(R.ptc.trip, 'TRIP', C.red);
-        h += `<line x1="${X(155)}" x2="${X(155)}" y1="22" y2="30" stroke="${C.ink}" stroke-dasharray="1.5 1.5"/><text x="${X(155)}" y="60" font-size="6" letter-spacing=".6" text-anchor="middle" fill="${C.mute}">F 155</text>`;
-        h += `<text x="${X(60)}" y="48" font-size="6.5" fill="${C.mute}">60</text><text x="${X(100)}" y="48" font-size="6.5" text-anchor="middle" fill="${C.mute}">100</text>`;
+        const X = (v) => 8 + ((Math.min(170, Math.max(40, v)) - 40) / 130) * (W - 16);
+        let h = `<rect x="${X(40)}" y="22" width="${X(170) - X(40)}" height="8" fill="#e6e7e9"/>`;
+        h += `<rect x="${X(40)}" y="22" width="${Math.max(0, X(t) - X(40)).toFixed(1)}" height="8" fill="${hot}"/>`;
+        const mark = (v, l, col, dash) => `<line x1="${X(v)}" x2="${X(v)}" y1="14" y2="38" stroke="${col}" stroke-width="1" ${dash ? 'stroke-dasharray="2 2"' : ''}/><text x="${X(v)}" y="10" font-size="6.4" letter-spacing=".8" text-anchor="middle" fill="${col}" font-weight="600">${l}</text><text x="${X(v)}" y="48" font-size="6.5" text-anchor="middle" fill="${C.mute}">${v}</text>`;
+        h += mark(T.fanOff, 'FAN OFF', C.mute, true) + mark(T.fanOn, 'FAN ON', C.ink) + mark(T.alarm, 'ALARM', C.ink) + mark(T.trip, 'TRIP', C.red);
+        h += `<text x="${X(40)}" y="48" font-size="6.5" fill="${C.mute}">40</text>`;
         th.innerHTML = h;
         const fanTxt = s.fan > 0.5 ? `<span style="color:${C.acc}">ON · AF</span>` : 'OFF · AN';
         tRows.innerHTML =
-          row('Ambient', `${R.amb} °C`) +
+          row('Hot spot (est.) · ambient', `${Math.round(hotSpot(t))} · ${R.amb} °C`) +
           row('Fans', fanTxt) +
           row('Rating now', s.fan > 0.5 ? '1500 kVA' : '1000 kVA') +
           row('Stray field at 3 m', `${f1(o.stray * on)} µT`) +
@@ -355,10 +368,12 @@ export function createConsole(app) {
           const [x] = tapSpot(i);
           if (i) h += `<line x1="${x - 38}" x2="${x - 14}" y1="17" y2="17" stroke="${C.faint}"/>`;
           const t = i === tapI;
-          h += `<circle cx="${x}" cy="17" r="13" fill="${t ? C.ink : '#fff'}" stroke="${t ? C.ink : C.faint}" stroke-width="1.2"/><text x="${x}" y="20" font-size="${p % 1 ? 8 : 9.5}" text-anchor="middle" font-weight="600" fill="${t ? '#fff' : C.ink}">${p > 0 ? '+' : p < 0 ? '−' : ''}${Math.abs(p)}</text>`;
+          h += `<circle cx="${x}" cy="17" r="13" fill="${t ? C.ink : '#fff'}" stroke="${t ? C.ink : C.faint}" stroke-width="1.2"/><text x="${x}" y="20.5" font-size="9.5" text-anchor="middle" font-weight="600" fill="${t ? '#fff' : C.ink}">${tapName(i)}</text>`;
+          h += `<text x="${x}" y="41" font-size="7" text-anchor="middle" fill="${t ? C.ink : C.mute}" letter-spacing=".5">${(p.V / 1000).toFixed(p.V % 500 ? 2 : 1)}</text>`;
         });
         pk.innerHTML = h;
-        tapSub.innerHTML = `TAP <b style="color:${C.ink}">${TAPS[tapI] > 0 ? '+' : ''}${TAPS[tapI]} %</b> &nbsp;·&nbsp; <b style="color:${C.ink}">${tapTurns(tapI)}</b> HV TURNS &nbsp;·&nbsp; LV <b style="color:${C.ink}">${f0(o.U2nl)} V</b> AT NO LOAD &nbsp;·&nbsp; ${f1(VPT)} V / TURN AT 0 %`;
+        const match = Math.abs(o.U2nl - R.U2) < 6;
+        tapSub.innerHTML = `LINK <b style="color:${C.ink}">${tapName(tapI)}</b> · <b style="color:${C.ink}">${TAPS[tapI].V}</b> V TAP · <b style="color:${C.ink}">${tapTurns(tapI)}</b> TURNS &nbsp;·&nbsp; GRID <b style="color:${C.ink}">${(Ug / 1000).toFixed(2)} kV</b> → LV <b style="color:${match ? C.ink : C.red}">${f0(o.U2nl)} V</b>${match ? '' : ` · <span style="color:${C.red}">RELINK</span>`}`;
       }
 
       // ---- toggles

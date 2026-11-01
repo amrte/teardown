@@ -7,8 +7,8 @@
 // it back.
 import {warmComposer} from '../kit/warm.js';
 import {CAMS, createConsole, CUTS, OVERLAYS, S_MAX} from './console.js';
-import {camAt, camName, cutAt, DURATION, heatAt, loadAt, makeConsoleFrame, makeCursor, overlaysAt, ovLevel, PLAY, SCRIPT, tapAt, TAU_S, TRACK, unitState, VIEW_FN, viewStart} from './film.js';
-import {airSpeed, hotRise, PHASES, R, stepHeat, TAPS} from './kin.js';
+import {camAt, camName, cutAt, DURATION, energisedAt, gridAt, gridK, heatAt, loadAt, makeConsoleFrame, makeCursor, overlaysAt, ovLevel, PLAY, RELINK, SCRIPT, tapAt, TAU_S, TRACK, unitState, VIEW_FN, viewStart} from './film.js';
+import {airSpeed, GRID, PHASES, R, stepHeat, TAP0, TAPS, windRise} from './kin.js';
 import {createStage} from './stage.js';
 
 const W = 1600;
@@ -101,13 +101,17 @@ export function runLive() {
   let view = 'hero';
   let viewAt = 0;
   let k = TRACK;
-  let tap = 2;
-  let tapF = 2;
+  let tap = TAP0;
+  let tapF = TAP0;
   let cut = 'solid';
   let energised = true;
+  let Ug = R.U1;
+  let UgTarget = R.U1;
+  // a tap change in progress: the breaker opened at t0, the links go from `from` to `tap`, the breaker closes again
+  let relink = null;
   const ov = {callouts: 1, flux: 0, airflow: 0, heat: 0, charts: 1};
   const ovF = {...ov};
-  const heat = {hs: R.amb + hotRise(S, 0), fan: 0, fanOn: false, trip: false, air: 0, spin: 0};
+  const heat = {hs: R.amb + windRise(S, 0), fan: 0, fanOn: false, trip: false, air: 0, spin: 0};
   const off = {az: 0, el: 0, k: 1};
   const cam = {...VIEW_FN.open(0)};
   let ring = {t: -9, x: 0, y: 0};
@@ -125,6 +129,7 @@ export function runLive() {
     paused = false;
     playI = 3;
     energised = true;
+    relink = null;
     Object.assign(off, {az: 0, el: 0, k: 1});
   };
   // the visitor takes over: the tour's state at this moment becomes the page's
@@ -139,6 +144,10 @@ export function runLive() {
     cut = cutAt(cyc);
     Object.assign(ov, overlaysAt(cyc));
     tap = Math.round(tapAt(cyc));
+    tapF = tap;
+    energised = true;
+    relink = null;
+    Ug = UgTarget = gridAt(cyc);
     Starget = loadAt(cyc);
     const h = heatAt(cyc);
     Object.assign(heat, {hs: h.hs, fan: h.fan, fanOn: h.fanOn, trip: false});
@@ -191,7 +200,7 @@ export function runLive() {
     });
   ui.btn.reset.addEventListener('click', () => {
     takeOver();
-    if (heat.hs < R.ptc.alarm) {
+    if (heat.hs < R.tc.alarm && !relink) {
       heat.trip = false;
       energised = true;
     }
@@ -214,8 +223,14 @@ export function runLive() {
     k = i;
     if (view === 'limb') viewAt = T - 0.01;
   });
-  // the page relinks instantly; on the real unit the links are moved with the transformer de-energised
-  picker(ui.tapSpot, TAPS.length, (i) => (tap = i));
+  // the manual's rule: taps are changed only de-energised, all three phases alike. The page opens the breaker, moves
+  // the three links and closes it again; a tripped unit stays open.
+  picker(ui.tapSpot, TAPS.length, (i) => {
+    if (i === tap || relink) return;
+    relink = {t0: T, from: tap, wasOn: energised};
+    tap = i;
+    energised = false;
+  });
   const slider = (knobAt, apply) => {
     const [x0, y] = knobAt(0);
     const [x1] = knobAt(1);
@@ -241,11 +256,13 @@ export function runLive() {
     ui.root.appendChild(d);
   };
   slider(ui.loadKnob, (v) => (Starget = Math.round((v * S_MAX) / 10e3) * 10e3));
+  slider(ui.gridKnob, (v) => (UgTarget = Math.round((GRID[0] + v * (GRID[1] - GRID[0])) / 10) * 10));
+  void gridK;
   slider(ui.playKnob, (v) => (playI = Math.round(v * (PLAYS.length - 1))));
   addEventListener('keydown', (e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     const key = e.key.toLowerCase();
-    const v = {1: 'hero', 2: 'front', 3: 'top', 4: 'side', 5: 'limb'}[key];
+    const v = {1: 'hero', 2: 'front', 3: 'top', 4: 'side', 5: 'limb', 6: 'taps'}[key];
     takeOver();
     if (v) setView(v);
     else if (key === ' ') paused = !paused;
@@ -335,6 +352,8 @@ export function runLive() {
       ovl = Object.fromEntries(Object.keys(ov).map((key) => [key, ovLevel(cyc, key)]));
       tapF = tapAt(cyc);
       tap = Math.round(tapF);
+      energised = energisedAt(cyc);
+      Ug = UgTarget = gridAt(cyc);
       S = loadAt(cyc);
       Starget = S;
       heatNow = heatAt(cyc);
@@ -358,7 +377,15 @@ export function runLive() {
       cursor = {x: -99, y: -99, press: false, ring: rk, ringX: ring.x, ringY: ring.y};
       for (const key of Object.keys(ov)) ovF[key] += (ov[key] - ovF[key]) * (1 - Math.exp(-dt / 0.15));
       ovl = {...ovF};
-      tapF += (tap - tapF) * (1 - Math.exp(-dt / 0.12));
+      if (relink) {
+        const u = T - relink.t0;
+        tapF = relink.from + (tap - relink.from) * ss(RELINK.move[0], RELINK.move[1], u);
+        if (u >= RELINK.close) {
+          energised = relink.wasOn && !heat.trip;
+          relink = null;
+        }
+      } else tapF = tap;
+      Ug += (UgTarget - Ug) * (1 - Math.exp(-dt / 0.2));
       S += (Starget - S) * (1 - Math.exp(-dt / 0.3));
       // heat runs on its own clock (τ 40 min in 3 s); a pause holds it
       const Sload = energised ? S : 0;
@@ -376,7 +403,7 @@ export function runLive() {
     const kc = 1 - Math.exp(-dt / (AP.on ? 0.18 : 0.45));
     cam.az += wrap(tgt.az - cam.az) * kc;
     for (const key of ['tx', 'ty', 'tz', 'el', 'd', 'sx', 'sy']) cam[key] += (tgt[key] - cam[key]) * kc;
-    st.frame(unitState({th, tap: tapF, heat: heatNow, cut, ovl, energised}), {...cam, az: cam.az * D2R, el: cam.el * D2R});
+    st.frame(unitState({th, tap: tapF, heat: heatNow, cut, ovl, energised, Ug}), {...cam, az: cam.az * D2R, el: cam.el * D2R});
 
     ui.root.style.display = hidden ? 'none' : '';
     for (const n of ui.root.querySelectorAll('[data-g="charts"]')) n.style.visibility = ov.charts ? '' : 'hidden';
@@ -391,7 +418,8 @@ export function runLive() {
       ov,
       cursor,
       since,
-      live: {trip: heat.trip, energised, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
+      Ug,
+      live: {trip: heat.trip, energised, relink: AP.on ? !energised : !!relink, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
     });
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);

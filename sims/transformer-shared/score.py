@@ -1,13 +1,13 @@
 """Score for the cast-resin transformer film: a cool bed (Em9 chords, 88 bpm) at one level the whole way, the
 transformer's own hum underneath (100 Hz and its harmonics: the core's laminations stretch twice per mains cycle, so
 the hum follows the flux density, not the load, and stays level), a quiet click on every button the operator presses,
-a metal tick when the tap link moves, rising air under the load drag and the fans' whirr from the moment the PTC
-starts them.
+a breaker clunk when the unit is switched off for the tap change and on again, a metal tick when the tap link
+re-seats, rising air under the load drag and the fans' whirr from the moment the PT100 controller starts them.
 
     python run_sfx.py sims/transformer-shared/score.py
 
-Times come from transformer-film/timeline.json: the clicks from film.js's SCRIPT, the fan start from the same thermal
-model the film integrates (kin.js stepHeat, 3 s time constant).
+Times come from transformer-film/timeline.json: the clicks from film.js's SCRIPT (the relink timing from its RELINK),
+the fan start from the same thermal model the film integrates (kin.js stepHeat, 3 s time constant, fan on at 100 °C).
 """
 
 import math
@@ -46,9 +46,11 @@ def score(mix, tl):
     mix.put(0, hum(dur), 0.022)
     for t in tl["clicks"]:
         mix.put(t, click(2400, 0.025), 0.055)
-    # the tap link lands on its new stud
-    mix.put(tl["tap"] + 0.65, click(5200, 0.018), 0.05)
-    mix.put(tl["tap"] + 0.65, thud(240, 0.03, 0.15), 0.04)
+    # the breaker opens and closes around the relink; the link lands on its new studs
+    for t in tl["breaker"]:
+        mix.put(t + 0.05, thud(70, 0.06, 0.35), 0.08)
+    mix.put(tl["tap"] + 1.25, click(5200, 0.018), 0.05)
+    mix.put(tl["tap"] + 1.25, thud(240, 0.03, 0.15), 0.04)
     t0, d = tl["load"]
     mix.put(t0, airy(d + 0.6, 300, 1400, 0.6), 0.03)
     # the fans: a motor whirr from the PTC's switch to the end, under a soft air

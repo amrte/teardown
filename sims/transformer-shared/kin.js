@@ -10,6 +10,13 @@
 //  - +50 % with cross-flow fans, cooling AN → AF (p. 11); PTC sensors in the LV windings, alarm and trip 20 K apart,
 //    relay resets 3 K below its response temperature (p. 10)
 //  - air 200 m³/h per kW at 15 K rise, Qv3 = V · c · ρ · Δθ (pp. 13-14); stray field formula (p. 23); 2,630 kg (p. 21)
+// Siemens "Operating Manual for Cast-resin Dry Type Distribution Transformer" for how the unit is connected and run:
+//  - nameplate 10000 V / 690 V, Dyn11, AN/AF, thermal class F/F, E2/C2/F1, insulation LI75 AC28 / AC3 (p. 6)
+//  - off-circuit tap links on every HV coil: studs 3 4 5 over 8 7 6, one link per phase, 5-6 10500 V, 4-6 10250 V,
+//    4-7 10000 V (factory setting), 3-7 9750 V, 3-8 9500 V; changed only de-energised, all three phases alike (p. 21)
+//  - delta tubes: upper terminals carry U-V-W, lower terminals V-W-U (p. 12)
+//  - PT100 temperature controller: fan on 100 °C, fan off 80 °C, alarm 130 °C, trip 150 °C (p. 18)
+//  - minimum clearance on the HV side for Um 12 kV, LI 75: 120 mm (p. 17); inrush 6-8 × rated current (p. 21)
 // Everything else (turns, core diameter, radii) is a design worked out here to be consistent with those figures.
 
 export const R = {
@@ -29,18 +36,30 @@ export const R = {
   stack: 0.96, // lamination stacking factor
   steps: 7, // core steps
   amb: 20, // ambient, °C (the guide's annual average)
-  riseHS: 115, // hot-spot rise at rated load: class F, 155 °C hot spot at 40 °C ambient
-  riseAvg: 100, // average winding rise at rated load, class F (IEC 60076-11)
+  riseW: 100, // winding rise at rated load where the PT100 sits: class F average (IEC 60076-11)
+  hsFactor: 1.15, // hot spot over that: 155 °C class F hot spot at 40 °C ambient is 115 K
   qAN: 0.8, // loading-guide exponents on the loss ratio
   qAF: 0.9,
-  ptc: {fan: 120, alarm: 140, trip: 160}, // PTC response temperatures, °C
-  hyst: 3, // PTC relay hysteresis, K
+  tc: {fanOn: 100, fanOff: 80, alarm: 130, trip: 150}, // PT100 controller settings, °C (manual 7.1.1)
   tau: 40, // winding thermal time constant, minutes
   mass: 2630,
+  insulation: 'LI75 AC28 / AC3',
+  clearance: 120, // mm, HV side with tappings, Um 12 kV LI 75
 };
-// HV tappings by connection straps: ±2 × 2.5 % of the HV turns
-export const TAPS = [-5, -2.5, 0, 2.5, 5];
-export const tapTurns = (i) => Math.round(R.N1 * (1 + TAPS[i] / 100));
+// HV tappings: one link per phase between a stud of the top row (3 4 5) and one of the bottom row (8 7 6). The tapping
+// turns sit in the middle of the HV winding; the link decides how many of them are in circuit. A higher rated HV
+// voltage means more turns, so the same grid gives a lower LV.
+export const TAPS = [
+  {link: [3, 8], pct: -5, V: 9500},
+  {link: [3, 7], pct: -2.5, V: 9750},
+  {link: [4, 7], pct: 0, V: 10000},
+  {link: [4, 6], pct: 2.5, V: 10250},
+  {link: [5, 6], pct: 5, V: 10500},
+];
+export const TAP0 = 2; // 4-7, the factory setting
+export const tapName = (i) => TAPS[i].link.join('-');
+export const tapTurns = (i) => Math.round((R.N1 * TAPS[i].V) / R.U1);
+export const GRID = [9500, 10500]; // the grid voltage range the page offers, V
 
 // ------------------------------------------------------------ core
 const D2R = Math.PI / 180;
@@ -97,12 +116,13 @@ export const PHASES = ['U', 'V', 'W'];
 // leads HV phase k by 30°. The flux lags its winding voltage by 90°.
 export const SHIFT = 30;
 export const limbAngle = (th, k) => th + SHIFT - k * 120;
-/** peak flux density in limb k at angle th, tap index tap (fewer turns → more volts per turn → more flux) */
-export const bLimb = (th, k, tap = 2) => R.Bpk * (R.N1 / tapTurns(tap)) * sin(limbAngle(th, k));
-export const bPeak = (tap = 2) => R.Bpk * (R.N1 / tapTurns(tap));
+/** peak flux density at grid voltage Ug on tap tap: volts per turn set the flux (fewer turns or more volts → more) */
+export const bPeak = (tap = TAP0, Ug = R.U1) => R.Bpk * (Ug / R.U1) * (R.N1 / tapTurns(tap));
+/** flux density in limb k at angle th */
+export const bLimb = (th, k, tap = TAP0, Ug = R.U1) => bPeak(tap, Ug) * sin(limbAngle(th, k));
 
-/** everything the panels read for load S (VA), power factor pf, tap index */
-export function operating(S, pf = 0.9, tap = 2) {
+/** everything the panels read for load S (VA), power factor pf, tap index, grid voltage Ug (V) */
+export function operating(S, pf = 0.9, tap = TAP0, Ug = R.U1) {
   const K = S / R.S;
   const N1 = tapTurns(tap);
   const ur = (R.Pk / R.S) * 100;
@@ -110,9 +130,9 @@ export function operating(S, pf = 0.9, tap = 2) {
   const sphi = Math.sqrt(Math.max(0, 1 - pf * pf));
   // IEC 60076-1 regulation for a lagging load, %
   const du = K * (ur * pf + ux * sphi) + (K * (ux * pf - ur * sphi)) ** 2 / 200;
-  const U2nl = (R.U1 * R.N2 * Math.sqrt(3)) / N1; // no-load LV line voltage at this tap
+  const U2nl = (Ug * R.N2 * Math.sqrt(3)) / N1; // no-load LV line voltage at this grid voltage and tap
   const U2 = U2nl * (1 - du / 100);
-  const B = bPeak(tap);
+  const B = bPeak(tap, Ug);
   const P0 = R.P0 * (B / R.Bpk) ** 2; // iron losses go roughly with B²
   const Pcu = K * K * R.Pk;
   const Pout = S * pf;
@@ -123,8 +143,9 @@ export function operating(S, pf = 0.9, tap = 2) {
     U2,
     du,
     U2ph: U2 / Math.sqrt(3),
-    I1: S / (Math.sqrt(3) * R.U1), // HV line current
-    I1w: S / (3 * R.U1), // HV winding current inside the delta
+    I1: S / (Math.sqrt(3) * Ug), // HV line current
+    I1w: S / (3 * Ug), // HV winding current inside the delta
+    Ug,
     I2: S / (Math.sqrt(3) * U2), // LV line = phase current
     B,
     P0,
@@ -143,24 +164,27 @@ export function operating(S, pf = 0.9, tap = 2) {
 export const wave = (th, k, phi = 25.8) => ({v: cos(limbAngle(th, k)), i: cos(limbAngle(th, k) - phi)});
 
 // ------------------------------------------------------------ heat
-/** steady-state hot-spot rise in K for load S and fan level 0..1 (the fans blend AN into AF) */
-export function hotRise(S, fan = 0) {
+// The state's hs is the winding temperature the PT100 reads; the hot spot runs R.hsFactor higher over ambient.
+/** steady-state winding rise at the PT100 in K for load S and fan level 0..1 (the fans blend AN into AF) */
+export function windRise(S, fan = 0) {
   const K = S / R.S;
   // the windings see their own losses and a fifth of the core's
   const c = (0.2 * R.P0) / R.Pk;
-  const an = R.riseHS * Math.pow((c + K * K) / (c + 1), R.qAN);
+  const an = R.riseW * Math.pow((c + K * K) / (c + 1), R.qAN);
   const kAF = (R.S_AF / R.S) ** 2; // 22.5 kW at 1500 kVA over 10 kW at 1000 kVA
-  const af = R.riseHS * Math.pow((c + K * K) / (c + kAF), R.qAF);
+  const af = R.riseW * Math.pow((c + K * K) / (c + kAF), R.qAF);
   return an + (af - an) * fan;
 }
-/** one thermal step: state {hs, fan, fanOn, trip}, load S, dt in screen seconds, tauS the screen time constant */
+export const hotSpot = (tw) => R.amb + (tw - R.amb) * R.hsFactor;
+/** one thermal step: state {hs, fan, fanOn, trip}, load S, dt in screen seconds, tauS the screen time constant;
+ *  the controller runs the fans between 100 and 80 °C and trips at 150 °C */
 export function stepHeat(st, S, dt, tauS) {
-  const target = R.amb + hotRise(S, st.fan);
+  const target = R.amb + windRise(S, st.fan);
   st.hs += (target - st.hs) * (1 - Math.exp(-dt / tauS));
-  if (!st.fanOn && st.hs >= R.ptc.fan) st.fanOn = true;
-  else if (st.fanOn && st.hs < R.ptc.fan - R.hyst) st.fanOn = false;
+  if (!st.fanOn && st.hs >= R.tc.fanOn) st.fanOn = true;
+  else if (st.fanOn && st.hs <= R.tc.fanOff) st.fanOn = false;
   st.fan += ((st.fanOn ? 1 : 0) - st.fan) * (1 - Math.exp(-dt / 0.6));
-  if (st.hs >= R.ptc.trip) st.trip = true;
+  if (st.hs >= R.tc.trip) st.trip = true;
   return st;
 }
 /** winding temperature along the height, 0 bottom .. 1 top: dry windings run hottest near the top */

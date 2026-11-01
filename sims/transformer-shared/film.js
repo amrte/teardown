@@ -1,12 +1,13 @@
 // Cast-resin transformer, the explorer film: the unit (unit.js) on the pale studio (stage.js) under the overlay
 // (console.js). The mains run at 50 Hz × playback (1/100: half a cycle a second on screen); the windings' thermal time
 // constant of 40 min plays in 3 s (×800). An operator x-rays the core to show the flux, cuts the windings in half
-// through the coil axes, turns the air on to watch it rise through the ducts, relinks the HV tap, turns on the heat map
-// and drags the load to 1400 kVA: the hot spot climbs, the PTC starts the fans at 120 °C, the rating moves from AN to
-// AF. A pure function of t.
+// through the coil axes, turns the air on to watch it rise through the ducts, then follows the operating manual's tap
+// procedure: the grid rises to 10.25 kV and the LV reads high, the breaker opens, all three links move from 4-7 to
+// 4-6, the unit is re-energised and the LV is back at 690 V. Then the heat map and a load drag to 1400 kVA: the
+// windings warm, the PT100 controller starts the fans at 100 °C, the rating moves from AN to AF. A pure function of t.
 import {runSim} from '../kit/runtime.js';
 import {CUTS, createConsole, OVERLAYS, S_MAX} from './console.js';
-import {airSpeed, bLimb, bPeak, G, hotRise, PHASES, R, stepHeat} from './kin.js';
+import {airSpeed, bLimb, bPeak, G, GRID, hotSpot, PHASES, R, stepHeat, TAP0, windRise} from './kin.js';
 import {createStage} from './stage.js';
 
 export const SCRIPT = [
@@ -17,15 +18,19 @@ export const SCRIPT = [
   {t: 9.4, cam: 'limb'},
   {t: 10.4, cut: 'section'},
   {t: 12.8, ov: 'airflow'},
-  {t: 15.2, tap: 3},
-  {t: 17.6, cam: 'hero'},
-  {t: 18.3, cut: 'solid'},
-  {t: 19.0, ov: 'heat'},
-  {t: 19.8, load: [600e3, 1400e3, 1.6]},
-  {t: 23.0, cam: 'side'},
-  {t: 26.8, cam: 'hero'},
+  {t: 15.2, cut: 'solid'},
+  {t: 15.8, cam: 'taps'},
+  {t: 17.0, grid: [10000, 10250, 0.8]},
+  {t: 18.8, tap: 3},
+  {t: 21.8, cam: 'hero'},
+  {t: 22.5, ov: 'heat'},
+  {t: 23.3, load: [600e3, 1400e3, 1.6]},
+  {t: 26.5, cam: 'side'},
+  {t: 30.3, cam: 'hero'},
 ];
-export const DURATION = 30;
+export const DURATION = 33.5;
+// a tap change: the breaker opens at the click, the link moves, the breaker closes again
+export const RELINK = {move: [0.35, 1.25], close: 1.55};
 export const DEFAULTS = {duration: DURATION, fps: 60, theme: 'light', hud: {enabled: false, title: 'cast-resin transformer', subtitle: ''}, director: {enabled: false}, watermark: ''};
 export const PLAY = 100; // playback divider for the mains: 1/100
 export const TAU_S = 3; // the thermal time constant on screen, s (40 min → 3 s is ×800)
@@ -46,9 +51,16 @@ export const loadAt = (t) => {
   return S;
 };
 export const tapAt = (t) => {
-  let v = 2;
-  for (const e of SCRIPT.filter((x) => x.tap !== undefined)) v += (e.tap - v) * ss(e.t + 0.1, e.t + 0.7, t);
+  let v = TAP0;
+  for (const e of SCRIPT.filter((x) => x.tap !== undefined)) v += (e.tap - v) * ss(e.t + RELINK.move[0], e.t + RELINK.move[1], t);
   return v;
+};
+export const energisedAt = (t) => !SCRIPT.some((e) => e.tap !== undefined && t >= e.t && t < e.t + RELINK.close);
+const GRID_EV = SCRIPT.filter((e) => e.grid);
+export const gridAt = (t) => {
+  let U = R.U1;
+  for (const e of GRID_EV) U = e.grid[0] + (e.grid[1] - e.grid[0]) * ss(e.t, e.t + e.grid[2], t);
+  return U;
 };
 export const cutAt = (t) => SCRIPT.filter((e) => e.cut && e.t <= t).pop()?.cut ?? 'solid';
 export const overlaysAt = (t) => {
@@ -77,7 +89,7 @@ const TAB = (() => {
   const fanOn = new Uint8Array(n);
   const air = new Float32Array(n);
   const spin = new Float32Array(n);
-  const st = {hs: R.amb + hotRise(loadAt(0), 0), fan: 0, fanOn: false, trip: false};
+  const st = {hs: R.amb + windRise(loadAt(0), 0), fan: 0, fanOn: false, trip: false};
   let a = 0;
   let sp = 0;
   for (let i = 0; i < n; i++) {
@@ -86,7 +98,7 @@ const TAB = (() => {
     fanOn[i] = st.fanOn ? 1 : 0;
     air[i] = a;
     spin[i] = sp;
-    stepHeat(st, loadAt(i * DT), DT, TAU_S);
+    stepHeat(st, energisedAt(i * DT) ? loadAt(i * DT) : 0, DT, TAU_S);
     a += airSpeed(st.hs, st.fan) * 0.3 * DT;
     sp += st.fan * 22 * DT;
   }
@@ -111,6 +123,8 @@ export const VIEW_FN = {
   top: (u) => ({tx: 0, ty: 0.0, tz: 0, az: 24 + 2.5 * u, el: 44, d: 4.8, sx: 0, sy: -14}),
   side: (u) => ({tx: 0.05, ty: -0.1, tz: 0.05, az: 60 - 2 * u, el: 7, d: 5.0, sx: 0, sy: -20}),
   limb: (u, k) => ({tx: mx(k), ty: -0.02, tz: 0, az: 9 + 1.6 * u, el: 5, d: 2.8, sx: 0, sy: -18}),
+  // close on the tracked coil's tapping panel
+  taps: (u, k) => ({tx: mx(k), ty: 0.02, tz: (G.hv.ro + 20) * 0.001, az: -10 + 1.2 * u, el: 4, d: 1.7, sx: 0, sy: -30}),
 };
 const VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
 export const camAt = (t, list = VIEWS, k = TRACK) => {
@@ -137,11 +151,13 @@ export const camName = (t) => {
 export const viewStart = (t) => VIEWS.filter(([t0]) => t0 <= t).pop()[0];
 
 // ------------------------------------------------------------ the operator's pointer
+export const gridK = (U) => (U - GRID[0]) / (GRID[1] - GRID[0]);
 const REST = [[820, 470], [700, 430], [900, 520], [760, 380]];
 export function makeCursor(ui) {
   const EV = SCRIPT.filter((e) => e.t > 0).map((e) => {
-    if (e.load) return {t: e.t, spot: ui.loadKnob(e.load[0] / S_MAX), to: ui.loadKnob(e.load[1] / S_MAX), drag: e.load[2], from: e.load[0], dest: e.load[1]};
+    if (e.load) return {t: e.t, spot: ui.loadKnob(e.load[0] / S_MAX), to: ui.loadKnob(e.load[1] / S_MAX), drag: e.load[2], knob: (tt) => ui.loadKnob(loadAt(tt) / S_MAX)};
     if (e.tap !== undefined) return {t: e.t, spot: ui.tapSpot(e.tap), drag: 0};
+    if (e.grid) return {t: e.t, spot: ui.gridKnob(gridK(e.grid[0])), to: ui.gridKnob(gridK(e.grid[1])), drag: e.grid[2], knob: (tt) => ui.gridKnob(gridK(gridAt(tt)))};
     if (e.cut) return {t: e.t, spot: ui.spots[e.cut], drag: 0};
     if (e.ov) return {t: e.t, spot: ui.spots[e.ov], drag: 0};
     return {t: e.t, spot: ui.spots[e.cam], drag: 0};
@@ -152,7 +168,7 @@ export function makeCursor(ui) {
     if (e.drag) {
       for (let k = 0; k <= 12; k++) {
         const tt = e.t + (k / 12) * e.drag;
-        WP.push([tt + 0.02, ...ui.loadKnob(loadAt(tt) / S_MAX)]);
+        WP.push([tt + 0.02, ...e.knob(tt)]);
       }
       WP.push([e.t + e.drag + 0.3, ...e.to]);
     } else WP.push([e.t + 0.24, ...e.spot]);
@@ -189,13 +205,14 @@ export function makeCursor(ui) {
 const CALL = {
   hero: [
     {a: 'hv', name: 'Cast-resin HV winding', sub: `${R.N1} TURNS · ${R.discs} DISCS`, l: [1168, 318], w: 140},
-    {a: 'tap', name: 'Tapping links', sub: '±2 × 2.5 % · OFF-LOAD', l: [440, 420], w: -128, hide: 'section'},
+    {a: 'tap', name: 'Tap links', sub: 'OFF-CIRCUIT · ALL 3 PHASES', l: [440, 420], w: -140, hide: 'section'},
     {a: 'fan', name: 'Cross-flow fans', sub: 'AN → AF · +50 %', l: [1168, 690], w: 120},
     {a: 'lvBar', name: 'LV busbars', sub: '2U 2V 2W · 2N', l: [1190, 160], w: 100},
   ],
   front: [
-    {a: 'delta', name: 'Delta connection', sub: 'CROSSED COPPER RODS', l: [440, 520], w: -132, hide: 'section'},
-    {a: 'ptc', name: 'PTC relay box', sub: 'FANS · ALARM · TRIP', l: [1180, 150], w: 118},
+    {a: 'delta', name: 'Delta tubes', sub: 'UPPER U-V-W · LOWER V-W-U', l: [440, 520], w: -150, hide: 'section'},
+    {a: 'ptc', name: 'PT100 sensors', sub: 'IN ALL THREE WINDINGS', l: [1180, 150], w: 130},
+    {a: 'earth', name: 'Earth terminal', sub: 'LOWER CLAMPING', l: [440, 680], w: -120, hide: 'section'},
     {a: 'plate', name: 'Rating plate', sub: `${R.mass} KG · IEC 60076-11`, l: [440, 160], w: -126},
   ],
   limb: [
@@ -203,6 +220,10 @@ const CALL = {
     {a: 'ductFace', name: 'Cooling duct', sub: '30 MM · AIR RISES', l: [1150, 200], w: 118, cut: 'section'},
     {a: 'hvFace', name: 'HV disc winding', sub: `${R.discs} DISCS CAST IN RESIN`, l: [1150, 470], w: 136, cut: 'section'},
     {a: 'coreFront', name: 'Stepped core', sub: `${Math.round(G.rc * 2)} MM · 7 STEPS · 1.6 T`, l: [470, 620], w: -140},
+  ],
+  taps: [
+    {a: 'tapPanel', name: 'Tap link', sub: 'STUDS 3 4 5 OVER 8 7 6', l: [1110, 560], w: 140},
+    {a: 'hvLead', name: 'HV cable', sub: `CLEARANCE ≥ ${R.clearance} MM · LI 75`, l: [1110, 170], w: 150},
   ],
   top: [
     {a: 'ductTop', name: 'Axial ducts', sub: 'THREE PER LIMB', l: [1170, 250], w: 110},
@@ -219,7 +240,7 @@ export function makeConsoleFrame(ui, st) {
   const A = st.unit.A;
   const at = (a, k) => (typeof A[a] === 'function' ? A[a](k) : A[a]);
   // live: the page's own state (overlays, cut, playback, pause); absent in the film
-  return (t, {th, cam, k, S, tap, heat, cut, ov, cursor, since, live}) => {
+  return (t, {th, cam, k, S, tap, heat, cut, ov, cursor, since, live, Ug = R.U1, energised = true, relink = false}) => {
     const vis = ss(1.1, 1.8, since) * (ov.callouts ? 1 : 0);
     const callouts = [];
     for (const c of CALL[cam] || []) {
@@ -240,7 +261,9 @@ export function makeConsoleFrame(ui, st) {
       fan: heat.fan,
       fanOn: heat.fanOn,
       trip: live ? live.trip : false,
-      energised: live ? live.energised : true,
+      energised: live ? live.energised : energised,
+      relink: live ? live.relink : relink,
+      Ug,
       cam,
       cut,
       overlays: ov,
@@ -256,23 +279,23 @@ void CUTS;
 void OVERLAYS;
 
 /** the unit's pose for a frame: shared by the film and the live page */
-export const unitState = ({th, tap, heat, cut, ovl, energised = true}) => {
+export const unitState = ({th, tap, heat, cut, ovl, energised = true, Ug = R.U1}) => {
   const on = energised ? 1 : 0;
   const ti = Math.round(tap);
   return {
-    B: [0, 1, 2].map((i) => bLimb(th, i, ti) * on),
-    bpk: bPeak(ti),
+    B: [0, 1, 2].map((i) => bLimb(th, i, ti, Ug) * on),
+    bpk: bPeak(TAP0),
     flux: ovl.flux * on,
     fluxT: th / 360,
     cut,
     heat: ovl.heat > 0.5 ? 1 : 0,
-    hs: heat.hs,
+    hs: hotSpot(heat.hs), // the heat map's top is the hot spot
     air: ovl.airflow,
     airPhase: heat.air,
     airHot: Math.min(1, Math.max(0.15, (heat.hs - R.amb) / 110)),
     fanSpin: heat.spin,
     tap,
-    ptcLit: Math.min(1, Math.max(0, (heat.hs - R.ptc.fan + 15) / 15)) * 0.8,
+    ptcLit: Math.min(1, Math.max(0, (heat.hs - R.tc.fanOn + 15) / 15)) * 0.8,
   };
 };
 
@@ -296,9 +319,12 @@ export function makeFilm() {
         const ov = overlaysAt(t);
         const ovl = Object.fromEntries(Object.keys(ov).map((key) => [key, ovLevel(t, key)]));
         const tap = tapAt(t);
-        const S = loadAt(t);
-        st.frame(unitState({th, tap, heat, cut, ovl}), {...c, az: c.az * D2R, el: c.el * D2R});
-        frame(t, {th, cam, k: TRACK, S, tap, heat, cut, ov, cursor: cursorAt(t), since: t - viewStart(t)});
+        const energised = energisedAt(t);
+        const S = energised ? loadAt(t) : 0;
+        const Ug = gridAt(t);
+        const relink = SCRIPT.some((e) => e.tap !== undefined && t >= e.t && t < e.t + RELINK.close);
+        st.frame(unitState({th, tap, heat, cut, ovl, energised, Ug}), {...c, az: c.az * D2R, el: c.el * D2R});
+        frame(t, {th, cam, k: TRACK, S, tap, heat, cut, ov, cursor: cursorAt(t), since: t - viewStart(t), Ug, energised, relink});
         return {};
       },
     };
