@@ -419,7 +419,7 @@ export function runLive() {
       cursor,
       since,
       Ug,
-      live: {trip: heat.trip, energised, relink: AP.on ? !energised : !!relink, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
+      live: {freeCam: !AP.on && (Math.abs(off.az) > 2 || Math.abs(off.el) > 2 || Math.abs(off.k - 1) > 0.04), trip: heat.trip, energised, relink: AP.on ? !energised : !!relink, paused, playText: AP.on ? '1 / 100 SPEED' : playText(PLAYS[playI]), playK: AP.on ? 0.5 : playI / (PLAYS.length - 1)},
     });
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);

@@ -113,18 +113,16 @@ export const heatAt = (t) => ({hs: read(TAB.hs, t), fan: read(TAB.fan, t), fanOn
 
 // ------------------------------------------------------------ views: metres and degrees, functions of u (s since on)
 const mx = (k) => G.limbX[k] * 0.001;
+// fixed views: the camera glides from one to the next and holds still
 export const VIEW_FN = {
-  open: (u) => {
-    const k = smoother(u / 4.1);
-    return {tx: 0, ty: -0.06, tz: 0, az: 8 + 30 * k, el: 10 + 6 * k, d: 5.9 - 0.8 * k, sx: 0, sy: -18};
-  },
-  hero: (u) => ({tx: 0, ty: -0.06, tz: 0, az: 38 + 2.5 * u, el: 16, d: 5.1, sx: 0, sy: -18}),
-  front: (u) => ({tx: 0, ty: -0.05, tz: 0, az: 3 + 1.6 * u, el: 5, d: 4.8, sx: 0, sy: -18}),
-  top: (u) => ({tx: 0, ty: 0.0, tz: 0, az: 24 + 2.5 * u, el: 44, d: 4.8, sx: 0, sy: -14}),
-  side: (u) => ({tx: 0.05, ty: -0.1, tz: 0.05, az: 60 - 2 * u, el: 7, d: 5.0, sx: 0, sy: -20}),
-  limb: (u, k) => ({tx: mx(k), ty: -0.02, tz: 0, az: 9 + 1.6 * u, el: 5, d: 2.8, sx: 0, sy: -18}),
+  open: () => ({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
+  hero: () => ({tx: 0, ty: -0.06, tz: 0, az: 40, el: 16, d: 5.1, sx: 0, sy: -18}),
+  front: () => ({tx: 0, ty: -0.05, tz: 0, az: 5, el: 5, d: 4.8, sx: 0, sy: -18}),
+  top: () => ({tx: 0, ty: 0.0, tz: 0, az: 26, el: 44, d: 4.8, sx: 0, sy: -14}),
+  side: () => ({tx: 0.05, ty: -0.1, tz: 0.05, az: 58, el: 7, d: 5.0, sx: 0, sy: -20}),
+  limb: (u, k) => ({tx: mx(k), ty: -0.02, tz: 0, az: 11, el: 5, d: 2.8, sx: 0, sy: -18}),
   // close on the tracked coil's tapping panel
-  taps: (u, k) => ({tx: mx(k), ty: 0.02, tz: (G.hv.ro + 20) * 0.001, az: -10 + 1.2 * u, el: 4, d: 1.7, sx: 0, sy: -30}),
+  taps: (u, k) => ({tx: mx(k), ty: 0.02, tz: (G.hv.ro + 20) * 0.001, az: -8, el: 4, d: 1.7, sx: 0, sy: -30}),
 };
 const VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
 export const camAt = (t, list = VIEWS, k = TRACK) => {
@@ -230,7 +228,7 @@ const CALL = {
     {a: 'neutral', name: 'Star point 2N', sub: 'LV NEUTRAL BAR', l: [1170, 130], w: 110},
   ],
   side: [
-    {a: 'fan', name: 'Cross-flow fans', sub: 'SWITCHED BY THE PTC', l: [440, 640], w: -130},
+    {a: 'fan', name: 'Cross-flow fans', sub: 'SWITCHED BY THE PT100', l: [440, 640], w: -130},
     {a: 'pad', name: 'Rubber pads', sub: 'CLAMP · DAMP NOISE', l: [1150, 210], w: 120},
   ],
 };
@@ -241,17 +239,19 @@ export function makeConsoleFrame(ui, st) {
   const at = (a, k) => (typeof A[a] === 'function' ? A[a](k) : A[a]);
   // live: the page's own state (overlays, cut, playback, pause); absent in the film
   return (t, {th, cam, k, S, tap, heat, cut, ov, cursor, since, live, Ug = R.U1, energised = true, relink = false}) => {
-    const vis = ss(1.1, 1.8, since) * (ov.callouts ? 1 : 0);
+    const vis = ss(1.1, 1.8, since) * (ov.callouts ? 1 : 0) * (live && live.freeCam ? 0 : 1);
     const callouts = [];
     for (const c of CALL[cam] || []) {
       if ((c.cut && c.cut !== cut) || c.hide === cut) continue;
       const p = st.project(at(c.a, k));
-      if (!p) continue;
-      const [lx, ly] = c.l;
+      // a point under a panel or off the free middle of the screen gets no leader at all
+      if (!p || p[0] < 300 || p[0] > 1300 || p[1] < 60 || p[1] > 780) continue;
+      // keep the label clear of the side panels: estimate its width from the text (11.5 px name, 8.6 px caps sub)
+      const tw = Math.max(c.name.length * 6.6, c.sub.length * 6.4) + 14;
+      const ly = c.l[1];
+      const lx = c.w < 0 ? Math.max(c.l[0], 296 + tw) : Math.min(c.l[0], 1306 - tw);
       callouts.push({name: c.name, sub: c.sub, at: p, label: [lx, ly], w: c.w, o: vis});
     }
-    // the phase panel's leader into the tracked coil
-    callouts.push({name: '', sub: '', at: st.project(cut === 'section' ? A.ductFace(k) : A.coilFront(k)), label: [1318 - 0.01, 124], w: 0, o: 0.85 * (ov.callouts ? 1 : 0)});
     ui.update({
       S,
       th,
