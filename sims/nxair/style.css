@@ -90,8 +90,10 @@ button, select, input { font: inherit; color: inherit; }
   box-shadow: 0 1px 0 var(--line);
 }
 .tag::after {
-  content: ''; position: absolute; left: 50%; top: 100%; width: 1px; height: 10px; background: var(--accent);
+  content: ''; position: absolute; left: 50%; top: 100%; width: 1px; height: var(--lead, 10px); background: var(--accent);
 }
+.tag.part { border-color: var(--ink-3); font-weight: 600; color: var(--ink); }
+.tag.part::after { background: var(--ink-3); }
 .tag i { font-style: normal; color: var(--accent-ink); }
 .tip {
   position: absolute; pointer-events: none; background: var(--ink); color: var(--bg);

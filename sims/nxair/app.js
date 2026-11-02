@@ -274,7 +274,7 @@ function applyFocus() {
       m.emissiveIntensity = on ? 0.18 : 0;
     }
   }
-  const active = new Set(state.selJoint ? [state.selJoint] : state.joints);
+  const active = new Set(activeJoints());
   for (const [jid, ims] of Object.entries(world.bolts)) {
     for (const im of ims) {
       const hot = active.has(jid);
@@ -360,43 +360,100 @@ function jointLabel(j, n) {
   const t = j.t != null ? `${j.t} Nm` : j.ref_t ? j.ref_t : BASIS[j.basis].label;
   return `${n}× ${esc(bolt)} · <i>${esc(t)}</i>`;
 }
+// Tags: bolt-joint tags ("11× M8 · 25 Nm") for the active joints, part-name tags for the focused / selected parts.
+// Each tag anchors to the visible instance (or part centre) nearest its centroid; tags are nudged apart on screen.
+function activeJoints() {
+  if (state.mode === 'breaker') return [];
+  if (state.selJoint) return [state.selJoint];
+  if (state.selPart) return partInfo(state.selPart)?.joints || [];
+  return state.joints;
+}
+function activeTagParts() {
+  if (state.mode === 'breaker') {
+    if (state.selPart) return [state.selPart];
+    if (state.bkFocus.length) return state.bkFocus;
+    return state.bkEx > 0.3 ? BK_PARTS.map((p) => p.id) : [];
+  }
+  if (state.selPart) return [state.selPart];
+  return state.joints.length ? [] : state.focus.filter((id) => partById[id]);
+}
 function renderLabels() {
   if (!world) return;
-  if (state.mode === 'breaker') { labelLayer.innerHTML = ''; return; }
-  const active = state.selJoint ? [state.selJoint] : state.joints;
   const html = [];
   if (state.labels) {
-    for (const jid of active) {
+    for (const jid of activeJoints()) {
       const ims = world.bolts[jid];
       if (!ims) continue;
       const n = ims.filter((im) => !im.userData.nut).reduce((a, im) => a + im.count, 0);
       html.push(`<div class="tag" data-j="${jid}">${jointLabel(jointById[jid], n)}</div>`);
     }
+    for (const pid of activeTagParts()) html.push(`<div class="tag part" data-p="${pid}">${esc(partInfo(pid)?.name || pid)}</div>`);
   }
   labelLayer.innerHTML = html.join('');
+  labelFrame = 0;
+}
+let labelFrame = 0;
+const partCentre = new Map();
+const tmpBox = new THREE.Box3();
+function partAnchor(pid) {
+  const groups = bkById[pid] ? [world.bk.parts[pid]] : world.subject.parts[pid] || [];
+  tmpBox.makeEmpty();
+  for (const g of groups) if (g && g.visible !== false) tmpBox.expandByObject(g);
+  if (tmpBox.isEmpty()) return null;
+  const c = tmpBox.getCenter(new THREE.Vector3());
+  const cutOn = state.mode === 'breaker' ? state.bkCut : state.cut;
+  if (cutOn && c.x < 0) c.x = Math.min(tmpBox.max.x, 0.002);
+  return c;
+}
+function toScreen(v, w, h) {
+  const p = v.clone().project(camera);
+  if (p.z > 1 || Math.abs(p.x) > 1.02 || Math.abs(p.y) > 1.02) return null;
+  return {x: ((p.x + 1) / 2) * w, y: ((1 - p.y) / 2) * h};
 }
 function placeLabels() {
-  if (!world || !state.labels) return;
+  if (!world || !state.labels || !labelLayer.children.length) return;
   const w = stage.clientWidth, h = stage.clientHeight;
+  const cutOn = state.mode === 'breaker' ? state.bkCut : state.cut;
+  // part centres are costly: refresh every 8th frame
+  if (labelFrame++ % 8 === 0) for (const el of labelLayer.children) if (el.dataset.p) partCentre.set(el.dataset.p, partAnchor(el.dataset.p));
+  const placed = [];
   for (const el of labelLayer.children) {
-    const ims = world.bolts[el.dataset.j];
-    if (!ims || !ims[0].visible) { el.hidden = true; continue; }
-    // anchor: the instance nearest the centroid of the first mesh's points
-    const im = ims[0];
-    const pts = im.userData.pts;
-    const c = pts.reduce((a, {p}) => a.add(p), new THREE.Vector3()).multiplyScalar(1 / pts.length);
-    let best = pts[0].p, bd = Infinity;
-    for (const {p} of pts) { const d = p.distanceToSquared(c); if (d < bd) { bd = d; best = p; } }
-    tmpV.copy(best);
-    im.parent.localToWorld(tmpV);
-    const hiddenByCut = state.cut && tmpV.x < -0.0005;
-    tmpV.project(camera);
-    const vis = tmpV.z < 1 && !hiddenByCut && Math.abs(tmpV.x) < 1.05 && Math.abs(tmpV.y) < 1.05;
-    el.hidden = !vis;
-    if (vis) {
-      el.style.left = `${((tmpV.x + 1) / 2) * w}px`;
-      el.style.top = `${((1 - tmpV.y) / 2) * h}px`;
+    let at = null;
+    if (el.dataset.j) {
+      const ims = (world.bolts[el.dataset.j] || []).filter((im) => !im.userData.nut && im.visible);
+      // candidates: every instance that is not cut away and is on screen; keep the one nearest the centroid
+      const cands = [];
+      for (const im of ims) {
+        if (!im.parent?.visible) continue;
+        for (const {p} of im.userData.pts) {
+          const v = im.parent.localToWorld(p.clone());
+          if (cutOn && v.x < -0.0005) continue;
+          const sp = toScreen(v, w, h);
+          if (sp) cands.push(sp);
+        }
+      }
+      if (cands.length) {
+        const cx = cands.reduce((a, c) => a + c.x, 0) / cands.length, cy = cands.reduce((a, c) => a + c.y, 0) / cands.length;
+        at = cands.reduce((b, c) => ((c.x - cx) ** 2 + (c.y - cy) ** 2 < (b.x - cx) ** 2 + (b.y - cy) ** 2 ? c : b));
+      }
+    } else if (el.dataset.p) {
+      const c = partCentre.get(el.dataset.p);
+      if (c) at = toScreen(c, w, h);
     }
+    el.hidden = !at;
+    if (!at) continue;
+    // nudge up until it does not overlap an already placed tag
+    const tw = el.offsetWidth || 120, th = (el.offsetHeight || 20) + 4;
+    let y = at.y;
+    for (let k = 0; k < 12; k++) {
+      const hit = placed.find((r) => Math.abs(r.x - at.x) < (r.w + tw) / 2 && Math.abs(r.y - y) < th);
+      if (!hit) break;
+      y = hit.y - th;
+    }
+    placed.push({x: at.x, y, w: tw});
+    el.style.left = `${Math.min(w - tw / 2 - 6, Math.max(tw / 2 + 6, at.x))}px`;
+    el.style.top = `${Math.max(th + 4, y)}px`;
+    el.style.setProperty('--lead', `${Math.max(10, at.y - Math.max(th + 4, y) + 10)}px`);
   }
 }
 
@@ -1009,7 +1066,7 @@ function wire() {
     else if (t.dataset.joint) selectJoint(t.dataset.joint);
     else if (t.dataset.f) { torqueFilter[t.dataset.f] = t.dataset.v; renderTorques(); }
   });
-  $('#ex').addEventListener('input', (e) => { if (state.mode === 'breaker') { state.bkEx = +e.target.value / 100; renderBreakerReadout(); } else state.ex = +e.target.value / 100; });
+  $('#ex').addEventListener('input', (e) => { if (state.mode === 'breaker') { state.bkEx = +e.target.value / 100; renderLabels(); } else state.ex = +e.target.value / 100; });
   for (const [id, key, parse] of [['v-w', 'W', Number], ['v-d', 'D', Number], ['v-bus', 'bus', Number], ['v-ur', 'ur', Number]]) {
     const el = $('#' + id);
     el.value = String(state[key]);
