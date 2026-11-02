@@ -297,13 +297,16 @@ function applyFocus() {
 }
 function applyGlassLite() { if (state.isolate) applyGlass(); }
 
+// parts drawn see-through in X-ray: the panel enclosure, or on the Breaker tab the mechanism cover, housing and pole shells
+const BK_SHELLS = new Set(['bkCover', 'bkFrame', 'bkShell']);
+const shellSet = () => (state.mode === 'breaker' ? BK_SHELLS : world.subject.shellIds);
 function applyGlass() {
   if (!world) return;
   const focus = new Set(state.selPart ? [state.selPart] : state.mode === 'breaker' ? state.bkFocus : state.focus);
   const iso = state.isolate && focus.size > 0;
   for (const [pid, list] of Object.entries(world.partMats)) {
     const ghost = iso && !focus.has(pid);
-    const glass = !ghost && state.glass && world.subject.shellIds.has(pid) && !(iso && focus.has(pid));
+    const glass = !ghost && state.glass && shellSet().has(pid) && !(iso && focus.has(pid));
     for (const m of list) {
       if (ghost) { m.transparent = true; m.opacity = 0.045; m.depthWrite = false; }
       else if (glass) { m.transparent = true; m.opacity = 0.13; m.depthWrite = false; }
@@ -484,7 +487,7 @@ function pick(ev) {
     if (hidden) continue;
     if (o.isInstancedMesh) return {joint: o.userData.joint};
     const pid = o.userData.part;
-    if (state.glass && world.subject.shellIds.has(pid)) continue;
+    if (state.glass && shellSet().has(pid)) continue;
     if (pid) return {part: pid, label: o.userData.label || o.parent?.userData?.label};
   }
   return null;
@@ -928,10 +931,10 @@ function renderBreaker() {
     <span class="eyebrow">SION 3AE5 · withdrawable · ${P} mm pole centres · ${TD} mm terminal distance · arms Ø ${arm} · ${fingers}-finger tulips</span>
     <h2>How the breaker works</h2>
     <ol class="body how">
-      <li><b>Charge.</b> The motor (or ≈ 50 turns of the hand crank) winds the closing spring through the gear unit until it latches. The motor switches off; the indicator shows CHARGED. Takes < 15 s.</li>
-      <li><b>Close.</b> The closing solenoid -Y9 (or the CLOSE button) frees the latch. The spring turns the main shaft; one lever per pole pushes an insulating rod up and the moving contact meets the fixed contact inside the vacuum. The last bit of travel compresses the contact-pressure springs, and the same movement charges the opening spring. Closing < 75 ms. The motor at once recharges the closing spring, so the breaker now stores OPEN – CLOSE – OPEN.</li>
-      <li><b>Open.</b> The shunt release -Y1 (protection trip, OPEN button, undervoltage release) frees the opening latch. The opening spring snaps the shaft back and pulls the contacts apart: opening < 65 ms, break time < 80 ms. Trip-free: an OPEN command always wins.</li>
-      <li><b>Interrupt.</b> The arc burns in metal vapour from the contacts. At the next current zero it goes out; the vapour condenses on the shield and the vacuum gap withstands the returning voltage within microseconds. Arcing < 15 ms.</li>
+      <li><b>Charge.</b> The motor -M1 (or ≈ 50 turns of the hand crank on coupling 57.2) turns the charging shaft through the gear unit. The crank on that shaft stretches the closing spring, a helical extension spring hanging at the right side plate, through a link rod. Just past dead centre the closing latch catches the crank: indicator CHARGED, -S4 signals, -S21/-S22 switch the motor off. Takes &lt; 15 s.</li>
+      <li><b>Close.</b> The closing solenoid -Y9 (or the CLOSE button) frees the closing latch. The spring pulls the crank round; the closing cam on the charging shaft presses the roller lever of the main shaft, which turns and lifts the three insulating rods through the pole levers. The moving contacts meet the fixed contacts in the vacuum; the last few millimetres compress the contact-pressure springs. The same rotation winds the two opening torsion springs on the main-shaft ends, and the opening latch holds the shaft. Closing &lt; 75 ms. The motor recharges the closing spring at once: OPEN – CLOSE – OPEN is now stored.</li>
+      <li><b>Open.</b> The 1st shunt release -Y1 strikes the opening latch with its armature (protection trip, OPEN button; -Y2, -Y4…-Y6 and -Y7 do it through their own small energy stores). The opening springs and the contact-pressure springs turn the main shaft back and pull the contacts apart: opening &lt; 65 ms, break time &lt; 80 ms. Trip-free: an OPEN command during closing returns the contacts to OPEN even with CLOSE held. Electrical anti-pumping by relay -K1.</li>
+      <li><b>Interrupt.</b> The interrupter is fixed to the upper support and guided axially in the lower one; a flexible conductor feeds the moving stem. The arc burns in metal vapour from the contacts and goes out at the next current zero; the vapour condenses on the shield and the gap withstands the returning voltage within microseconds. Arcing &lt; 15 ms.</li>
     </ol>
     <div class="cycle">
       <div class="row">
@@ -944,6 +947,15 @@ function renderBreaker() {
       <div class="readout" id="bkRead"></div>
     </div>
     <p class="small muted">Slow motion. Readouts show the real times from the 3AE manual. Contact travel is drawn larger than life; Siemens publishes no stroke. Use Cut for a section through the middle pole.</p>
+    <h3>Springs</h3>
+    <div class="scroll-x"><table class="grid4"><thead><tr><th>Spring</th><th>Type</th><th>Charged by</th><th>Does</th></tr></thead><tbody>
+      <tr><td>Closing spring (55)</td><td>helical extension, 1 per breaker</td><td>motor / hand crank via charging shaft and crank</td><td>closes the breaker; also charges the opening and contact-pressure springs</td></tr>
+      <tr><td>Opening springs (17)</td><td>helical torsion, on both main-shaft ends</td><td>the closing movement</td><td>open the breaker when the opening latch is released</td></tr>
+      <tr><td>Contact-pressure springs</td><td>helical compression, 1 per pole on the insulating rod</td><td>the last part of the closing stroke (over-travel)</td><td>keep the closed contacts pressed, take up contact erosion, assist opening</td></tr>
+      <tr><td>Release energy stores</td><td>inside -Y2, -Y4…-Y6, -Y7</td><td>reset by the mechanism</td><td>strike the opening latch on a trip</td></tr>
+      <tr><td>Tulip garter springs</td><td>ring springs, 2 per contact system</td><td>assembly</td><td>press the contact fingers onto the bushing contact</td></tr>
+    </tbody></table></div>
+    <p class="small muted">Types read from the 3AE instructions (Fig. 20) and catalog HG 11.02 p. 8; Siemens publishes no spring forces or rates.</p>
     <h3>Teardown</h3>
     <ol class="tear">${BK_TEAR.map((x, k) => `<li><button type="button" class="tearbtn" data-tear="${k}"><span class="tt">${esc(x.t)}</span><span class="badge ${x.field ? 'step' : 'none'}">${x.field ? 'Field work' : 'Siemens only'}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
     ${sel ? `<div class="pcard" style="margin-top:14px"><span class="eyebrow">${esc(sel.grp)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>${comps.length ? `<h3>Components</h3><ul class="plain small">${comps.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
@@ -1019,10 +1031,11 @@ function bkTick(now, dt) {
   const u = Math.min(1, (now - bkCur.t0) / 1000 / (reduced ? 0.2 : A.dur));
   const m = THREE.MathUtils.clamp((u - 0.2) / 0.8, 0, 1); // movement after the release pulse
   let c = state.bk.c, sv = state.bk.s, pClose = 0, pOpen = 0;
-  if (bkCur.kind === 'charge') { c = bkCur.from.c + (1 - bkCur.from.c) * u; bkCur.motor += dt * 40; }
-  if (bkCur.kind === 'close') { pClose = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = m * m; sv = e; c = 1 - e; }
+  let crank = c > 0.99 ? 170 : 0;
+  if (bkCur.kind === 'charge') { c = bkCur.from.c + (1 - bkCur.from.c) * u; crank = 170 * c; bkCur.motor += dt * 40; }
+  if (bkCur.kind === 'close') { pClose = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = m * m; sv = Math.min(1, e * 1.3); c = 1 - e; crank = 170 + 190 * e; }
   if (bkCur.kind === 'open') { pOpen = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = 1 - (1 - m) * (1 - m); sv = 1 - e; }
-  world.bk.pose({c, s: sv, motor: bkCur.motor, pClose, pOpen});
+  world.bk.pose({c, s: sv, crank, motor: bkCur.motor, pClose, pOpen});
   const realT = bkCur.kind === 'charge' ? u * A.real : bkCur.kind === 'dead' ? u * A.real : m * A.real;
   bkCur.live = `${A.label} … ${A.unit === 's' ? realT.toFixed(1) : Math.round(realT)} ${A.unit} (${A.max})`;
   if (u >= 1) {

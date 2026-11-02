@@ -126,6 +126,8 @@ const BK_ALLOW = [
   [/^bkShaft:Pole lever/, /^bkFrame:Separating panel|^bkLower:Insulator/, 'lever passes through its slot in the separating panel and the insulator'],
   [/^bkShaft:Pole lever/, /^bkRods:Rod end/, 'lever pin engages the rod end'],
   [/^bkUpper:/, /^bkVI:Fixed stem/, 'fixed stem bolted into the pole head'],
+  [/^bkShaft:Main shaft/, /^bkOpeningSpring:Opening spring \(17\)/, 'torsion springs coaxial on the main shaft (radial check below)'],
+  [/^bkMotor:Worm shaft/, /^bkFrame:Mechanism mounting plate/, 'worm shaft passes through the mounting plate'],
 ];
 const mats = makeMaterials([]);
 let total = 0;
@@ -168,6 +170,7 @@ if (args.includes('--breaker') || args.includes('--all')) {
     const dd = bk.dims;
     if (dd.viR >= dd.shellIn) { console.log(`breaker W${W}: interrupter (${dd.viR}) touches the pole shell (${dd.shellIn})`); bt++; }
     if (dd.viRear <= dd.shellRear) { console.log(`breaker W${W}: interrupter pokes through the shell rear`); bt++; }
+    if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
     for (const [c, s] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
       bk.pose({c, s});
       const res = clashes(collect(bk.root)).filter((r) => !BK_ALLOW.some(([x, y]) => (x.test(r.a) && y.test(r.b)) || (x.test(r.b) && y.test(r.a))));
