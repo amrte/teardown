@@ -17,9 +17,10 @@
       <canvas id="gl"></canvas>
       <div class="labels" id="labels"></div>
       <div class="tip" id="tip" hidden></div>
+      <div class="toast" id="toast" role="status" hidden></div>
       <div class="tools">
         <div class="seg" id="views" role="group" aria-label="Camera view"></div>
-        <div class="seg" role="group" aria-label="Breaker position">
+        <div class="seg" id="truckSeg" role="group" aria-label="Breaker position">
           <button type="button" data-truck="service" aria-pressed="true">Service</button>
           <button type="button" data-truck="test" aria-pressed="false">Test</button>
           <button type="button" data-truck="out" aria-pressed="false">Out</button>
@@ -32,7 +33,7 @@
           <button type="button" id="t-row" aria-pressed="true" title="Show the neighbour panels">Row</button>
           <button type="button" id="t-lab" aria-pressed="true" title="Bolt labels">Tags</button>
         </div>
-        <div class="seg" role="group" aria-label="Bolts shown">
+        <div class="seg" id="boltSeg" role="group" aria-label="Bolts shown">
           <button type="button" data-bolts="step" aria-pressed="true" title="All bolts dim, current step lit">Bolts</button>
           <button type="button" data-bolts="all" aria-pressed="false" title="All bolts coloured by size">By size</button>
           <button type="button" data-bolts="none" aria-pressed="false" title="Only the current step">Step only</button>
@@ -47,12 +48,14 @@
     <aside class="rail">
       <nav class="tabs" aria-label="Reference">
         <a href="#steps" data-tab="steps">Steps</a>
+        <a href="#breaker" data-tab="breaker">Breaker</a>
         <a href="#parts" data-tab="parts">Parts</a>
         <a href="#torques" data-tab="torques">Torques</a>
         <a href="#specs" data-tab="specs">Specs</a>
         <a href="#sources" data-tab="sources">Sources</a>
       </nav>
       <div class="pane" id="pane-steps"></div>
+      <div class="pane" id="pane-breaker" hidden></div>
       <div class="pane" id="pane-parts" hidden></div>
       <div class="pane" id="pane-torques" hidden></div>
       <div class="pane" id="pane-specs" hidden></div>

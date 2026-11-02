@@ -578,15 +578,12 @@ export function buildPanel(mats, opts) {
     p.add(B(-3, 3, 510, 912, D + 2, D + 3), 'black', 'Mimic: feeder');
     p.add(B(-28, 28, 790, 850, D + 2, D + 3), 'black', 'Mimic: circuit-breaker');
     p.add(C(26, 26, 5, 'z', 0, 870, D + 4), 'black', 'Position indicator withdrawable part');
-    p.add(B(-4, 4, 848, 892, D + 6, D + 7), 'white', 'Indicator bar (service = vertical)');
     p.add(C(20, 20, 5, 'z', 70, 600, D + 4), 'black', 'Position indicator feeder earthing switch');
-    p.add(B(66, 74, 582, 618, D + 6, D + 7), 'white', 'Indicator bar');
     // actuating openings + slides
     p.add(C(14, 14, 6, 'z', 0, 720, D + 2), 'steel', 'Actuating opening: racking');
     p.add(RB(-30, 30, 680, 770, D + 2, D + 7, 3), 'zinc', 'Operating slide (racking)');
     p.add(C(7, 7, 6, 'z', 55, 720, D + 2), 'steel', 'Double-bit key opening (5 mm)');
     p.add(C(14, 14, 6, 'z', 70, 530, D + 2), 'steel', 'Actuating opening: earthing switch');
-    p.add(RB(40, 100, 490, 570, D + 2, D + 7, 3), 'zinc', 'Operating slide (earthing)');
     p.add(C(9, 9, 6, 'z', -60, 1250, D + 2), 'green', 'Actuating opening: CLOSE');
     p.add(C(9, 9, 6, 'z', 60, 1250, D + 2), 'red', 'Actuating opening: OPEN');
     p.add(C(14, 14, 8, 'z', 0, 1300, D + 3), 'black', 'Rotary button / spring charging opening');
@@ -595,6 +592,29 @@ export function buildPanel(mats, opts) {
     p.add(C(14, 14, 20, 'z', hw - 42, 940, D + 10), 'steel', 'Handle pivot');
     p.add(B(-hw + 80, -hw + 260, 1230, 1280, D, D + 1), 'yellow', 'Instruction label');
     p.finish();
+    // moving front elements: earthing-switch slide, indicators, operating lever (O §10.16)
+    const mk = (flag, label, build, pos) => {
+      const g = new THREE.Group();
+      const pb = new PartBuilder(g, mats);
+      build(pb);
+      pb.finish();
+      g.userData[flag] = true;
+      g.userData.label = label;
+      g.traverse((c) => { if (c.isMesh) c.userData.part = 'doorCtl'; });
+      g.position.copy(pos);
+      parts.hvdoor[0].add(g);
+      return g;
+    };
+    mk('eswSlide', 'Operating slide (earthing switch)', (b) => b.add(RB(-30, 30, -40, 40, 0, 5, 3), 'zinc', 'Operating slide (earthing switch)'), V(70, 530, D + 2));
+    mk('eswInd', 'Position indicator feeder earthing switch (vertical I = earthed)', (b) => b.add(B(-4, 4, -18, 18, 0, 1), 'white', 'Indicator bar'), V(70, 600, D + 6));
+    mk('truckInd', 'Position indicator withdrawable part (vertical = service, horizontal = test)', (b) => b.add(B(-4, 4, -22, 22, 0, 1), 'white', 'Indicator bar'), V(0, 870, D + 6));
+    const lev = mk('eswLever', 'Operating lever, feeder earthing switch (180°)', (b) => {
+      b.add(C(9, 9, 160, 'z', 0, 0, 80), 'steel', 'Lever shaft');
+      b.add(B(-14, 14, -3, 3, -6, 6).translate(0, 0, 4), 'steel', 'Coupling pins');
+      b.add(C(16, 16, 240, 'x', 0, 0, 165), 'black', 'Lever handle (cross bar)');
+      b.add(C(19, 19, 60, 'x', 112, 0, 165), 'red', 'Grip');
+    }, V(70, 530, D));
+    lev.visible = false;
   }
 
   // ================================================================ WITHDRAWABLE 3AE CIRCUIT-BREAKER

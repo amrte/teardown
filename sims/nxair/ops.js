@@ -50,7 +50,7 @@ export const OPS_STEPS = [
     ],
   },
   {
-    id: 'earthing', phase: 'Operate', title: 'Earth and de-earth the feeder', view: 'side', ex: 0, truck: 'test', row: false, focus: ['esw', 'shelf'], cut: true,
+    id: 'earthing', phase: 'Operate', title: 'Earth and de-earth the feeder', view: 'door', ex: 0, truck: 'test', esw: 0, row: false, focus: ['esw', 'doorCtl'], drill: 'esw',
     body: [
       'Preconditions: HV door closed, feeder isolated (opposite end too), breaker in TEST position, operating lever at hand, padlock off, electromagnetic interlock released.',
       '1 Lift the slide. 2 Insert the lever slightly with its pins horizontal, 3 push it fully in. 4 Hold it straight and turn 180° clockwise to CLOSED in one movement. 5 Remove the lever, 6 slide down, 7 padlock. Indicator vertical I = earthed.',

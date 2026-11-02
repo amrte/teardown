@@ -8,6 +8,10 @@ import {
 } from './data.js';
 import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
 import {boltGeometry, buildPanel, makeMaterials, nutGeometry} from './model.js';
+import {BK_PARTS, buildBreaker} from './breaker.js';
+import {CB_JOINTS} from './ops.js';
+const bkById = Object.fromEntries(BK_PARTS.map((p) => [p.id, p]));
+const partInfo = (id) => partById[id] || bkById[id];
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
@@ -21,6 +25,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
+  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, bk: {c: 0, s: 0, count: 0, aux: true}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -108,7 +113,10 @@ function build() {
 
   // per-part material clones so focus tinting is per part
   const partMats = {};
-  for (const [id, groups] of Object.entries(subject.parts)) {
+  cloneMats(subject.parts, partMats);
+  function cloneMats(partsMap, partMats) {
+  for (const [id, groups0] of Object.entries(partsMap)) {
+    const groups = Array.isArray(groups0) ? groups0 : [groups0];
     const cache = new Map();
     for (const g of groups) {
       g.traverse((c) => {
@@ -117,6 +125,7 @@ function build() {
         const key = pid + '|' + c.material.uuid;
         if (!cache.has(key)) {
           const m = c.material.clone();
+          m.clippingPlanes = [cutPlane]; // clone() copies planes; share the live one
           m.userData.base = {opacity: m.opacity, transparent: m.transparent};
           cache.set(key, m);
           (partMats[pid] ||= []).push(m);
@@ -128,6 +137,7 @@ function build() {
         c.add(e);
       });
     }
+  }
   }
 
   // bolts
@@ -185,7 +195,19 @@ function build() {
   // one continuous pair of foundation rails under the row
   for (const g of subject.parts.rails) g.scale.x = 3;
 
-  world = {row, subject, neighbors, bolts, partMats};
+  // the stand-alone breaker for the teardown tab
+  if (world?.bkHolder) { scene.remove(world.bkHolder); disposeTree(world.bkHolder); }
+  const wd = WIDTHS[state.W];
+  const bk = buildBreaker(mats, {P: wd.pitch, TD: state.W === 1000 ? 310 : 275, armD: wd.contact === 40 ? 40 : 60, fingers: wd.contact === 40 ? 13 : 26});
+  const bkHolder = new THREE.Group();
+  bkHolder.scale.setScalar(0.001);
+  bk.root.position.z = 90;
+  bkHolder.add(bk.root);
+  scene.add(bkHolder);
+  cloneMats(bk.parts, partMats);
+
+  world = {row, subject, neighbors, bolts, partMats, bk, bkHolder};
+  applyMode();
   anim.ex = state.ex;
   anim.truck = truckZ(state.truck);
   applyFocus();
@@ -195,7 +217,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {ex: 0, truck: 0};
+const anim = {ex: 0, truck: 0, bkEx: 0, esw: 0, slide: 0, lever: 0};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? 220 : 1150); // 3AE racking travel 220 mm (CB p.57)
 
 function applyPose(force) {
@@ -218,9 +240,15 @@ function applyPose(force) {
       g.position.copy(g.userData.dir).multiplyScalar(anim.ex);
     }
   }
-  // shutters follow the truck, earthing switch closed unless in service
+  // shutters follow the truck; earthing switch, door slide, indicators and lever follow the drill state
   const open = THREE.MathUtils.clamp(1 - anim.truck / 160, 0, 1);
-  const eswClosed = state.truck !== 'service';
+  for (const g of subject.parts.hvdoor || []) for (const c of g.children) {
+    if (c.userData.eswSlide) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + 75 * anim.slide; }
+    if (c.userData.eswInd) c.rotation.z = (1 - anim.esw) * Math.PI / 2;
+    if (c.userData.truckInd) c.rotation.z = anim.truck > 110 ? Math.PI / 2 : 0;
+    if (c.userData.eswLever) { c.visible = anim.lever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.lever); c.rotation.z = -Math.PI * anim.esw; }
+  }
+  if (world.bk) for (const g of Object.values(world.bk.parts)) g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx);
   for (const p of [subject, ...neighbors]) {
     for (const g of p.parts.shutters || []) {
       for (const c of g.children) {
@@ -229,7 +257,7 @@ function applyPose(force) {
         c.position.y = c.userData.y0 + c.userData.shut * 250 * (p === subject ? open : 1);
       }
     }
-    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + (eswClosed ? 0 : 1.25); });
+    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + 1.25 * (1 - (p === subject ? anim.esw : 0)); });
     if (p !== subject) for (const g of p.parts.breaker || []) g.position.z = 0;
   }
   neighbors.forEach((n, i) => { n.root.visible = state.row && !state.isolate && !(state.cut && i === 0); });
@@ -237,7 +265,7 @@ function applyPose(force) {
 
 function applyFocus() {
   if (!world) return;
-  const focus = new Set(state.selPart ? [state.selPart] : state.focus);
+  const focus = new Set(state.selPart ? [state.selPart] : state.mode === 'breaker' ? state.bkFocus : state.focus);
   for (const [pid, list] of Object.entries(world.partMats)) {
     const on = focus.has(pid);
     for (const m of list) {
@@ -262,7 +290,7 @@ function applyGlassLite() { if (state.isolate) applyGlass(); }
 
 function applyGlass() {
   if (!world) return;
-  const focus = new Set(state.selPart ? [state.selPart] : state.focus);
+  const focus = new Set(state.selPart ? [state.selPart] : state.mode === 'breaker' ? state.bkFocus : state.focus);
   const iso = state.isolate && focus.size > 0;
   for (const [pid, list] of Object.entries(world.partMats)) {
     const ghost = iso && !focus.has(pid);
@@ -279,7 +307,7 @@ function applyGlass() {
 }
 
 function applyCut() {
-  cutPlane.constant = state.cut ? 0 : 1e5;
+  cutPlane.constant = (state.mode === 'breaker' ? state.bkCut : state.cut) ? 0 : 1e5;
   applyPose();
 }
 
@@ -294,12 +322,23 @@ const VIEWS = {
   bus: {p: [-3.3, 3.2, 2.0], t: [0, 1.5, -0.3]},
   cable: {p: [-3.0, 1.15, -2.1], t: [0, 0.6, -0.45]},
 };
+const BK_VIEWS = {
+  iso: {p: [1.55, 1.05, 1.75], t: [0, 0.36, 0]},
+  front: {p: [0.15, 0.5, 2.3], t: [0, 0.38, 0]},
+  side: {p: [-2.1, 0.5, 0.05], t: [0, 0.38, 0]},
+  rear: {p: [-1.3, 1.0, -1.7], t: [0, 0.38, -0.1]},
+  top: {p: [0.2, 2.4, 0.5], t: [0, 0.3, 0]},
+  vi: {p: [-0.62, 0.43, -0.05], t: [0, 0.39, -0.04]},
+};
+VIEWS.door = {p: [0.75, 0.85, 2.15], t: [0.07, 0.6, 0.6]};
+VIEWS.eswCut = {p: [-3.0, 0.95, -0.2], t: [0, 0.6, -0.25]};
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
 function goView(name, instant) {
-  const v = VIEWS[name] || VIEWS.iso;
+  const bkMode = state.mode === 'breaker';
+  const v = (bkMode ? BK_VIEWS[name] : VIEWS[name]) || (bkMode ? BK_VIEWS.iso : VIEWS.iso);
   const k = state.W / 800;
-  const to = new THREE.Vector3(...v.p).multiplyScalar(name === 'top' ? 1 : 0.85 + 0.15 * k);
+  const to = new THREE.Vector3(...v.p).multiplyScalar(name === 'top' || bkMode || name === 'door' ? 1 : 0.85 + 0.15 * k);
   const tt = new THREE.Vector3(...v.t);
   if (state.crane && name === 'iso') to.multiplyScalar(1.15);
   if (instant || reduced) {
@@ -323,6 +362,7 @@ function jointLabel(j, n) {
 }
 function renderLabels() {
   if (!world) return;
+  if (state.mode === 'breaker') { labelLayer.innerHTML = ''; return; }
   const active = state.selJoint ? [state.selJoint] : state.joints;
   const html = [];
   if (state.labels) {
@@ -368,9 +408,9 @@ function pick(ev) {
   const r = canvas.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObject(world.subject.root, true);
+  const hits = ray.intersectObject(state.mode === 'breaker' ? world.bk.root : world.subject.root, true);
   for (const h of hits) {
-    if (state.cut && h.point.x < -0.0005) continue;
+    if ((state.mode === 'breaker' ? state.bkCut : state.cut) && h.point.x < -0.0005) continue;
     let o = h.object;
     if (!o.visible || o.isLineSegments) continue;
     let hidden = false;
@@ -390,6 +430,7 @@ canvas.addEventListener('pointerup', (e) => {
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
   const hit = pick(e);
   if (hit?.joint) selectJoint(hit.joint, true);
+  else if (hit?.part && bkById[hit.part]) { state.selLabel = hit.label || null; selectBk(hit.part); }
   else if (hit?.part && partById[hit.part]) { state.selLabel = hit.label || null; selectPart(hit.part, true); }
   else { state.selPart = null; state.selJoint = null; applyFocus(); syncSelection(); }
 });
@@ -402,7 +443,7 @@ canvas.addEventListener('pointermove', (e) => {
   const r = stage.getBoundingClientRect();
   let txt = '';
   if (hit?.joint) { const j = jointById[hit.joint]; txt = `${j.where} · ${j.t != null ? j.t + ' Nm' : BASIS[j.basis].label}`; }
-  else if (hit?.part && partById[hit.part]) txt = hit.label && hit.label !== partById[hit.part].name ? `${hit.label} · ${partById[hit.part].name}` : partById[hit.part].name;
+  else if (hit?.part && partInfo(hit.part)) txt = hit.label && hit.label !== partInfo(hit.part).name ? `${hit.label} · ${partInfo(hit.part).name}` : partInfo(hit.part).name;
   tip.hidden = !txt;
   if (txt) { tip.textContent = txt; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`; }
 });
@@ -429,6 +470,14 @@ function frame(now) {
     anim.truck += (tz - anim.truck) * (reduced ? 1 : 1 - Math.exp(-dt * 3.5));
     applyPose();
   }
+  // drill + breaker animations
+  const kd = reduced ? 1 : 1 - Math.exp(-dt * 4);
+  let moved = false;
+  for (const [a, b] of [['bkEx', 'bkEx'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
+    if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
+  }
+  if (moved) applyPose();
+  bkTick(now, dt);
   if (camTween) {
     const u = Math.min(1, (now - camTween.t0) / camTween.dur);
     const e = ease(u);
@@ -472,9 +521,11 @@ function jointRow(j, {sel} = {}) {
 }
 
 // ---------------------------------------------------------------- tabs + hash routing
-const TABS = ['steps', 'parts', 'torques', 'specs', 'sources'];
+const TABS = ['steps', 'breaker', 'parts', 'torques', 'specs', 'sources'];
 function showTab(name) {
   if (!TABS.includes(name)) name = 'steps';
+  const mode = name === 'breaker' ? 'breaker' : 'panel';
+  if (mode !== state.mode) { state.mode = mode; applyMode(); goView(mode === 'breaker' ? 'iso' : STEPS[state.step].view || 'iso'); }
   for (const t of TABS) {
     $('#pane-' + t).hidden = t !== name;
     $(`[data-tab="${t}"]`).setAttribute('aria-current', t === name ? 'page' : 'false');
@@ -500,6 +551,7 @@ function renderStep() {
     <ul class="body">${s.body.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
     ${s.warn ? `<div class="warn">${esc(s.warn)}</div>` : ''}
     ${extra}
+    ${s.drill ? drillHtml(s.drill) : ''}
     ${joints.length ? `<h3>Fasteners in this step</h3><div class="joints">${joints.map((j) => jointRow(j, {sel: state.selJoint === j.id})).join('')}</div>` : ''}
     <h3>All steps</h3>
     <ol class="plain small" style="padding-left:22px">${STEPS.map((x, i) => `<li><a href="#steps" data-goto="${i}" style="color:${i === state.step ? 'var(--accent-ink)' : 'inherit'};${i === state.step ? 'font-weight:600' : ''}">${esc(x.title)}</a> <span class="muted">· ${esc(x.phase)}</span></li>`).join('')}</ol>`;
@@ -510,6 +562,10 @@ function setStep(i, {view = true} = {}) {
   const s = STEPS[state.step];
   state.ex = s.ex ?? 0;
   state.truck = s.truck || 'service';
+  state.eswT = s.esw ?? (state.truck === 'service' ? 0 : 1);
+  state.slide = 0;
+  state.lever = 0;
+  drill = null;
   state.row = s.row ?? true;
   state.cut = !!s.cut;
   state.crane = !!s.crane;
@@ -554,7 +610,8 @@ function renderParts() {
 }
 function framePart(id) {
   const box = new THREE.Box3();
-  for (const g of world?.subject.parts[id] || []) if (g.visible !== false) box.expandByObject(g);
+  const gs = bkById[id] ? [world?.bk.parts[id]] : world?.subject.parts[id] || [];
+  for (const g of gs) if (g && g.visible !== false) box.expandByObject(g);
   if (box.isEmpty()) return;
   const c = box.getCenter(new THREE.Vector3());
   const r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() * 0.5);
@@ -669,11 +726,246 @@ function renderSources() {
     <p class="small muted">Independent study aid built from Siemens' publicly available documentation. Not a Siemens publication. Work on medium-voltage switchgear only as qualified personnel under the five safety rules.</p>`;
 }
 
+
+// ================================================================================ mode, interlocks, toast
+function applyMode() {
+  if (!world) return;
+  world.row.visible = state.mode === 'panel';
+  world.bkHolder.visible = state.mode === 'breaker';
+  for (const id of ['truckSeg', 'boltSeg']) { const el = $('#' + id); if (el) el.hidden = state.mode === 'breaker'; }
+  $('#t-row').hidden = state.mode === 'breaker';
+  applyCut();
+  applyFocus();
+  applyGlass();
+  syncTools();
+}
+let toastT = 0;
+function toast(msg, kind = 'warn') {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.className = 'toast ' + kind;
+  el.hidden = false;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => { el.hidden = true; }, 4200);
+}
+function rackTo(pos) {
+  if (pos === state.truck) return true;
+  if (pos === 'service' && state.eswT > 0.5) { toast('Interlocked: the feeder earthing switch is CLOSED. De-earth it before racking to service (O §7.1).'); return false; }
+  if (state.lever > 0.5) { toast('Interlocked: remove the earthing-switch lever first.'); return false; }
+  if (state.bk.s > 0.5 && state.mode === 'panel') { /* the panel breaker is shown OPEN in the panel view */ }
+  state.truck = pos;
+  syncTools();
+  applyPose();
+  return true;
+}
+
+// ================================================================================ earthing-switch drill
+let drill = null; // {dir, i}
+const DRILL = {
+  earth: [
+    {t: 'Check: breaker in TEST position, HV door closed, feeder isolated at the far end too.', view: 'door', act() { if (state.truck === 'service') { rackTo('test'); return 'The breaker was in service, where the earthing switch is interlocked. Racked to test first.'; } }},
+    {t: 'Lift the operating slide (15) and hold it. The actuating opening (14) is uncovered.', view: 'door', act() { state.slide = 1; }},
+    {t: 'Insert the operating lever slightly with its pins horizontal, then push it fully in.', view: 'door', act() { state.lever = 1; }},
+    {t: 'Hold it straight and turn 180° clockwise in one movement. The drive rod turns the shaft in the connection compartment and the knife blades snap onto the fixed contacts.', view: 'eswCut', cut: true, act() { state.eswT = 1; }},
+    {t: 'Pull the lever out (never mid-turn).', view: 'door', act() { state.lever = 0; }},
+    {t: 'Push the slide down and fit the padlock. Indicator (16) shows a vertical I: the feeder is earthed. Racking to service is now interlocked.', view: 'door', act() { state.slide = 0; }},
+  ],
+  deearth: [
+    {t: 'Check: breaker in TEST position, HV door closed, work finished and people clear.', view: 'door', act() { if (state.truck === 'service') return 'Breaker is in service position: the earthing switch cannot be operated.'; }},
+    {t: 'Remove the padlock, lift the operating slide and hold it.', view: 'door', act() { state.slide = 1; }},
+    {t: 'Insert the operating lever with its pins horizontal and push it fully in.', view: 'door', act() { state.lever = 1; }},
+    {t: 'Turn 180° counter-clockwise in one movement. The blades swing away from the fixed contacts.', view: 'eswCut', cut: true, act() { state.eswT = 0; }},
+    {t: 'Pull the lever out.', view: 'door', act() { state.lever = 0; }},
+    {t: 'Push the slide down, padlock. Indicator horizontal: feeder not earthed. The breaker may now be racked to service.', view: 'door', act() { state.slide = 0; }},
+  ],
+};
+function drillHtml() {
+  const dir = drill?.dir || (state.eswT > 0.5 ? 'deearth' : 'earth');
+  const list = DRILL[dir];
+  const i = drill?.i ?? 0;
+  return `<div class="drill">
+    <h3>Do it on the model</h3>
+    <div class="seg" role="group" aria-label="Operation">
+      <button type="button" data-drilldir="earth" aria-pressed="${dir === 'earth'}">Earth</button>
+      <button type="button" data-drilldir="deearth" aria-pressed="${dir === 'deearth'}">De-earth</button>
+    </div>
+    <ol class="dsteps">${list.map((d, k) => `<li class="${k < i ? 'done' : k === i ? 'on' : ''}">${esc(d.t)}</li>`).join('')}</ol>
+    <div class="row">
+      <button type="button" class="btn primary" data-drill="next" ${i >= list.length ? 'disabled' : ''}>${i >= list.length ? 'Done' : `Do step ${i + 1}`}</button>
+      <button type="button" class="btn" data-drill="reset">Restart</button>
+      <button type="button" class="btn" data-drill="try">Try racking to service</button>
+    </div>
+    <p class="small muted" id="drillNote">${esc(drill?.note || 'The 3D view follows each action: slide, lever, 180° turn, blades, indicator.')}</p>
+  </div>`;
+}
+function drillAct(cmd) {
+  if (cmd === 'reset') { drill = {dir: drill?.dir || (state.eswT > 0.5 ? 'deearth' : 'earth'), i: 0}; state.slide = 0; state.lever = 0; renderStep(); goView('door'); return; }
+  if (cmd === 'try') { if (rackTo('service')) { toast('Racked to service: possible because the earthing switch is OPEN.', 'ok'); } renderStep(); return; }
+  drill ||= {dir: state.eswT > 0.5 ? 'deearth' : 'earth', i: 0};
+  const list = DRILL[drill.dir];
+  const d = list[drill.i];
+  if (!d) return;
+  if (drill.dir === 'deearth' && drill.i === 0 && state.truck === 'service') { toast('Earthing switch not operable in service position.'); }
+  drill.note = d.act() || `Step ${drill.i + 1} done.`;
+  state.cut = !!d.cut;
+  state.isolate = false;
+  applyCut();
+  syncTools();
+  goView(d.view);
+  drill.i++;
+  if (drill.i >= list.length) drill.note = drill.dir === 'earth' ? 'Feeder earthed. Try racking to service: the interlock blocks it.' : 'Feeder de-earthed. Racking to service is possible again.';
+  renderStep();
+}
+
+// ================================================================================ breaker tab
+const BK_TEAR = [
+  {t: 'Make it safe and take it out', field: true, ex: 0, focus: ['bkTruck'], view: 'iso', text: 'Breaker OPEN, test position, auxiliary voltage off. Discharge the closing spring: OPEN – CLOSE – OPEN with the push rod. Unplug the LV connector, take the breaker out with the service truck (2 locking levers out, pull to the end stop, levers in, unlocking levers up).'},
+  {t: 'Contact systems (tulips) off', field: true, ex: 0.35, focus: ['bkTulips'], view: 'rear', text: 'Unscrew each contact system from its threaded rod (6 per breaker). Reassembly: fingers greased both sides with Molykote Longterm 2, round outer edge towards the arm, 40 ±4 Nm (M12) / 100 ±10 Nm (M16), greased threads.'},
+  {t: 'Contact arms off', field: true, ex: 0.45, focus: ['bkArms'], view: 'rear', text: 'Unscrew the arms and threaded rods from the pole terminals. Reassembly: threaded rod greased with Vaseline, screw-in depth upper 20 ±1 mm, lower 28 ±1 mm (38 ±1 mm at 40 kA), 40 ±4 / 100 ±10 Nm. Copper end faces roughened, cleaned, Vaseline; silver-plated faces cleaned, Vaseline.'},
+  {t: 'Covers off: see the mechanism', field: true, ex: 0.5, focus: ['bkCover', 'bkLV'], view: 'iso', text: '3AE1: cover and side panels each held by 4 Phillips pan-head screws ISO 7045 (driver size 3), 4 ±0.4 Nm. PG-fitting plate: Torx 20 self-tapping, 3 ±0.3 Nm, single use. Only with the closing spring discharged.'},
+  {t: 'Operating mechanism', field: false, ex: 0.75, focus: ['bkMotor', 'bkClosingSpring', 'bkShaft', 'bkOpeningSpring', 'bkReleases', 'bkAux'], view: 'iso', text: 'Shown for understanding. The mechanism is maintenance-free up to 10 000 cycles; adjustment and parts replacement (motor, releases, switches) follow the 3AE instructions and Siemens service.'},
+  {t: 'Poles', field: false, ex: 0.85, focus: ['bkShell', 'bkUpper', 'bkLower', 'bkRods'], view: 'rear', text: 'Pole shell, pole heads, lower connections with flexible conductor, insulating operating rods with contact-pressure springs. Factory-assembled and set; not dismantled in the field.'},
+  {t: 'Inside the vacuum interrupter', field: false, ex: 0, iso: true, focus: ['bkVI', 'bkVIin', 'bkRods', 'bkUpper', 'bkLower'], view: 'vi', cut: true, text: 'Section through the middle pole. Sealed for life: the interrupter is replaced, never opened. Internals drawn generically: ceramic body, vapour shield, fixed and moving contact discs, bellows.'},
+];
+let bkSel = null;
+function renderBreaker() {
+  const wd = WIDTHS[state.W];
+  const P = wd.pitch, TD = state.W === 1000 ? 310 : 275, arm = wd.contact === 40 ? 40 : 60, fingers = wd.contact === 40 ? 13 : 26;
+  const sel = bkSel && bkById[bkSel];
+  const groups = [...new Set(BK_PARTS.map((p) => p.grp))];
+  const comps = sel ? componentsOfBk(sel.id) : [];
+  $('#pane-breaker').innerHTML = `
+    <span class="eyebrow">SION 3AE5 · withdrawable · ${P} mm pole centres · ${TD} mm terminal distance · arms Ø ${arm} · ${fingers}-finger tulips</span>
+    <h2>How the breaker works</h2>
+    <ol class="body how">
+      <li><b>Charge.</b> The motor (or ≈ 50 turns of the hand crank) winds the closing spring through the gear unit until it latches. The motor switches off; the indicator shows CHARGED. Takes < 15 s.</li>
+      <li><b>Close.</b> The closing solenoid -Y9 (or the CLOSE button) frees the latch. The spring turns the main shaft; one lever per pole pushes an insulating rod up and the moving contact meets the fixed contact inside the vacuum. The last bit of travel compresses the contact-pressure springs, and the same movement charges the opening spring. Closing < 75 ms. The motor at once recharges the closing spring, so the breaker now stores OPEN – CLOSE – OPEN.</li>
+      <li><b>Open.</b> The shunt release -Y1 (protection trip, OPEN button, undervoltage release) frees the opening latch. The opening spring snaps the shaft back and pulls the contacts apart: opening < 65 ms, break time < 80 ms. Trip-free: an OPEN command always wins.</li>
+      <li><b>Interrupt.</b> The arc burns in metal vapour from the contacts. At the next current zero it goes out; the vapour condenses on the shield and the vacuum gap withstands the returning voltage within microseconds. Arcing < 15 ms.</li>
+    </ol>
+    <div class="cycle">
+      <div class="row">
+        <button type="button" class="btn" data-bk="charge">Charge spring</button>
+        <button type="button" class="btn ok" data-bk="close">CLOSE</button>
+        <button type="button" class="btn bad" data-bk="open">OPEN</button>
+        <button type="button" class="btn primary" data-bk="play">Play O – 0.3 s – CO</button>
+      </div>
+      <label class="small check"><input type="checkbox" id="bkAux" ${state.bk.aux ? 'checked' : ''}> Auxiliary voltage on (motor recharges after closing)</label>
+      <div class="readout" id="bkRead"></div>
+    </div>
+    <p class="small muted">Slow motion. Readouts show the real times from the 3AE manual. Contact travel is drawn larger than life; Siemens publishes no stroke. Use Cut for a section through the middle pole.</p>
+    <h3>Teardown</h3>
+    <ol class="tear">${BK_TEAR.map((x, k) => `<li><button type="button" class="tearbtn" data-tear="${k}"><span class="tt">${esc(x.t)}</span><span class="badge ${x.field ? 'step' : 'none'}">${x.field ? 'Field work' : 'Siemens only'}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
+    ${sel ? `<div class="pcard" style="margin-top:14px"><span class="eyebrow">${esc(sel.grp)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>${comps.length ? `<h3>Components</h3><ul class="plain small">${comps.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+    <h3>Parts</h3>
+    ${groups.map((g) => `<div class="group-h">${esc(g)}</div><div class="plist">${BK_PARTS.filter((p) => p.grp === g).map((p) => `<button type="button" data-bkpart="${p.id}" class="${bkSel === p.id ? 'sel' : ''}"><span class="sw" style="background:var(--copper)"></span>${esc(p.name)}</button>`).join('')}</div>`).join('')}
+    <h3>Fasteners on the breaker</h3><div class="joints">${CB_JOINTS.map((j) => jointRow(j)).join('')}</div>
+    <h3>Breaker data</h3>${kv(CB_DATA)}`;
+  renderBreakerReadout();
+}
+function componentsOfBk(id) {
+  const set = new Set();
+  world?.bk.parts[id]?.traverse((c) => { if (c.isMesh && c.userData.label) set.add(c.userData.label); });
+  return [...set];
+}
+function selectBk(id) {
+  bkSel = id;
+  state.selPart = id;
+  state.isolate = true;
+  applyFocus();
+  applyGlass();
+  syncTools();
+  location.hash = 'breaker';
+  renderBreaker();
+}
+
+// ---------------------------------------------------------------- breaker cycle engine
+const bkQueue = [];
+let bkCur = null;
+let bkLast = 'Closing spring discharged, breaker open. Press Charge spring.';
+const BK_ACT = {
+  charge: {dur: 2.6, real: 15, unit: 's', max: '< 15 s', label: 'Charging the closing spring'},
+  close: {dur: 1.5, real: 75, unit: 'ms', max: '< 75 ms', label: 'Closing', pulse: 'close'},
+  open: {dur: 1.2, real: 65, unit: 'ms', max: '< 65 ms', label: 'Opening', pulse: 'open'},
+  dead: {dur: 0.9, real: 300, unit: 'ms', max: '0.3 s dead time', label: 'Dead time'},
+};
+function bkPredict() {
+  // state after everything queued
+  let {c, s} = state.bk;
+  for (const a of [bkCur, ...bkQueue].filter(Boolean)) {
+    if (a.kind === 'charge') c = 1;
+    if (a.kind === 'close') { c = 0; s = 1; }
+    if (a.kind === 'open') s = 0;
+  }
+  return {c, s};
+}
+function bkDo(kind) {
+  if (kind === 'play') {
+    if (bkCur || bkQueue.length) return toast('Wait for the running operation.');
+    const {c, s} = state.bk;
+    if (c < 0.99) bkQueue.push({kind: 'charge'});
+    if (s < 0.5) { bkQueue.push({kind: 'close'}); bkQueue.push({kind: 'charge'}); }
+    else if (c < 0.99 || bkQueue.length) bkQueue.push({kind: 'charge'});
+    bkQueue.push({kind: 'open'}, {kind: 'dead'}, {kind: 'close', noAuto: true}, {kind: 'open'});
+    return;
+  }
+  if (bkCur || bkQueue.length) return toast('Wait for the running operation.');
+  const {c, s} = bkPredict();
+  if (kind === 'charge' && c > 0.99) return toast('The closing spring is already charged.', 'ok');
+  if (kind === 'close' && s > 0.5) return toast('The breaker is already closed.', 'ok');
+  if (kind === 'close' && c < 0.99) return toast('Closing blocked: the closing spring is not charged. Charge it first.');
+  if (kind === 'open' && s < 0.5) return toast('The breaker is already open.', 'ok');
+  bkQueue.push({kind});
+}
+let bkReadT = 0;
+function bkTick(now, dt) {
+  if (!world?.bk) return;
+  if (!bkCur && bkQueue.length) {
+    bkCur = {...bkQueue.shift(), t0: now, from: {...state.bk}, motor: 0};
+    if (bkCur.kind === 'close' && state.bk.c < 0.99) { toast('Closing blocked: spring not charged.'); bkCur = null; return; }
+  }
+  if (!bkCur) return;
+  const A = BK_ACT[bkCur.kind];
+  const u = Math.min(1, (now - bkCur.t0) / 1000 / (reduced ? 0.2 : A.dur));
+  const m = THREE.MathUtils.clamp((u - 0.2) / 0.8, 0, 1); // movement after the release pulse
+  let c = state.bk.c, sv = state.bk.s, pClose = 0, pOpen = 0;
+  if (bkCur.kind === 'charge') { c = bkCur.from.c + (1 - bkCur.from.c) * u; bkCur.motor += dt * 40; }
+  if (bkCur.kind === 'close') { pClose = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = m * m; sv = e; c = 1 - e; }
+  if (bkCur.kind === 'open') { pOpen = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = 1 - (1 - m) * (1 - m); sv = 1 - e; }
+  world.bk.pose({c, s: sv, motor: bkCur.motor, pClose, pOpen});
+  const realT = bkCur.kind === 'charge' ? u * A.real : bkCur.kind === 'dead' ? u * A.real : m * A.real;
+  bkCur.live = `${A.label} … ${A.unit === 's' ? realT.toFixed(1) : Math.round(realT)} ${A.unit} (${A.max})`;
+  if (u >= 1) {
+    state.bk.c = c; state.bk.s = sv;
+    if (bkCur.kind === 'close') { state.bk.count++; bkLast = 'Closed. Contacts pressed by the contact-pressure springs; opening spring charged.'; if (state.bk.aux && !bkCur.noAuto && !bkQueue.length) bkQueue.unshift({kind: 'charge'}); }
+    if (bkCur.kind === 'open') bkLast = 'Opened. Arc extinguished at current zero (arcing < 15 ms, break time < 80 ms).';
+    if (bkCur.kind === 'charge') bkLast = 'Closing spring charged and latched; motor switched off by -S21/-S22.';
+    bkCur = null;
+    renderBreakerReadout();
+    return;
+  }
+  if (now - bkReadT > 90) { bkReadT = now; renderBreakerReadout(); }
+}
+function renderBreakerReadout() {
+  const el = $('#bkRead');
+  if (!el) return;
+  const {c, s, count} = state.bk;
+  const live = bkCur?.live;
+  const springTxt = bkCur?.kind === 'charge' ? 'charging' : c > 0.99 ? 'CHARGED' : 'DISCHARGED';
+  const contactTxt = bkCur && (bkCur.kind === 'close' || bkCur.kind === 'open') ? 'moving' : s > 0.5 ? 'CLOSED (I)' : 'OPEN (O)';
+  el.innerHTML = `
+    <div><span>Closing spring</span><b class="${c > 0.99 ? 'okc' : ''}">${springTxt}</b></div>
+    <div><span>Contacts</span><b class="${s > 0.5 ? 'badc' : 'okc'}">${contactTxt}</b></div>
+    <div><span>Opening spring</span><b>${s > 0.5 ? 'charged' : 'released'}</b></div>
+    <div><span>Operations counter</span><b>${count}</b></div>
+    <div class="wide"><span>Now</span><b>${esc(live || bkLast)}</b></div>`;
+}
+
 // -------------------------------------------------------------------------------------------- tools wiring
 function syncTools() {
   for (const b of document.querySelectorAll('[data-truck]')) b.setAttribute('aria-pressed', String(b.dataset.truck === state.truck));
-  $('#ex').value = String(Math.round(state.ex * 100));
-  $('#t-cut').setAttribute('aria-pressed', String(state.cut));
+  $('#ex').value = String(Math.round((state.mode === 'breaker' ? state.bkEx : state.ex) * 100));
+  $('#t-cut').setAttribute('aria-pressed', String(state.mode === 'breaker' ? state.bkCut : state.cut));
   $('#t-row').setAttribute('aria-pressed', String(state.row));
   $('#t-glass').setAttribute('aria-pressed', String(state.glass));
   $('#t-iso').setAttribute('aria-pressed', String(state.isolate));
@@ -688,17 +980,28 @@ function variantNote() {
 
 function wire() {
   $('#views').innerHTML = VIEW_BUTTONS.map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="false">${l}</button>`).join('');
+  document.addEventListener('change', (e) => { if (e.target.id === 'bkAux') state.bk.aux = e.target.checked; });
   document.addEventListener('click', (e) => {
     const t = e.target.closest('button, a');
     if (!t) return;
     if (t.dataset.view) goView(t.dataset.view);
-    else if (t.dataset.truck) { state.truck = t.dataset.truck; syncTools(); applyPose(); }
+    else if (t.dataset.truck) rackTo(t.dataset.truck);
     else if (t.dataset.bolts) { state.bolts = t.dataset.bolts; syncTools(); applyFocus(); }
-    else if (t.id === 't-cut') { state.cut = !state.cut; applyCut(); syncTools(); }
+    else if (t.id === 't-cut') { if (state.mode === 'breaker') state.bkCut = !state.bkCut; else state.cut = !state.cut; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
     else if (t.id === 't-glass') { state.glass = !state.glass; applyGlass(); syncTools(); }
     else if (t.id === 't-iso') { state.isolate = !state.isolate; applyGlass(); syncTools(); }
     else if (t.id === 't-lab') { state.labels = !state.labels; renderLabels(); syncTools(); }
+    else if (t.dataset.drill) drillAct(t.dataset.drill);
+    else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
+    else if (t.dataset.bk) bkDo(t.dataset.bk);
+    else if (t.dataset.bkpart) { selectBk(t.dataset.bkpart); framePart(t.dataset.bkpart); }
+    else if (t.dataset.tear) {
+      const x = BK_TEAR[+t.dataset.tear];
+      bkSel = null; state.selPart = null; state.bkFocus = x.focus; state.bkEx = x.ex; state.bkCut = !!x.cut; state.isolate = !!x.iso;
+      applyCut(); applyFocus(); applyGlass(); syncTools(); goView(x.view); renderBreaker();
+      for (const b of document.querySelectorAll('.tearbtn')) b.classList.toggle('on', b.dataset.tear === t.dataset.tear);
+    }
     else if (t.id === 'prev') setStep(state.step - 1);
     else if (t.id === 'next') setStep(state.step + 1);
     else if (t.dataset.goto) { e.preventDefault(); setStep(+t.dataset.goto); $('#pane-steps').scrollTop = 0; }
@@ -706,7 +1009,7 @@ function wire() {
     else if (t.dataset.joint) selectJoint(t.dataset.joint);
     else if (t.dataset.f) { torqueFilter[t.dataset.f] = t.dataset.v; renderTorques(); }
   });
-  $('#ex').addEventListener('input', (e) => { state.ex = +e.target.value / 100; });
+  $('#ex').addEventListener('input', (e) => { if (state.mode === 'breaker') { state.bkEx = +e.target.value / 100; renderBreakerReadout(); } else state.ex = +e.target.value / 100; });
   for (const [id, key, parse] of [['v-w', 'W', Number], ['v-d', 'D', Number], ['v-bus', 'bus', Number], ['v-ur', 'ur', Number]]) {
     const el = $('#' + id);
     el.value = String(state[key]);
@@ -743,6 +1046,7 @@ renderParts();
 renderTorques();
 renderSpecs();
 renderSources();
+renderBreaker();
 applyThemeColors();
 setStep(state.step, {view: false});
 goView(STEPS[state.step].view || 'iso', true);
