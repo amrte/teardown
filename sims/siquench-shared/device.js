@@ -8,7 +8,9 @@
 //
 // The housing, plate, hood and drawings are to scale. The mechanism inside is a schematic reading of the manual's
 // photos, sized to fit the switching part; its numbers come from quench.js (DRIVE). The trip coil (X1 in the circuit
-// diagram, the Magnetspule of section 4.1) is not visible in any of the manual's pictures, so it is not drawn.
+// diagram, the Magnetspule of section 4.1) is not visible in any of the manual's pictures. It is drawn as a ghost
+// (translucent violet, dashed edges): an ASSUMED coil under the tongue's bracket that pulls a rocker, which lifts the
+// tongue. Its place, its shape and the rocker are not in the documentation.
 // Earthing per Abb. 1 and 23: the copper earthing plate bonds the three poles; at its end, the earth connection takes
 // the customer's earthing bar on an M12 screw (105 Nm), which runs to the switchgear's earth.
 import * as THREE from 'three';
@@ -252,6 +254,9 @@ export function buildDevice() {
     switchBody: new THREE.MeshStandardMaterial({color: '#2f3a33', roughness: 0.6, metalness: 0.1}),
     s3Body: new THREE.MeshStandardMaterial({color: '#d4d7da', roughness: 0.55, metalness: 0.15}),
     s3Label: new THREE.MeshStandardMaterial({map: labelTex('S3'), roughness: 0.6}),
+    // ASSUMED parts: not described in the documentation
+    ghost: new THREE.MeshStandardMaterial({color: '#8f7ad6', roughness: 0.5, metalness: 0.2, transparent: true, opacity: 0.38, depthWrite: false, emissive: new THREE.Color('#8f7ad6'), emissiveIntensity: 0}),
+    ghostLine: new THREE.LineDashedMaterial({color: '#5b45b0', dashSize: 0.0016, gapSize: 0.0011, transparent: true, opacity: 0.9}),
     tool: new THREE.MeshStandardMaterial({color: '#3c3f44', roughness: 0.35, metalness: 0.9, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     spanner: new THREE.MeshStandardMaterial({color: '#a9aeb4', roughness: 0.3, metalness: 1}),
     sensor: new THREE.MeshStandardMaterial({color: '#2b8fd6', roughness: 0.5, metalness: 0.1}),
@@ -439,6 +444,24 @@ export function buildDevice() {
   const tongueGeo = new RoundedBoxGeometry(TB.w, TB.y1 - TB.y0, TB.t, 2, 0.0008);
   const BR = {y: 0.041, t: 0.002, z0: -0.128, z1: -0.03};
   const s3Geo = new RoundedBoxGeometry(0.024, 0.016, 0.026, 2, 0.0025);
+  // the ASSUMED trip coil and its rocker: coil under the bracket beside the tongue, plunger up through the bracket to a
+  // rocker on a post; the coil pulls the plunger down 5 mm, the rocker's long arm lifts the tongue 11 mm
+  const TC = {x: 0.024, z: -0.088, r: 0.008, y0: 0.026, y1: 0.04, pTop: 0.052, pull: 0.005};
+  const RK = (() => {
+    const rear = new V3(0, TB.y1, 0); // z filled in per pole below (the blade's centre)
+    const a = 0.0218;
+    return {a, b: 0.0099, rear};
+  })();
+  const ghostAdd = (parent, geo) => {
+    const m = new THREE.Mesh(geo, M.ghost);
+    m.renderOrder = 3;
+    parent.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 25), M.ghostLine);
+    e.computeLineDistances();
+    e.renderOrder = 4;
+    m.add(e);
+    return m;
+  };
   const swBox = new RoundedBoxGeometry(0.022, 0.026, 0.012, 2, 0.002);
   const swLever = new THREE.BoxGeometry(0.0015, 0.004, 0.022);
   const bush = ring(0.012, 0.0075, 0.012, 24);
@@ -531,7 +554,28 @@ export function buildDevice() {
       sw.push(lv);
     }
     add(g, new THREE.BoxGeometry(0.03, 0.003, 0.06), M.frame).position.set(-0.045, 0.0615, crossZ(DRIVE.L / 2));
-    return {g, mov, discs, springs, tongueG, s3Lever, sw, crossM};
+    // the ASSUMED trip coil, plunger and rocker (ghosted)
+    const coilG = new THREE.Group();
+    g.add(coilG);
+    ghostAdd(coilG, new THREE.CylinderGeometry(TC.r, TC.r, TC.y1 - TC.y0, 24)).position.set(TC.x, (TC.y0 + TC.y1) / 2, TC.z);
+    const plungerG = new THREE.Group();
+    g.add(plungerG);
+    ghostAdd(plungerG, new THREE.CylinderGeometry(0.0025, 0.0025, TC.pTop - TC.y0 - 0.004, 12)).position.set(TC.x, (TC.pTop + TC.y0 + 0.004) / 2, TC.z);
+    const rear = new V3(0, TB.y1, PIV.z + TB.t / 2);
+    const front = new V3(TC.x, TC.pTop, TC.z);
+    const dir = front.clone().sub(rear);
+    const len = Math.hypot(dir.x, dir.z);
+    const piv = rear.clone().add(dir.clone().multiplyScalar(RK.a / len));
+    ghostAdd(g, new THREE.BoxGeometry(0.003, piv.y - BR.y - BR.t / 2, 0.003)).position.set(piv.x, (piv.y + BR.y + BR.t / 2) / 2, piv.z);
+    const rockerYaw = new THREE.Group();
+    rockerYaw.position.copy(piv);
+    rockerYaw.rotation.y = Math.atan2(dir.x, dir.z);
+    g.add(rockerYaw);
+    const rocker = new THREE.Group();
+    rockerYaw.add(rocker);
+    const rk0 = -Math.atan2(dir.y, len);
+    ghostAdd(rocker, new THREE.BoxGeometry(0.003, 0.0025, RK.a + RK.b + 0.004)).position.z = (RK.b - RK.a) / 2;
+    return {g, mov, discs, springs, tongueG, s3Lever, sw, crossM, plungerG, rocker, rk0};
   });
 
   // ------------------------------------------------------------ the charging tool and the SW24 spanner
@@ -667,7 +711,7 @@ export function buildDevice() {
    * s: {poles: [poleState x3] (from quench.js), tool: {pole, in, turns} | null, hood 0..1 (1 on), xray 0..1,
    *     section pole index | -1, explode 0..1, sys 0..1 (busbars and arc context), arc 0..1 (arc brightness),
    *     arcTick (an integer that changes the arc's shape), flow 0..1, flowPhase (dots' phase), active {coil, tongue,
-   *     cross, contact, tool} (coil lights the tongue: the coil itself is not drawn) 0..1 glow on the part doing the work}
+   *     cross, contact, tool} (coil lights the ASSUMED ghost coil) 0..1 glow on the part doing the work}
    */
   const update = (s) => {
     setXray(s.xray ?? 0);
@@ -679,7 +723,9 @@ export function buildDevice() {
     frameG.position.y = -0.05 * e;
     toolG.position.y = -0.05 * e;
     const act = s.active || {};
-    M.tongue.emissiveIntensity = 0.9 * Math.max(act.coil ?? 0, act.tongue ?? 0);
+    M.tongue.emissiveIntensity = 0.9 * (act.tongue ?? 0);
+    M.ghost.emissiveIntensity = 0.9 * (act.coil ?? 0);
+    M.ghost.opacity = 0.38 + 0.3 * (act.coil ?? 0);
     M.contact.emissiveIntensity = 0.45 * (act.contact ?? 0);
     M.tool.emissiveIntensity = 0.6 * (act.tool ?? 0);
 
@@ -706,6 +752,9 @@ export function buildDevice() {
       m.tongueG.position.y = TB.lift * lift;
       // S3's lever follows the blade (MODELLED: the manual shows where S3 sits, not what it senses)
       m.s3Lever.rotation.x = 0.5 * lift;
+      // the ASSUMED rocker and plunger follow the tongue (or drive it, when the coil fires)
+      m.rocker.rotation.x = m.rk0 + Math.asin(Math.min(1, (TB.lift * lift) / RK.a));
+      m.plungerG.position.y = -TC.pull * lift;
       // switch levers: pressed when the flag sits on them
       m.sw[0].rotation.x = Math.abs(zc - crossZ(0)) < 0.004 ? -0.35 : 0;
       m.sw[1].rotation.x = Math.abs(zc - crossZ(DRIVE.L)) < 0.004 ? -0.35 : 0;

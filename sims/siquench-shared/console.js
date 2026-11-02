@@ -20,6 +20,7 @@ const CSS = `
 .tb.dis{opacity:.4}
 .call{position:absolute;white-space:nowrap;background:rgba(243,244,246,.86);padding:2px 6px 3px;margin:-2px -6px 0}
 .call b{display:block;font-size:11.5px;font-weight:600;letter-spacing:.1px}
+.call i{font-style:normal;display:inline-block;margin:0 0 0 6px;padding:0 4px;border:1px dashed #6d55c4;color:#5b45b0;font-size:7.4px;font-weight:600;letter-spacing:1.2px;vertical-align:2px;line-height:12px}
 .call span{display:block;font-size:8.6px;font-weight:500;letter-spacing:1.4px;color:${C.mute};text-transform:uppercase;margin-top:2px}
 .cur{position:absolute;left:0;top:0;z-index:50;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
 .ring{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1.5px solid ${C.acc};opacity:0;z-index:49}
@@ -163,6 +164,8 @@ export function createConsole(app) {
   add(`<div class="cp mu" style="position:absolute;left:0;right:0;top:790px;text-align:center;font-weight:500"><span style="color:${C.ink}">EVENT TIMELINE</span> &nbsp;— &nbsp;0 TO ${CLOCK_MAX} MS &nbsp;·&nbsp; CLICK TO SCRUB</div>`);
   btn.quench = add(`<div class="tb" style="left:330px;top:826px;width:132px;height:22px"></div>`);
   const tl = add(`<svg style="position:absolute;left:${TL.x - 20}px;top:${TL.y - 26}px;overflow:visible" width="${TL.w + 40}" height="56"></svg>`);
+  // the legend for the ASSUMED tag and the ghosted parts
+  add(`<div class="cp call" style="position:absolute;left:0;right:0;top:92px;margin:0;padding:0;background:none;text-align:center;font-size:7.6px;font-weight:500;letter-spacing:1.2px;color:${C.mute}"><i style="margin:0 6px 0 0">ASSUMED</i>NOT DESCRIBED IN THE SIEMENS DOCUMENTATION &nbsp;·&nbsp; <span style="display:inline-block;width:9px;height:9px;border:1px dashed #5b45b0;background:rgba(143,122,214,.4);vertical-align:-1px;margin:0 5px 0 0"></span>VIOLET GHOST = ASSUMED PART</div>`);
   add(`<div class="cp" style="position:absolute;left:0;right:0;top:874px;text-align:center;font-weight:500;color:${C.faint}">DRAG TO ORBIT &nbsp;·&nbsp; SCROLL TO ZOOM &nbsp;·&nbsp; H HIDES THE OVERLAY &nbsp;·&nbsp; INTERNALS SCHEMATIC, NOT TO MANUFACTURER DRAWING</div>`);
 
   // ------------------------------------------------------------ callouts, the pointer
@@ -401,8 +404,8 @@ export function createConsole(app) {
         const [lx, ly] = c.label;
         const right = c.w < 0;
         const w = Math.abs(c.w);
-        lh += `<polyline points="${ax.toFixed(1)},${ay.toFixed(1)} ${lx.toFixed(1)},${(ly + 21).toFixed(1)} ${(lx + (right ? -w : w)).toFixed(1)},${(ly + 21).toFixed(1)}" fill="none" stroke="${C.mute}" stroke-width=".8" opacity="${c.o.toFixed(2)}"/><circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="2" fill="${c.hot ? C.acc : C.ink}" opacity="${c.o.toFixed(2)}"/>`;
-        ch += `<div class="call" style="left:${(right ? lx - w : lx).toFixed(1)}px;top:${(ly - 10).toFixed(1)}px;opacity:${c.o.toFixed(2)};${right ? `width:${w}px;text-align:right` : ''}"><b style="${c.hot ? `color:${C.acc}` : ''}">${c.name}</b><span>${c.sub}</span></div>`;
+        lh += `<polyline points="${ax.toFixed(1)},${ay.toFixed(1)} ${lx.toFixed(1)},${(ly + 21).toFixed(1)} ${(lx + (right ? -w : w)).toFixed(1)},${(ly + 21).toFixed(1)}" fill="none" stroke="${c.assumed ? '#6d55c4' : C.mute}" stroke-width=".8"${c.assumed ? ' stroke-dasharray="3 2"' : ''} opacity="${c.o.toFixed(2)}"/><circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="2" fill="${c.hot ? C.acc : C.ink}" opacity="${c.o.toFixed(2)}"/>`;
+        ch += `<div class="call" style="left:${(right ? lx - w : lx).toFixed(1)}px;top:${(ly - 10).toFixed(1)}px;opacity:${c.o.toFixed(2)};${right ? `width:${w}px;text-align:right` : ''}"><b style="${c.hot ? `color:${C.acc}` : ''}">${c.name}${c.assumed ? '<i>ASSUMED</i>' : ''}</b><span>${c.sub}</span></div>`;
       }
       callSvg.innerHTML = lh;
       callG.innerHTML = ch;

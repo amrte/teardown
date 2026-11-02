@@ -171,8 +171,12 @@ export const lookAt = (t) => {
 };
 const camButton = (v) => (v === 'open' ? 'hero' : v === 'charge' ? 'mech' : v);
 
-// ------------------------------------------------------------ callouts per view: name, sub, world point, label, width
+// ------------------------------------------------------------ callouts per view
+// [name, sub, world point, label (unused), width (unused), hot, basis]. basis 'A' = ASSUMED: the part, its shape, its
+// place or the function the label states is not described in the Siemens documentation (manual 9229 0100 100, brochure);
+// the sub says what is assumed. Every other label is backed by the documents (section or figure in docs/siquench.md).
 const P3 = POLES[2];
+const A = 'A';
 export const CALLOUTS = {
   hero: (st) => [
     ['High-voltage connection', 'Ø55 · 4 × M8 · 20 NM', [POLES[0], 0.02, 0.276], [360, 196], 150],
@@ -183,37 +187,40 @@ export const CALLOUTS = {
     ['Base plate', '10 × M8 FIXING POINTS · 24 NM', [0.345, -0.045, 0.004], [1110, 560], 168],
   ],
   system: (st) => [
-    ['Arc', 'PHASE TO PHASE · CABLE COMPARTMENT', [POLES[0] + 0.1, -0.5, 0.29], [360, 610], 186, st.arc > 0.05],
-    ['Point light sensor', 'FIBRE TO THE ARC FLASH RELAY', [-0.36, -0.42, 0.32], [360, 470], 172],
-    ['Busbars', 'BOLTED ON THE HV TERMINALS', [POLES[2], -0.2, 0.282], [1080, 420], 150],
+    ['Arc', 'PHASE TO PHASE · PLACE ILLUSTRATIVE', [POLES[0] + 0.1, -0.5, 0.29], [360, 610], 186, st.arc > 0.05, A],
+    ['Point light sensor', 'TO THE ARC FLASH RELAY · PLACE ILLUSTRATIVE', [-0.36, -0.42, 0.32], [360, 470], 172, false, A],
+    ['Busbars', 'ON THE HV TERMINALS · ROUTE ASSUMED', [POLES[2], -0.2, 0.282], [1080, 420], 150, false, A],
     ['SIQuench Core', 'ONE POLE PER PHASE, TO EARTH', [0.1, 0.07, 0.14], [1060, 196], 160],
-    ['Earthing bar', 'TO THE SWITCHGEAR EARTH', [-0.448, -0.3, 0.011], [360, 300], 190],
+    ['Earthing bar', 'SIZE AND ROUTE ASSUMED', [-0.448, -0.3, 0.011], [360, 300], 190, false, A],
   ],
   mech: (st) => [
-    ['Disc spring stack', `${(DRIVE.Fcharged / 1000).toFixed(0)} KN WHEN CHARGED`, [POLES[0], -0.037, -0.17], [360, 560], 150, Math.max(...st.active.cross) > 0],
-    ['Latch tongue', 'HOLDS THE CROSSHEAD BACK', [POLES[1], 0.04, -0.09], [690, 150], 150, st.active.tongue > 0],
+    ['Disc spring stack', `RIBBED STACK IN ABB. 39 · FORCES ASSUMED`, [POLES[0], -0.037, -0.17], [360, 560], 150, Math.max(...st.active.cross) > 0, A],
+    ['Latch tongue', 'ZUNGE (ABB. 39) · HOW IT LATCHES: ASSUMED', [POLES[1], 0.04, -0.109], [690, 150], 150, st.active.tongue > 0, A],
+    ['Trip coil', 'X1 · PLACE AND SHAPE ASSUMED', [POLES[2] + 0.024, 0.033, -0.088], [1050, 300], 190, st.active.coil > 0, A],
     ['Position switch S3', 'ON THE TONGUE BRACKET · 3 IN SERIES', [POLES[2] - 0.016, 0.058, -0.095], [1050, 170], 190],
     ['Helical springs', 'ON THE GUIDE RODS · GREASE: ISOFLEX', [POLES[1] + 0.05, -0.037, -0.17], [1080, 600], 190],
     ['Actuation opening', 'Ø16.1 · FOR THE SPANNWERKZEUG', [POLES[1], -0.037, -0.27], [690, 690], 170],
     ['Position switches', 'S1 · S2 · QUENCHER READY SIGNAL', [POLES[0] - 0.045, 0.05, -0.11], [400, 300], 170],
   ],
   pole: (st) => [
-    ['Fixed contact', 'AT HIGH VOLTAGE · TULIP', [P3, 0.012, 0.225], [1040, 200], 150, st.ev && st.poles[2].closed],
-    ['Moving contact', `AT EARTH · ${DRIVE.L * 1000} MM THROUGH OIL`, [P3, -0.009, 0.15], [1040, 610], 180, st.active.contact > 0 || st.poles[2].v > 0],
+    ['Fixed contact', 'AT HIGH VOLTAGE · SHAPE AND PLACE ASSUMED', [P3, 0.012, 0.225], [1040, 200], 150, st.ev && st.poles[2].closed, A],
+    ['Moving contact', `AT EARTH · ${DRIVE.L * 1000} MM TRAVEL ASSUMED`, [P3, -0.009, 0.15], [1040, 610], 180, st.active.contact > 0 || st.poles[2].v > 0, A],
     ['Insulating oil', 'MINERAL OIL DIALA S4 ZX-I', [P3, 0.035, 0.12], [640, 160], 150],
-    ['Sliding contact', 'EARTHED THROUGH THE COPPER PLATE', [P3, -0.017, 0.022], [480, 630], 180],
+    ['Sliding contact', 'TO THE COPPER PLATE · ASSUMED', [P3, -0.017, 0.022], [480, 630], 180, false, A],
   ],
   latch: (st) => [
-    ['Position switch S3', 'ON THE TONGUE BRACKET', [P3 - 0.016, 0.058, -0.095], [480, 170], 160],
-    ['Latch tongue', 'ZUNGE · PULLED UP BY THE TRIP COIL', [P3, 0.04, -0.109], [1080, 380], 190, st.active.coil > 0 || st.active.tongue > 0],
-    ['Slotted bracket', 'GUIDES THE TONGUE', [P3 + 0.02, 0.041, -0.07], [1060, 200], 150],
-    ['Crosshead', 'CARRIES THE CONTACT ROD', [P3, -0.03, crossZ0()], [500, 600], 150, Math.max(...st.active.cross) > 0],
+    ['Position switch S3', 'ON THE TONGUE BRACKET · WHAT IT SENSES: ASSUMED', [P3 - 0.016, 0.058, -0.095], [480, 170], 160, false, A],
+    ['Latch tongue', 'ZUNGE (ABB. 39) · LIFT AND ENGAGEMENT ASSUMED', [P3, 0.04, -0.109], [1080, 380], 190, st.active.tongue > 0, A],
+    ['Trip coil', 'X1 · PLACE AND SHAPE ASSUMED', [P3 + 0.024, 0.033, -0.088], [1060, 520], 190, st.active.coil > 0, A],
+    ['Rocker', 'COIL TO TONGUE LINK · ASSUMED', [P3 + 0.012, 0.051, -0.098], [1060, 200], 150, st.active.coil > 0, A],
+    ['Slotted bracket', 'GUIDES THE TONGUE (ABB. 39)', [P3 - 0.02, 0.041, -0.07], [480, 300], 150],
+    ['Crosshead', 'CARRIES THE CONTACT ROD · ASSUMED', [P3, -0.03, crossZ0()], [500, 600], 150, Math.max(...st.active.cross) > 0, A],
   ],
   charge: (st) => [
     ['Spannwerkzeug', 'SW24 · CLOCKWISE TO THE STOP · ≤ 100 NM', [P3, -0.037, -0.33], [440, 600], 220, st.active.tool > 0],
-    ['Charging spindle', 'DRAWN BACK BY THE THREAD', [P3, -0.037, -0.235], [460, 250], 160],
-    ['Disc spring stack', 'COMPRESSED 18 MM', [P3, -0.037, -0.17], [1060, 200], 140, Math.max(...st.active.cross) > 0],
-    ['Latch tongue', 'DROPS IN FRONT OF THE LIP · RE-ARMED', [P3, 0.04, -0.109], [1060, 560], 200],
+    ['Charging spindle', 'DRAWN BACK BY THE THREAD · ASSUMED', [P3, -0.037, -0.235], [460, 250], 160, false, A],
+    ['Disc spring stack', 'COMPRESSED 18 MM · ASSUMED', [P3, -0.037, -0.17], [1060, 200], 140, Math.max(...st.active.cross) > 0, A],
+    ['Latch tongue', 'DROPS IN FRONT OF THE LIP · ASSUMED', [P3, 0.04, -0.109], [1060, 560], 200, false, A],
   ],
 };
 CALLOUTS.open = CALLOUTS.hero;
@@ -230,7 +237,7 @@ export function layoutCallouts(list) {
   const cx = shown.reduce((a, c) => a + c.at[0], 0) / shown.length;
   const sides = {L: [], R: []};
   for (const c of shown) {
-    const w = Math.round(Math.max(c.name.length * 7.0, c.sub.length * 6.55) + 6);
+    const w = Math.round(Math.max(c.name.length * 7.0 + (c.assumed ? 66 : 0), c.sub.length * 6.55) + 6);
     const left = c.at[0] < cx || (shown.length === 1 && c.at[0] < 800);
     const lx = left ? Math.min(312 + w, c.at[0] - 40) : Math.max(1282 - w, c.at[0] + 40);
     sides[left ? 'L' : 'R'].push({...c, w: left ? -w : w, label: [lx, c.at[1] - 34]});
@@ -285,7 +292,7 @@ export function makeCursor(ui) {
 export function makeConsoleFrame(ui, st) {
   return (m, {tau, cam, since, cursor, quench = true, det = DET, slow = '', slowK = 0.5, paused = false, display, opsIk, opsMech, canTrip = true, canCharge = false, labels = 1}) => {
     const vis = ss(1.0, 1.7, since) * labels;
-    const callouts = layoutCallouts((CALLOUTS[cam] || (() => []))(m).map(([name, sub, at, , , hot]) => ({name, sub, at: st.project(...at), o: vis, hot: !!hot})));
+    const callouts = layoutCallouts((CALLOUTS[cam] || (() => []))(m).map(([name, sub, at, , , hot, basis]) => ({name, sub, at: st.project(...at), o: vis, hot: !!hot, assumed: basis === 'A'})));
     ui.update({
       tau,
       ev: m.ev,
