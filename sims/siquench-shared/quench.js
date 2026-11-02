@@ -63,11 +63,12 @@ export const DRIVE = {
   L: 0.018, // contact travel
   m: 1.2, // kg moving mass: contact rod, crosshead, a third of the discs
   thEnd: (85 * Math.PI) / 180,
-  discs: 20, // discs in series, alternating
+  // the stack's look follows the ribbed cylinder of Abb. 39 (about 14 ribs); discs, sizes and forces are ASSUMED
+  discs: 14, // discs in series, alternating
   discOD: 0.08,
   discID: 0.041,
-  discT: 0.0035,
-  discH: 0.0018, // free cone height
+  discT: 0.005,
+  discH: 0.00257, // free cone height (stack free length kept at 106 mm)
   pitch: 0.0025, // charging thread pitch
   freeTurns: 2, // lost motion before the tool picks up the spring
   rEff: 0.0058, // m, torque per newton of spring force through the thread (friction included)

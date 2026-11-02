@@ -2,7 +2,8 @@
 // opened switching part (Abb. 23, 39): the galvanised base plate with its 10 fixing points, the copper earthing plate
 // that shorts the three poles, per pole a steel sleeve and a cycloaliphatic epoxy housing filled with insulating oil
 // around a fixed contact at the high-voltage terminal and a moving contact at earth; behind the plate, under the hood,
-// per pole a disc spring stack, a crosshead on two guide rods with helical springs, the latch tongue (a blade through
+// per pole a disc spring stack, a crosshead with two rods running forward out of it, each carrying a helical spring
+// (as the springs in front of the ribbed stack's face in Abb. 39 item 2), the latch tongue (a blade through
 // a slotted bracket that carries position switch S3, as in Abb. 39), S1/S2 and the charging spindle the Spannwerkzeug screws into. Outside: three busbars to the cable
 // compartment where the arc strikes, a point light sensor, and the charging tool with its SW24 spanner.
 //
@@ -433,8 +434,15 @@ export function buildDevice() {
 
   // ------------------------------------------------------------ the mechanism, one per pole
   const discG = discGeo();
-  const helix = helixGeo(0.0085, 0.0028, 9);
-  const guide = new THREE.CylinderGeometry(0.005, 0.005, L.frontZ - L.bulkZ, 14).rotateX(Math.PI / 2);
+  // the helical springs of Abb. 39 item 2: in front of the stack's face, one on a rod coaxial with the stack and one on
+  // a parallel rod beside and below it; both rods run forward from the crosshead through the front bulkhead and end in
+  // hex nuts. Proportions read off the drawing against the stack (no dimensions given); rates and role ASSUMED.
+  const HS = [
+    {x: 0, y: 0, r: 0.0105, w: 0.0033, n: 14, rod: 0.0065},
+    {x: 0.03, y: -0.008, r: 0.0088, w: 0.003, n: 15, rod: 0.0055},
+  ];
+  const helixGs = HS.map((h) => helixGeo(h.r, h.w, h.n));
+  const rodLen = L.frontZ + 0.004 - crossZ(0) - L.ch / 2;
   const spindle = new THREE.CylinderGeometry(0.0075, 0.0075, 1, 16).rotateX(Math.PI / 2);
   const crossGeo = new RoundedBoxGeometry(0.13, 0.072, L.ch, 2, 0.003);
   const lipGeo = new RoundedBoxGeometry(0.03, 0.01, L.ch, 2, 0.002);
@@ -471,14 +479,6 @@ export function buildDevice() {
     const g = new THREE.Group();
     g.position.x = px;
     root.add(g);
-    // guide rods and their helical springs, both sides of the stack
-    const springs = [];
-    for (const s of [-1, 1]) {
-      add(g, guide, M.steel).position.set(s * 0.05, L.toolY, (L.frontZ + L.bulkZ) / 2);
-      const sp = add(g, helix, M.spring);
-      sp.position.set(s * 0.05, L.toolY, L.bulkZ);
-      springs.push(sp);
-    }
     // the disc stack, alternating
     const discs = [];
     for (let k = 0; k < DRIVE.discs; k++) {
@@ -514,6 +514,20 @@ export function buildDevice() {
     const tip = add(mov, new THREE.SphereGeometry(0.0086, 20, 12, 0, TAU, 0, Math.PI / 2).rotateX(Math.PI / 2), M.silver);
     tip.position.z = ROD - 0.012;
     add(mov, new THREE.CylinderGeometry(0.0086, 0.0086, 0.012, 20).rotateX(Math.PI / 2), M.silver).position.z = ROD - 0.006;
+    // the two spring rods out of the crosshead's front face (Abb. 39 item 2), washers, nuts; the springs bear on the
+    // front bulkhead, so they are compressed as the contact closes (role ASSUMED)
+    const springs = [];
+    HS.forEach((h, k) => {
+      const y = L.toolY + h.y;
+      const rod = add(mov, new THREE.CylinderGeometry(h.rod, h.rod, rodLen, 14).rotateX(Math.PI / 2), M.steel);
+      rod.position.set(h.x, y, L.ch / 2 + rodLen / 2);
+      add(mov, ring(h.r + 0.003, h.rod + 0.0005, 0.003, 28), M.steel).position.set(h.x, y, L.ch / 2);
+      add(mov, hexPrism(h.rod * 2.6, 0.006), M.steel).position.set(h.x, y, L.ch / 2 + rodLen - 0.001);
+      add(g, ring(h.rod + 0.003, h.rod + 0.0004, 0.006, 20), M.steel).position.set(h.x, y, L.frontZ - 0.006);
+      const sp = add(g, helixGs[k], M.spring);
+      sp.position.set(h.x, y, 0);
+      springs.push(sp);
+    });
     // a flag that works the position switches
     const flag = add(mov, new THREE.BoxGeometry(0.014, 0.006, 0.008), crossM);
     flag.position.set(-0.045, 0.028, 0);
@@ -744,7 +758,12 @@ export function buildDevice() {
         d.scale.z = k;
         d.position.z = L.bulkZ + j * pitch + (j % 2 ? pitch : 0);
       });
-      for (const sp of m.springs) sp.scale.z = len - 0.004;
+      // the helical springs from the washer on the crosshead's face to the front bulkhead
+      const z0 = zc + L.ch / 2 + 0.003;
+      for (const sp of m.springs) {
+        sp.position.z = z0;
+        sp.scale.z = L.frontZ - 0.006 - z0;
+      }
       // the tongue is pulled up when the trip coil fires, rides the lip while it passes, drops in front of it at the end
       const lipFront = zc + L.ch / 2;
       const onLip = lipFront > PIV.z + 0.0008 && zc - L.ch / 2 < PIV.z + TB.t ? 1 : 0;

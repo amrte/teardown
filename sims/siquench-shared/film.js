@@ -198,7 +198,7 @@ export const CALLOUTS = {
     ['Latch tongue', 'ZUNGE (ABB. 39) · HOW IT LATCHES: ASSUMED', [POLES[1], 0.04, -0.109], [690, 150], 150, st.active.tongue > 0, A],
     ['Trip coil', 'X1 · PLACE AND SHAPE ASSUMED', [POLES[2] + 0.024, 0.033, -0.088], [1050, 300], 190, st.active.coil > 0, A],
     ['Position switch S3', 'ON THE TONGUE BRACKET · 3 IN SERIES', [POLES[2] - 0.016, 0.058, -0.095], [1050, 170], 190],
-    ['Helical springs', 'ON THE GUIDE RODS · GREASE: ISOFLEX', [POLES[1] + 0.05, -0.037, -0.17], [1080, 600], 190],
+    ['Helical springs', 'ON 2 RODS IN FRONT OF THE STACK (ABB. 39) · ROLE ASSUMED', [POLES[1], -0.037 - 0.0105, -0.07], [1080, 600], 190, false, A],
     ['Actuation opening', 'Ø16.1 · FOR THE SPANNWERKZEUG', [POLES[1], -0.037, -0.27], [690, 690], 170],
     ['Position switches', 'S1 · S2 · QUENCHER READY SIGNAL', [POLES[0] - 0.045, 0.05, -0.11], [400, 300], 170],
   ],
