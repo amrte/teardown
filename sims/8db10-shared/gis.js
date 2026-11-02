@@ -89,9 +89,9 @@ export const Q1A = {closed: 0, open: 52, earth: 104};
 export const Q1L = 0.115; // blade length, pivot to tip
 // Q2: disconnector, busbar system 2. Pivot near the bushing to Q1, the fixed contact under the busbar-2 neck;
 // OPEN swings the blade down toward the rear (Fig. 7, item 4)
-export const Q2P = {dz: 0.1, y: 1.5};
-export const Q2L = 0.16;
-export const Q2A = {closed: (Math.atan2(-Q2P.dz, 1.625 - Q2P.y) * 180) / Math.PI, open: -120};
+export const Q2P = {dz: 0.1, y: 1.515, contactY: 1.625};
+export const Q2L = Math.hypot(Q2P.dz, Q2P.contactY - Q2P.y);
+export const Q2A = {closed: (Math.atan2(-Q2P.dz, Q2P.contactY - Q2P.y) * 180) / Math.PI, open: -120};
 
 export const CB = {
   closeT: 0.058, // command -> contacts touch (cat. < 95 ms)

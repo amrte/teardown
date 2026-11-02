@@ -66,7 +66,10 @@ ok(Math.abs(gasAt(20) - GAS.rated) < 1e-9 && gasAt(-5) > GAS.low, `manometer ${g
   };
   ok(stateAt(ev, 0.5).node === 'bb1' && stateAt(ev, 0.5).cable === 'live', 'start: feeder on busbar 1');
   run('bb2', 'transfer to busbar 2', {node: 'bb2', cable: 'live'});
-  const tf = worstInception(tau + 0.3);
+  // the closing spring must be charged before the fault, or the auto-reclose could not close
+  const pre = stateAt(ev, tau);
+  const tf = worstInception(tau + (pre.springBusy ? (1 - pre.spring) * CB.charge + 0.1 : 0.3));
+  ok(stateAt(ev, tf).spring >= 1, 'closing spring charged before the fault');
   const fe = faultEvents(tf);
   ok(allowed(stateAt(ev, tf), 'fault').ok, 'fault allowed on a live feeder');
   fire(fe);
