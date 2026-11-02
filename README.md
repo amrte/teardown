@@ -10,6 +10,10 @@ Ask how something works. Claude builds it as one offline HTML page: the machine 
 |---|---|
 | ![Telson SC-8 robotic scorpion](docs/scorpion.gif) | ![Pelagos OC-8 robotic octopus](docs/octopus.gif) |
 
+**SIQuench 3AM4 arc quencher**: built from the manufacturer's manual and brochure. An arc strikes in the switchgear, and the device earths all three phases in 4 ms. Then the poles are recharged with the charging tool. Every moving part is explained in [docs/siquench.md](docs/siquench.md).
+
+![SIQuench 3AM4 teardown](docs/siquench.gif)
+
 ## Install
 
 ```
@@ -34,12 +38,13 @@ Ask Claude Code in plain words:
 
 > Make a teardown of a hydraulic excavator arm and record a 20-second video of it.
 
-Or open one of the 3 examples first:
+Or open one of the 4 examples first:
 
 ```
 node sims/build.mjs v8-live          # teardown-out/dist/v8-live.html
 node sims/build.mjs cessna-live
 node sims/build.mjs strandbeest-live
+node sims/build.mjs siquench-live    # SIQuench 3AM4 arc quencher, see docs/siquench.md
 ```
 
 ## What is inside
@@ -48,7 +53,7 @@ node sims/build.mjs strandbeest-live
 |---|---|
 | `SKILL.md` | What Claude reads: how a machine is built, the rules that make it look right, the review loop. |
 | `sims/kit/` | Runtime, stage, shader warm-up. |
-| `sims/v8-*`, `sims/cessna-*`, `sims/strandbeest-*` | 3 complete machines. `-shared` is the machine, `-live` the page you drive, `-film` the recorded tour. |
+| `sims/v8-*`, `sims/cessna-*`, `sims/strandbeest-*`, `sims/siquench-*` | 4 complete machines. `-shared` is the machine, `-live` the page you drive, `-film` the recorded tour. |
 | `sims/build.mjs` | Bundles a machine into one HTML file, three.js and fonts inlined. |
 | `sims/capture.mjs` | Renders the film frame by frame to a 60 fps mp4, or to review sheets of stills. |
 | `sfx/`, `run_sfx.py` | Procedural sound on the film's timeline, mastered to −14 LUFS. |
