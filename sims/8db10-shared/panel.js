@@ -204,10 +204,10 @@ export function buildPanel() {
 
     // ---------------------------------------------------------- operating linkage: a crank per pole on the shaft
     const crank = new THREE.Group();
-    crank.position.set(0.21, 0.82, z);
+    crank.position.set(-0.21, 0.82, z);
     add(new RoundedBoxGeometry(0.02, 0.016, 0.075, 2, 0.005).translate(0, 0, 0.032), M.steel, crank);
     pole.add(crank);
-    add(cylX(0.022, 0.05), M.aluDark, pole, new V3(0.18, 0.82, z));
+    add(cylX(0.022, 0.05), M.aluDark, pole, new V3(-0.18, 0.82, z));
     links.push(crank);
 
     // ---------------------------------------------------------- under the frame: pervious bushing, CT, connection
@@ -230,7 +230,7 @@ export function buildPanel() {
   });
 
   // ------------------------------------------------------------ the linkage shaft from the mechanism to all three poles
-  const shaft = add(cylZ(0.016, G.cubZ0 - (G.poleZ[2] - 0.1)), M.steel, root, new V3(0.21, 0.82, (G.cubZ0 + G.poleZ[2] - 0.1) / 2));
+  const shaft = add(cylZ(0.016, G.cubZ0 - (G.poleZ[2] - 0.1)), M.steel, root, new V3(-0.21, 0.82, (G.cubZ0 + G.poleZ[2] - 0.1) / 2));
   shaft.castShadow = true;
 
   // ------------------------------------------------------------ the subframe
@@ -427,10 +427,10 @@ export function buildPanel() {
       const m = compMat[c.id];
       m.color.copy(aluCol).lerp(new THREE.Color(GAS_TINT[c.id]), gas * 0.85);
       m.metalness = 0.55 * (1 - gas);
-      m.opacity = 1 - 0.92 * xray;
+      m.opacity = 1 - 0.8 * xray;
       see(m, xray);
     }
-    for (const [m, k] of [[M.boltCover, 0.9], [M.aluDark, 0.95], [M.ceramic, 0.62], [M.bush, 0.8], [M.bushPerv, 0.8], [M.resin, 0.8]]) {
+    for (const [m, k] of [[M.boltCover, 0.85], [M.aluDark, 0.88], [M.ceramic, 0.62], [M.bush, 0.8], [M.bushPerv, 0.8], [M.resin, 0.8]]) {
       m.opacity = 1 - k * xray;
       see(m, xray);
     }
