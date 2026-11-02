@@ -3,10 +3,11 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {
-  BASIS, BUSBAR, CABLES, COMPS, DEPTHS, DIMENSIONS, DOCS, INTERLOCKS, JOINTS, LUBES, MAINT, PARTS, RATINGS, STEPS,
+  BASIS, BUSBAR, CABLES, FOUNDATION, ROOM, COMPS, DEPTHS, DIMENSIONS, DOCS, INTERLOCKS, JOINTS, LUBES, MAINT, PARTS, RATINGS, STEPS,
   TOOLS, TORQUE_TABLE, WIDTHS, jointById, partById,
 } from './data.js';
-import {boltGeometry, buildPanel, makeMaterials} from './model.js';
+import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
+import {boltGeometry, buildPanel, makeMaterials, nutGeometry} from './model.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
@@ -20,7 +21,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, bolts: 'step', labels: true,
+  step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
 };
@@ -49,7 +50,7 @@ controls.minDistance = 0.6;
 controls.maxDistance = 14;
 controls.maxPolarAngle = Math.PI * 0.62;
 
-const cutPlane = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 1e5);
+const cutPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 1e5); // keeps x ≥ 0; look from -x so the front is on the right
 const mats = makeMaterials([cutPlane]);
 const lineMat = new THREE.LineBasicMaterial({color: 0x1f2427, transparent: true, opacity: 0.32, clippingPlanes: [cutPlane]});
 const ghostMat = new THREE.MeshStandardMaterial({color: 0xb7bdb9, transparent: true, opacity: 0.1, depthWrite: false, roughness: 0.7, side: THREE.DoubleSide});
@@ -137,18 +138,28 @@ function build() {
   for (const [jid, list] of Object.entries(subject.anchors)) {
     const j = jointById[jid];
     const size = SIZE_KEYS.includes(j?.size) ? j.size : 'M8';
-    for (const {group, list: pts} of list) {
-      const geo = boltGeometry(size);
-      geo.userData.shared = true;
-      const im = new THREE.InstancedMesh(geo, boltMat[size], pts.length);
+    for (const {group, list: pts, nut} of list) {
+      const im = new THREE.InstancedMesh(boltGeometry(size), boltMat[size], pts.length);
+      const nm = nut ? new THREE.InstancedMesh(nutGeometry(size), boltMat[size], pts.length) : null;
       pts.forEach(({p, n}, i) => {
-        q.setFromUnitVectors(up, n.clone().normalize());
+        const nn = n.clone().normalize();
+        q.setFromUnitVectors(up, nn);
         m4.compose(p, q, new THREE.Vector3(VIS, VIS, VIS));
         im.setMatrixAt(i, m4);
+        if (nm) {
+          q.setFromUnitVectors(up, nn.clone().negate());
+          m4.compose(p.clone().addScaledVector(nn, -nut), q, new THREE.Vector3(VIS, VIS, VIS));
+          nm.setMatrixAt(i, m4);
+        }
       });
       im.userData = {joint: jid, size, pts};
       group.add(im);
       (bolts[jid] ||= []).push(im);
+      if (nm) {
+        nm.userData = {joint: jid, size, pts, nut: true};
+        group.add(nm);
+        (bolts[jid] ||= []).push(nm);
+      }
     }
   }
 
@@ -185,7 +196,7 @@ function build() {
 
 // ------------------------------------------------------------------------------------------- pose + looks
 const anim = {ex: 0, truck: 0};
-const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? 230 : 1150);
+const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? 220 : 1150); // 3AE racking travel 220 mm (CB p.57)
 
 function applyPose(force) {
   if (!world) return;
@@ -218,10 +229,10 @@ function applyPose(force) {
         c.position.y = c.userData.y0 + c.userData.shut * 250 * (p === subject ? open : 1);
       }
     }
-    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = eswClosed ? 0 : 1.15; });
+    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + (eswClosed ? 0 : 1.25); });
     if (p !== subject) for (const g of p.parts.breaker || []) g.position.z = 0;
   }
-  for (const n of neighbors) n.root.visible = state.row;
+  neighbors.forEach((n, i) => { n.root.visible = state.row && !state.isolate && !(state.cut && i === 0); });
 }
 
 function applyFocus() {
@@ -232,7 +243,7 @@ function applyFocus() {
     for (const m of list) {
       if (!m.emissive) continue;
       m.emissive.copy(on ? accentColor : new THREE.Color(0));
-      m.emissiveIntensity = on ? 0.26 : 0;
+      m.emissiveIntensity = on ? 0.18 : 0;
     }
   }
   const active = new Set(state.selJoint ? [state.selJoint] : state.joints);
@@ -245,28 +256,31 @@ function applyFocus() {
     }
   }
   renderLabels();
+  if (world) applyGlassLite();
 }
+function applyGlassLite() { if (state.isolate) applyGlass(); }
 
 function applyGlass() {
   if (!world) return;
-  for (const id of world.subject.shellIds) {
-    for (const m of world.partMats[id] || []) {
-      if (state.glass) {
-        m.transparent = true;
-        m.opacity = 0.13;
-        m.depthWrite = false;
-      } else {
-        m.transparent = m.userData.base.transparent;
-        m.opacity = m.userData.base.opacity;
-        m.depthWrite = true;
-      }
+  const focus = new Set(state.selPart ? [state.selPart] : state.focus);
+  const iso = state.isolate && focus.size > 0;
+  for (const [pid, list] of Object.entries(world.partMats)) {
+    const ghost = iso && !focus.has(pid);
+    const glass = !ghost && state.glass && world.subject.shellIds.has(pid) && !(iso && focus.has(pid));
+    for (const m of list) {
+      if (ghost) { m.transparent = true; m.opacity = 0.045; m.depthWrite = false; }
+      else if (glass) { m.transparent = true; m.opacity = 0.13; m.depthWrite = false; }
+      else { m.transparent = m.userData.base.transparent; m.opacity = m.userData.base.opacity; m.depthWrite = true; }
       m.needsUpdate = true;
     }
   }
+  lineMat.opacity = iso ? 0.16 : 0.32;
+  applyPose();
 }
 
 function applyCut() {
   cutPlane.constant = state.cut ? 0 : 1e5;
+  applyPose();
 }
 
 // -------------------------------------------------------------------------------------------------- views
@@ -274,11 +288,11 @@ const VIEWS = {
   iso: {p: [3.7, 2.9, 4.7], t: [0, 1.1, 0]},
   front: {p: [0.25, 1.4, 6.0], t: [0, 1.15, 0]},
   rear: {p: [-2.6, 1.9, -5.0], t: [0, 1.05, -0.2]},
-  side: {p: [5.6, 1.4, 0.15], t: [0, 1.15, 0]},
+  side: {p: [-5.2, 1.35, 0.1], t: [0, 1.15, 0]},
   top: {p: [0.4, 6.8, 1.6], t: [0, 0.8, 0]},
   low: {p: [2.4, 0.9, 2.7], t: [0, 0.2, 0.1]},
-  bus: {p: [3.3, 3.2, 2.0], t: [0, 1.65, -0.3]},
-  cable: {p: [3.0, 1.15, -2.1], t: [0, 0.6, -0.45]},
+  bus: {p: [-3.3, 3.2, 2.0], t: [0, 1.5, -0.3]},
+  cable: {p: [-3.0, 1.15, -2.1], t: [0, 0.6, -0.45]},
 };
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
@@ -315,7 +329,7 @@ function renderLabels() {
     for (const jid of active) {
       const ims = world.bolts[jid];
       if (!ims) continue;
-      const n = ims.reduce((a, im) => a + im.count, 0);
+      const n = ims.filter((im) => !im.userData.nut).reduce((a, im) => a + im.count, 0);
       html.push(`<div class="tag" data-j="${jid}">${jointLabel(jointById[jid], n)}</div>`);
     }
   }
@@ -335,7 +349,7 @@ function placeLabels() {
     for (const {p} of pts) { const d = p.distanceToSquared(c); if (d < bd) { bd = d; best = p; } }
     tmpV.copy(best);
     im.parent.localToWorld(tmpV);
-    const hiddenByCut = state.cut && tmpV.x > 0.0005;
+    const hiddenByCut = state.cut && tmpV.x < -0.0005;
     tmpV.project(camera);
     const vis = tmpV.z < 1 && !hiddenByCut && Math.abs(tmpV.x) < 1.05 && Math.abs(tmpV.y) < 1.05;
     el.hidden = !vis;
@@ -356,7 +370,7 @@ function pick(ev) {
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObject(world.subject.root, true);
   for (const h of hits) {
-    if (state.cut && h.point.x > 0.0005) continue;
+    if (state.cut && h.point.x < -0.0005) continue;
     let o = h.object;
     if (!o.visible || o.isLineSegments) continue;
     let hidden = false;
@@ -365,7 +379,7 @@ function pick(ev) {
     if (o.isInstancedMesh) return {joint: o.userData.joint};
     const pid = o.userData.part;
     if (state.glass && world.subject.shellIds.has(pid)) continue;
-    if (pid) return {part: pid};
+    if (pid) return {part: pid, label: o.userData.label || o.parent?.userData?.label};
   }
   return null;
 }
@@ -376,7 +390,7 @@ canvas.addEventListener('pointerup', (e) => {
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
   const hit = pick(e);
   if (hit?.joint) selectJoint(hit.joint, true);
-  else if (hit?.part && partById[hit.part]) selectPart(hit.part, true);
+  else if (hit?.part && partById[hit.part]) { state.selLabel = hit.label || null; selectPart(hit.part, true); }
   else { state.selPart = null; state.selJoint = null; applyFocus(); syncSelection(); }
 });
 let hoverT = 0;
@@ -388,7 +402,7 @@ canvas.addEventListener('pointermove', (e) => {
   const r = stage.getBoundingClientRect();
   let txt = '';
   if (hit?.joint) { const j = jointById[hit.joint]; txt = `${j.where} · ${j.t != null ? j.t + ' Nm' : BASIS[j.basis].label}`; }
-  else if (hit?.part && partById[hit.part]) txt = partById[hit.part].name;
+  else if (hit?.part && partById[hit.part]) txt = hit.label && hit.label !== partById[hit.part].name ? `${hit.label} · ${partById[hit.part].name}` : partById[hit.part].name;
   tip.hidden = !txt;
   if (txt) { tip.textContent = txt; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`; }
 });
@@ -406,7 +420,7 @@ new ResizeObserver(resize).observe(stage);
 const ease = (u) => (u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2);
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   const kEx = reduced ? 1 : 1 - Math.exp(-dt * 6);
   const tz = truckZ(state.truck);
@@ -429,12 +443,19 @@ function frame(now) {
 }
 
 // ================================================================================================ the rail
+// across-flats per ISO 4017 / ISO 4032, wrench ranges from the manual's tool list (I §5.10)
+const TOOL = {
+  M8: '13 mm socket / ring spanner · torque wrench 20–70 Nm (8–20 Nm for small values)',
+  M10: '16 mm socket / ring spanner · torque wrench 8–20 Nm',
+  M12: '18 mm socket / ring spanner, counter-hold the nut · torque wrench 20–70 Nm',
+  M16: '24 mm socket · driver or wrench for 110 Nm',
+};
 const sizeOf = (j) => (SIZE_KEYS.includes(j.size) ? j.size : 'MX');
 function jointRow(j, {sel} = {}) {
   let bolt = j.bolt;
   if (j.id === 'busbar') bolt = `${BUSBAR[state.bus].bolt} (busbar ${BUSBAR[state.bus].label}, bag ${BUSBAR[state.bus].bag})`;
   const tq = j.t != null
-    ? `<div class="n">${j.t}<small>Nm</small></div>${j.c != null ? `<div class="c">check ${j.c} Nm</div>` : ''}`
+    ? `<div class="n">${j.t}<small>Nm</small></div>${j.tol ? `<div class="c">${esc(j.tol)}</div>` : ''}${j.c != null ? `<div class="c">check ${j.c} Nm</div>` : ''}`
     : `<div class="n" style="font-size:15px">${j.ref_t ? esc(j.ref_t) : '—'}</div>`;
   const has3d = !!(world?.bolts[j.id]);
   return `<button class="jrow${sel ? ' sel' : ''}" data-joint="${j.id}" type="button" title="${has3d ? 'Show in 3D' : 'No 3D position for this joint'}">
@@ -443,6 +464,7 @@ function jointRow(j, {sel} = {}) {
       <span class="w">${esc(j.where)}</span>
       <span class="spec" style="display:block"><b>${esc(j.qty)}</b> · ${esc(bolt)}${j.wash && j.wash !== '—' ? ` · ${esc(j.wash)}` : ''}</span>
       ${j.note ? `<span class="note" style="display:block">${esc(j.note)}</span>` : ''}
+      ${TOOL[j.size] ? `<span class="spec" style="display:block">Tool: ${esc(TOOL[j.size])}</span>` : ''}
       <span class="ref" style="display:block;margin-top:3px">${esc(j.ref)}${has3d ? ' · <span style="color:var(--accent-ink)">shown in 3D</span>' : ''}</span>
     </span>
     <span class="tq">${tq}<span class="badge ${j.basis}" title="${esc(BASIS[j.basis].tip)}">${esc(BASIS[j.basis].label)}</span></span>
@@ -495,6 +517,8 @@ function setStep(i, {view = true} = {}) {
   state.joints = s.joints || [];
   state.selJoint = null;
   state.selPart = null;
+  state.isolate = false;
+  applyGlass();
   syncTools();
   applyCut();
   applyPose();
@@ -505,10 +529,17 @@ function setStep(i, {view = true} = {}) {
 }
 
 // ---------------------------------------------------------------- parts
+function componentsOf(id) {
+  const set = new Set();
+  for (const g of world?.subject.parts[id] || []) g.traverse((c) => { if (c.isMesh && !c.isInstancedMesh && c.userData.label) set.add(c.userData.label); });
+  return [...set];
+}
 function renderParts() {
   const sel = state.selPart && partById[state.selPart];
   const card = sel
-    ? `<div class="pcard"><span class="eyebrow">${esc(COMPS[sel.comp].name)}</span><h2>${esc(sel.name)}</h2><p>${esc(sel.desc)}</p>
+    ? `<div class="pcard"><span class="eyebrow">${esc(COMPS[sel.comp].name)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>
+       ${sel.facts ? `<table class="kv small" style="margin-top:8px">${sel.facts.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>` : ''}
+       ${componentsOf(sel.id).length ? `<h3>Components in this assembly</h3><ul class="plain small comps">${componentsOf(sel.id).map((l) => `<li${l === state.selLabel ? ' style="color:var(--accent-ink);font-weight:600"' : ''}>${esc(l)}</li>`).join('')}</ul>` : ''}
        ${sel.joints.length ? `<h3>How it is fixed</h3><div class="joints">${sel.joints.map((id) => jointRow(jointById[id], {sel: state.selJoint === id})).join('')}</div>` : '<p class="muted small">No bolted joints to make on site.</p>'}</div>`
     : `<div class="pcard"><span class="eyebrow">Parts</span><h2>Pick a part</h2><p class="small muted">Click any part in the 3D view or in the list. The part lights up, the camera stays put, and its fixings appear here with size, washers and torque.</p></div>`;
   const groups = Object.entries(COMPS).map(([k, c]) => {
@@ -521,7 +552,18 @@ function renderParts() {
   }).join('');
   $('#pane-parts').innerHTML = card + groups;
 }
+function framePart(id) {
+  const box = new THREE.Box3();
+  for (const g of world?.subject.parts[id] || []) if (g.visible !== false) box.expandByObject(g);
+  if (box.isEmpty()) return;
+  const c = box.getCenter(new THREE.Vector3());
+  const r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() * 0.5);
+  const dir = camera.position.clone().sub(controls.target).normalize();
+  const dist = r / Math.sin((camera.fov * Math.PI) / 360) * 0.95;
+  camTween = {t0: performance.now(), dur: 800, p0: camera.position.clone(), t0v: controls.target.clone(), p1: c.clone().addScaledVector(dir, dist), t1: c};
+}
 function selectPart(id, fromStage) {
+  if (!fromStage) state.selLabel = null;
   state.selPart = id;
   state.selJoint = null;
   if (id === 'crane') { state.crane = true; applyPose(); }
@@ -587,6 +629,9 @@ function renderSpecs() {
       ['Transverse partition', state.D >= 1400 ? 'Compulsory (depth ≥ 1400 mm)' : 'Optional (depth 1350 mm)'],
       ['Insulating shells', state.ur === 17.5 ? 'Yes, Ur = 17.5 kV' : 'Only with insulated busbar option'],
     ])}
+    <h3>Foundation drawing (110-2300.9)</h3><div class="scroll-x"><table class="grid4"><thead><tr>${FOUNDATION[0].map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${FOUNDATION.slice(1).map((r) => `<tr>${r.map((c, i) => (i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`)).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="small muted">All mm. The model's floor shows the 40 kA / 1500 mm cut-outs for the chosen width.</p>
+    <h3>Room</h3>${kv(ROOM)}
     <h3>Room and foundation</h3>${kv([
       ['Room height', '≥ 2500 mm with evacuation duct; ≥ 2800 / 3000 / 3500 mm with duct or absorber depending on kV and kA (see step 2)'],
       ['Aisles', 'Operating aisle ≥ 1250 mm for panel replacement · rear ≥ 500 mm for rear access · walls ≥ 150 mm from end panels'],
@@ -601,6 +646,9 @@ function renderSpecs() {
     <h3>Interlocks to verify</h3>${kv(INTERLOCKS)}
     <h3>Tools</h3><ul class="plain">${TOOLS.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
     <h3>Maintenance</h3><div class="scroll-x"><table class="grid4"><thead><tr><th>Measure</th><th>When</th><th>What</th></tr></thead><tbody>${MAINT.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <h3>Circuit-breaker 3AE</h3>${kv(CB_DATA)}
+    <h3>Troubleshooting</h3>${kv(TROUBLE)}
+    <h3>Other panel types</h3>${kv(PANEL_TYPES)}
     <h3>Other NXAIR versions</h3>
     <p class="small">NXAIR 50 kA (172-2014.9) and NXAIR M 24 kV (139-2019.9) use the same general table: M8 30 / M12 70 / M16 110 Nm, control 25 / 60 / 90 Nm. NXAIR M differs in detail: cup-head M12 bolts on some busbar joints, M16x45 with conical spring washer 16 on VT and busbar-earthing-switch connections, and on double-busbar panels insulating plates at 16 Nm (lateral) and 8 Nm with plastic M8 bolts (central). Use the manual of your exact version for those.</p>`;
 }
@@ -613,7 +661,8 @@ function renderSources() {
     <ul class="plain">
       <li>Counts, sizes, washers and torques are copied from the manuals; the section reference sits on every row.</li>
       <li>Bolt positions in 3D are representative. The counts per joint match the manual. Bolt heads are drawn ${VIS}× life size so they can be seen.</li>
-      <li>The panel geometry follows the sectional view (O §6.2) at the real outer dimensions. Internal shapes such as breaker poles, bars and bushings are simplified.</li>
+      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. Breaker geometry uses the 3AE manual (pole centres, terminal distance, contact arm Ø, 13 / 26 tulip fingers, 220 mm racking travel). Shapes of poles, CTs, VTs and mechanisms are simplified.</li>
+      <li>Two torque regimes exist: panel joints with dry threads (M8 30 / 25, M12 70, M16 110 Nm) and breaker contact-arm joints with greased threads (M12 40 ±4, M16 100 ±10 Nm). Each row says which.</li>
       <li>A badge marks how each torque is known. "Maker of part" and "Not stated" rows need the part supplier's figure.</li>
       <li>The order documents, dimension drawings 110-2300.9 and the circuit diagrams of your switchgear take precedence over this page.</li>
     </ul>
@@ -627,6 +676,7 @@ function syncTools() {
   $('#t-cut').setAttribute('aria-pressed', String(state.cut));
   $('#t-row').setAttribute('aria-pressed', String(state.row));
   $('#t-glass').setAttribute('aria-pressed', String(state.glass));
+  $('#t-iso').setAttribute('aria-pressed', String(state.isolate));
   $('#t-lab').setAttribute('aria-pressed', String(state.labels));
   for (const b of document.querySelectorAll('[data-bolts]')) b.setAttribute('aria-pressed', String(b.dataset.bolts === state.bolts));
 }
@@ -647,11 +697,12 @@ function wire() {
     else if (t.id === 't-cut') { state.cut = !state.cut; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
     else if (t.id === 't-glass') { state.glass = !state.glass; applyGlass(); syncTools(); }
+    else if (t.id === 't-iso') { state.isolate = !state.isolate; applyGlass(); syncTools(); }
     else if (t.id === 't-lab') { state.labels = !state.labels; renderLabels(); syncTools(); }
     else if (t.id === 'prev') setStep(state.step - 1);
     else if (t.id === 'next') setStep(state.step + 1);
     else if (t.dataset.goto) { e.preventDefault(); setStep(+t.dataset.goto); $('#pane-steps').scrollTop = 0; }
-    else if (t.dataset.part) selectPart(t.dataset.part);
+    else if (t.dataset.part) { state.isolate = true; selectPart(t.dataset.part); applyGlass(); syncTools(); framePart(t.dataset.part); }
     else if (t.dataset.joint) selectJoint(t.dataset.joint);
     else if (t.dataset.f) { torqueFilter[t.dataset.f] = t.dataset.v; renderTorques(); }
   });

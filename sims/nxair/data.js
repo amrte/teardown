@@ -6,13 +6,19 @@
 // Cross-checked: 50 kA installation instructions 172-2014.9 rev. 04 and NXAIR M 24 kV 139-2019.9 rev. 07 carry the
 // same general torque table. Section numbers point into those documents.
 
-export const DOCS = [
+import {CB_DOCS, CB_JOINTS, OPS_JOINTS, OPS_STEPS} from './ops.js';
+
+const BASE_DOCS = [
   {k: 'I', t: 'Installation Instructions NXAIR ≤ 17.5 kV / ≤ 40 kA / ≤ 4000 A', no: '110-0084.9', rev: 'Rev. 15, Dec 2020', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:33c1a0b8-3ac8-4cbe-8923-0fc9568e6a41/110-0084-9-e.pdf'},
   {k: 'O', t: 'Operating Instructions NXAIR ≤ 17.5 kV / ≤ 40 kA', no: '110-0134.9', rev: 'Rev. 14, Jan 2019', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:c9d54883-7f95-480e-86e8-f8a50151946e/nxair-operacao-110-0134-9-e.pdf'},
   {k: 'I50', t: 'Installation Instructions NXAIR ≤ 17.5 kV / 50 kA', no: '172-2014.9', rev: 'Rev. 04, Jun 2018', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:dc26bbce-688d-4063-8205-b33d742aa106/nxair-50ka-instalacao-172-2014-9-04.pdf'},
   {k: 'IM', t: 'Installation Instructions NXAIR M 24 kV / 25 kA', no: '139-2019.9', rev: 'Rev. 07, Sep 2018', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:3f740473-f357-47f7-932d-04b792b1b4aa/nxair-m-instalacao-139-2019-9.pdf'},
+  {k: 'SUP', t: 'Information / dimension drawings NXAIR (110-0250.9 ≤ 31.5 kA, 110-0262.9 40 kA)', no: '110-2300.9', rev: 'Rev. 02, Jan 2017', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:843eb425-ac4a-4df2-86a3-f5b8e6d656b2/nxair-desenhos-suplementares-nxair-110-2300-9-02-bx1-184.pdf'},
+  {k: 'C23', t: 'Catalog HA 25.73 NXAIR up to 17.5 kV, 40 kA', no: 'HA 25.73', rev: 'Edition 2023', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:e8fb6cbc-9887-4533-939c-9d67a3a130ff/NXAIR-40kA-EN.pdf'},
   {k: 'C', t: 'Catalog HA 25.71 NXAIR and NXAIR M', no: 'HA 25.71', rev: 'Edition 2019', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:35caf0b0-ed6f-474f-846c-8f5545a6fddb/catalogue-nxair-en.pdf'},
 ];
+
+export const DOCS = [...BASE_DOCS, ...CB_DOCS];
 
 // I §7.1 and §12.2. Applies to every bolted joint that has no torque stated in its own step.
 export const TORQUE_TABLE = [
@@ -50,9 +56,9 @@ export const DEPTHS = [1350, 1500, 1650];
 // --------------------------------------------------------------------------------------------- bolted joints
 // qty: per panel. bolt: designation as printed. wash: washers / nut. t: torque Nm (null = see basis), c: control
 // torque. part: which 3D part carries the bolts. ref: where it is written.
-export const JOINTS = [
+const BASE_JOINTS = [
   // transport + erection
-  {id: 'crane', group: 'Transport', where: 'Craning angles to panel', qty: '3 per side angle, 2 per rear angle (3–4 angles)', bolt: 'M8x20', wash: 'from craning-angle set', t: 30, c: 25, basis: 'step', ref: 'I §6.9', part: 'crane', size: 'M8'},
+  {id: 'crane', group: 'Transport', where: 'Craning angles to panel', qty: '3 per side angle, 2 per rear angle (3–4 angles)', bolt: 'M8x20 combination screw SN 65480 (+ nut SN 65482 on 1000 mm panels)', wash: 'Washer ISO 7093-1-8-200 HV', t: 30, c: 25, basis: 'step', ref: 'I §6.9', part: 'crane', size: 'M8'},
   {id: 'pallet', group: 'Transport', where: 'Angle brackets to wooden pallet (front + rear)', qty: '1 bracket front, 1 rear', bolt: 'Hexagon head bolts: screw them back into the panel after removing the brackets', wash: '—', t: null, c: null, basis: 'none', ref: 'I §6.7', size: '—', note: 'Size not given in the manual. These holes are later used by the panel itself, so tighten to the general table value for their size.'},
   {id: 'floorC', group: 'Foundation', where: 'Base frame to C-profile rail (bolted floor fixing)', qty: '2 points per panel (front + rear cross member, elongated holes 60 x 20 mm)', bolt: 'Hook-head bolt M16x35-4.6, galvanized', wash: 'Washer ISO 7094-16-100 HV, hex nut ISO 4032-M16-8', t: 110, c: 90, basis: 'general', ref: 'I §5.12 Fig. 7, §7.5; kit 8BX2060', part: 'base', size: 'M16'},
   {id: 'floorDouble', group: 'Foundation', where: 'Base frame to double-floor supporting profile', qty: '2 points per panel', bolt: 'Hex head bolt ISO 4017-M10-8.8', wash: 'Washer ISO 7093-1-10-200 HV, hex nut ISO 4032-M10-8', t: null, ref_t: '≈ 49 Nm (generic M10 8.8, µ 0.14)', c: null, basis: 'none', ref: 'I §5.12 Fig. 9', size: 'M10'},
@@ -63,7 +69,7 @@ export const JOINTS = [
   // busbar compartment
   {id: 'transPart', group: 'Busbar compartment', where: 'Transverse partition plate (busbar bushings) to busbar compartment', qty: '2 top + 2 bottom', bolt: '2 hex head M8x20 (top), 2 M8x20 (bottom)', wash: 'Top: plain washers 8.4 mm. Bottom: contact washers', t: 30, c: 25, basis: 'general', ref: 'I §7.7 Fig. 51, §7.8 Fig. 96', part: 'transPart', size: 'M8', note: 'Compulsory at panel depth ≥ 1400 mm, optional at 1350 mm. Contactor 435 mm: 2 M8x20 top + 1 hex socket bolt (key 6) bottom, fitted from the adjacent panel.'},
   {id: 'busCover', group: 'Busbar compartment', where: 'Busbar cover, between busbar and switching-device compartment', qty: '11', bolt: 'Nut M8 (on studs)', wash: 'Contact washers', t: 25, c: null, basis: 'step', ref: 'I §7.7 Fig. 54, §7.8 Fig. 100', part: 'busCover', size: 'M8', note: 'Hand-tight all round first, then 25 Nm. Switch-disconnector panel: 3 bolts M8x20 with contact washers, 25 Nm.'},
-  {id: 'busbar', group: 'Busbar compartment', where: 'Busbar to feeder bar, each phase L1 L2 L3', qty: '2 bolts per phase joint (4 per phase in the end panel)', bolt: 'per busbar rating: M12x40 / M12x50 / M12x60 / M12x80', wash: 'Conical spring washer under head AND under nut, hex nut M12', t: 70, c: 60, basis: 'check', ref: 'I §7.6 Fig. 58–90, report 1.7', part: 'busbars', size: 'M12', note: 'Threads dry and grease-free. Contact faces brushed, thin film of Vaseline. Follow the bolt insertion direction in the figure. No distortion or gap between bars.'},
+  {id: 'busbar', group: 'Busbar compartment', where: 'Busbar to feeder bar, each phase L1 L2 L3', qty: '2 bolts per phase joint (4 per phase in the end panel)', bolt: 'per busbar rating: M12x40 / M12x50 / M12x60 / M12x80', wash: 'Conical spring washer under head AND under nut, hex nut M12', t: 70, c: 60, basis: 'check', ref: 'I §7.6 Fig. 58–90, report 1.7', part: 'busbars', size: 'M12', note: 'Threads dry and grease-free. Copper contact faces brushed (silver-plated faces are not brushed), then a thin film of Vaseline. Drawing 110-2300.9: ISO 4017 M12 bolt, ISO 4032 nut, 2 conical spring washers DIN 6796, 70 Nm. Follow the bolt insertion direction in the figure. No distortion or gap between bars.'},
   {id: 'shells', group: 'Busbar compartment', where: 'Insulating half-shells over busbar joints (Ur = 17.5 kV and insulated busbar)', qty: '1 pair per joint, all three phases', bolt: 'Reclosable strip fastener', wash: 'Trim leaving ≈ 15 mm protrusion', t: null, c: null, basis: 'none', ref: 'I §7.6 Fig. 92/93', size: '—'},
 
   // bolting panels together
@@ -89,7 +95,7 @@ export const JOINTS = [
 
   // connection compartment access (rear)
   {id: 'rearBase', group: 'Rear wall', where: 'Rear wall at panel base', qty: '4', bolt: 'M8x20 with contact washer', wash: '—', t: 25, c: null, basis: 'step', ref: 'I §9.1 Fig. 211, §11.5 Fig. 289', part: 'rearWall', size: 'M8', note: 'Only loosened to remove; rear wall lifts out by its handle.'},
-  {id: 'rearH', group: 'Rear wall', where: 'Horizontal ledge', qty: '9', bolt: 'M8x25 with contact washer', wash: 'Plain washer size 8 ISO 7093', t: 25, c: null, basis: 'step', ref: 'I §9.1 Fig. 209, §11.5 Fig. 290', part: 'ledgeH', size: 'M8'},
+  {id: 'rearH', group: 'Rear wall', where: 'Horizontal ledge', qty: '9', bolt: 'M8x25 with contact washer', wash: 'Plain washer size 8 ISO 7093', t: 25, c: null, basis: 'step', ref: 'I §9.1 Fig. 209, §11.5 Fig. 290', part: 'ledgeH', size: 'M8', note: 'The operating instructions (O §24.1) list 8 × M8x25 here; the installation instructions list 9. Fit every hole the ledge has.'},
   {id: 'rearV', group: 'Rear wall', where: 'Vertical ledges (2), over the panel-to-panel gap with sealing brackets', qty: '2 × 14 = 28', bolt: 'M8x20 with contact washer', wash: '—', t: 25, c: null, basis: 'step', ref: 'I §9.1 Fig. 209, §11.5 Fig. 290', part: 'ledgeV', size: 'M8'},
 
   // cables
@@ -112,6 +118,7 @@ export const JOINTS = [
   {id: 'quakeHoles', group: 'Doors and operation', where: 'Unused craning-angle holes at the panel rear after removing the angles', qty: 'as found', bolt: 'none: seal holes', wash: 'SIKAFLEX 221-GR 310 ML', t: null, c: null, basis: 'none', ref: 'I §6.11', size: '—'},
 ];
 
+export const JOINTS = [...BASE_JOINTS, ...CB_JOINTS, ...OPS_JOINTS];
 export const jointById = Object.fromEntries(JOINTS.map((j) => [j.id, j]));
 
 // --------------------------------------------------------------------------------------------------- parts
@@ -158,6 +165,13 @@ export const PARTS = [
   {id: 'hvdoor', comp: 'sdc', name: 'High-voltage door', desc: 'Pressure-resistant front door with control board: racking opening and slide, double-bit key opening, earthing-switch opening and slide, mimic with mechanical position indicators, inspection window, spring indicator, operations counter, CLOSE / OPEN openings. Opens only with the truck in test position.', joints: []},
   {id: 'lv', comp: 'lv', name: 'Low-voltage compartment', desc: 'Protection relay, terminals, MCBs, bus wires panel to panel. Height 630 mm standard (980 mm high version: panel 2350 mm). Door key: 3 mm double-bit. Bolted to the neighbour with 3 or 5 × M8x20.', joints: ['lv']},
   {id: 'prc', comp: 'prc', name: 'Pressure relief duct (PRC)', desc: 'Collects arc gases from all compartments through flaps and leads them sideways or to the rear (evacuation duct) or into an absorber. Bolted panel to panel with 14 + 8 × M8x20, 30 Nm. Relief flaps must lie flush on top of the busbar compartment.', joints: ['prcLow', 'prcUp', 'evac', 'fan']},
+  {id: 'shellB', comp: 'busbar', name: 'Fixed compartment walls + relief flaps', desc: 'Galvanised walls that stay on the panel: busbar compartment rear wall, the bushing plate between busbar and switching-device compartment, the partition to the LV compartment, and the pressure relief flaps on top of each high-voltage compartment that open into the pressure relief duct in an internal arc. The flaps must rest flush (installation report 2.6).', joints: []},
+  {id: 'shutterMech', comp: 'sdc', name: 'Shutter mechanism (left + right)', desc: 'Drive slides and cranked levers on both side walls of the switching-device compartment. The truck pushes the slides while racking in; the levers lift the upper shutter and lower the lower shutter. Do not reach into it. Linkage cleaned with WD-40 on a cloth, never sprayed.', joints: []},
+  {id: 'shelf', comp: 'sdc', name: 'Withdrawable-part shelf, guide rails, interlocking unit', desc: 'Mid-height shelf the withdrawable breaker runs on. Guide rails greased with Klüber ISOFLEX TOPAS L 32. At the front: operating and interlocking unit with the racking shaft, the earthing-switch operating unit with its drive rod to the connection compartment, position switches, the truck earthing contact rail, and the fixed half of the 64-pole LV connector under the LV compartment.', joints: []},
+  {id: 'heater', comp: 'conn', name: 'Anti-condensation heater (optional)', desc: 'Finned heater in the connection compartment, thermostat- or hygrostat-controlled from the LV compartment. Switch it on after installation (I §11.1). Hot surface: let it cool before touching.', joints: []},
+  {id: 'mech', comp: 'truck', name: '3AE stored-energy operating mechanism', desc: 'Housing at the front of the breaker with closing spring, opening spring, charging motor, camshaft, shunt closing and opening releases, auxiliary switch, CLOSE / OPEN push buttons, CLOSED/OPEN and spring-state indicators, operations counter and the hand-crank shaft. Visible through the inspection window of the HV door.', joints: []},
+  {id: 'lvPlug', comp: 'truck', name: 'Low-voltage plug, 64-pole', desc: 'Coded 64-pole plug on a cable from the breaker to the fixed socket under the LV compartment. Plugged = auxiliary circuits connected (test and service position). Coding stops a breaker with a lower rating from being plugged into a panel with a higher one. A 3 m 64-pole coupling cable is available for tests outside the panel.', joints: []},
+  {id: 'serviceTruck', comp: 'truck', name: 'Service truck', desc: 'Height-matched trolley to take the withdrawable part out of the panel and put it back. Lift both unlocking levers to release the part. Move it only empty or with the part latched in its end position, operate only from the operating side, park with the rear side against a wall. Remove the transport protection plate before first use.', joints: []},
   {id: 'crane', comp: 'site', name: 'Craning angles (transport)', desc: 'Bolted to the panel for lifting: 4 angles on a panel without end wall, 3 with end wall. M8x20 at 30 Nm. Crane rods S355JR Ø 25 mm pushed through, protrusion > 300 mm each end, washer size 27 + cotter pin. Remove after setting down, seal open rear holes.', joints: ['crane']},
 ];
 export const partById = Object.fromEntries(PARTS.map((p) => [p.id, p]));
@@ -166,7 +180,7 @@ export const partById = Object.fromEntries(PARTS.map((p) => [p.id, p]));
 // view: camera preset. ex: explode amount 0..1 for the subject panel. focus: parts lit with the accent. joints: bolts
 // shown and labelled. truck: 'service' | 'test' | 'out'. row: show the neighbour panels. cut: section through the
 // panel centre.
-export const STEPS = [
+const INSTALL_STEPS = [
   {
     id: 'safety', phase: 'Before you start', title: 'Five safety rules, people, PPE', view: 'iso', ex: 0, truck: 'service', row: true,
     body: [
@@ -339,6 +353,8 @@ export const STEPS = [
   },
 ];
 
+export const STEPS = [...INSTALL_STEPS, ...OPS_STEPS];
+
 // ---------------------------------------------------------------------------------------------------- specs
 export const RATINGS = [
   ['Rated voltage', '7.2 / 12 / 17.5 kV'],
@@ -357,6 +373,27 @@ export const RATINGS = [
   ['Switching devices', '3AE1 / SION 3AE5 vacuum CB · 3TM3 (435 mm) / 3TL8 (600 mm) vacuum contactor · L-TRI 5F switch-fuse'],
 ];
 
+export const FOUNDATION = [
+  ['', '≤ 31.5 kA, 1350 deep', '40 kA, 1500 deep', '40 kA, 1650 deep'],
+  ['Base frame depth', '1314', '1464', '1614'],
+  ['Fixing holes (oblong 60 x 20)', '68 from rear, 1195 apart, panel centre', '68 from rear, 1345 apart', '218 from rear'],
+  ['HV cable cut-out', 'from 125 to 570 from rear (445 long); 440 wide (600 panel)', 'from 125 to 670 from rear (545 long)', 'from 275 from rear'],
+  ['HV cut-out width', '600: 440 · 1000: 700', '435: 265 · 600: 440 · 800: 640 · 1000: 700', 'as 1500'],
+  ['Control cable cut-out', '65 x 180 at the left edge, top 1065 from rear', 'top 1215 from rear', 'top 1365 from rear'],
+  ['Wall behind panels', '≥ 150 (contactor ≥ 100)', '≥ 150', '≥ 110 (1540); ≥ 800 with rear box'],
+];
+
+export const ROOM = [
+  ['Operating aisle', '≥ 1250 mm to replace a device; ≥ 1700 mm for extension or panel replacement'],
+  ['Side walls', '≥ 150 mm; ≥ 500 mm for maintenance and on the side where the duct leaves'],
+  ['Rear', '≥ 500 mm for maintenance access, ≥ 800 mm for operation from the rear'],
+  ['Ceiling (duct out of the building)', '≥ 2500 mm (≥ 2800 mm with IPX1/2 roof)'],
+  ['Ceiling (absorber)', '12 kV: ≥ 2800 (25 kA), ≥ 3000 (31.5 kA), ≥ 3500 (40 kA); 17.5 kV: ≥ 3500'],
+  ['Duct wall opening', '537 x 249 mm, bottom edge 2000 mm above floor; exit flange 537 x 248.5 with M8 press nuts (3 across at 230, 3 down at 85)'],
+  ['Foundation rails (drawing)', '3 rails per panel, L 100 x 100 x 8 EN 10056, 4 x M12 anchors each, spacing 595 / 1195 (435: 688 / 1287.5)'],
+  ['Earthquake points', 'M12 in tapped rails: drill Ø 6 pilot, Ø 10.2, tap M12; template widths 440 / 605 / 805 / 1005'],
+];
+
 export const DIMENSIONS = [
   ['Height', '2300 mm standard LV · 2350 high LV / busbar add-on compartment · 2450 forced ventilation · 2500 with absorber'],
   ['Depth', '1350 or 1500 mm (≤ 2500 A, ≤ 31.5 kA) · 1500 mm at 40 kA · 1540 / 1650 mm with 3150 / 4000 A feeders · 435 mm contactor 1400 mm · rear duct + 600 mm'],
@@ -364,6 +401,9 @@ export const DIMENSIONS = [
   ['Width, circuit-breaker panel', '600 mm ≤ 1000 A · 800 mm 1250–2000 A (40 kA also 2500/3150 A) · 1000 mm 2500–4000 A'],
   ['Width, other', 'Disconnecting 800 / 1000 · metering 800 · contactor 435 or 600 · switch-disconnector 800 · bus sectionalizer 2 × 800 / 2 × 1000'],
   ['Evacuation duct', '2 mm galvanised sheet, cross-section 530 x 245 mm, bolted M8-8.8, lateral or rear'],
+  ['Internal split (drawing)', 'Rear compartments 662 / 762 / 812 mm, front 688 / 738 mm; connection compartment top 1075 mm; LV compartment 630 (or 980) high, 406 deep, from 1370 mm; pressure relief duct to 2300 mm behind it'],
+  ['Busbar copper', '1250 A 1 x 80 x 10 or 1 x 100 x 10 · 2500 A 2 x 100 x 10 · 4000 A 3 x 120 x 10 (Cu)'],
+  ['Panel weights (drawing)', '435: 700–770 · 600: 800–950 · 800: 1020–1320 · 1000: 1230–1650 kg; with rear box 950–1890 kg'],
 ];
 
 export const CABLES = [
