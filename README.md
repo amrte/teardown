@@ -53,6 +53,14 @@ node sims/build.mjs strandbeest-live
 | `sims/capture.mjs` | Renders the film frame by frame to a 60 fps mp4, or to review sheets of stills. |
 | `sfx/`, `run_sfx.py` | Procedural sound on the film's timeline, mastered to −14 LUFS. |
 
+## NXAIR switchgear teardown
+
+`sims/nxair/` is a different kind of page: a reference teardown of the Siemens NXAIR air-insulated medium-voltage switchgear (≤ 17.5 kV, ≤ 40 kA, ≤ 4000 A). A 3D circuit-breaker panel built at real outer dimensions sits next to a rail with 18 installation steps, every part, every bolted joint (count, size, washers, tightening and control torque, source section) and the spec sheets, all taken from Siemens' installation and operating instructions.
+
+```
+node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~690 KB
+```
+
 ## Credits
 
 Built on [whaleyxbt/claude-motion](https://github.com/whaleyxbt/claude-motion) (MIT): the runtime, frame capture, sound engine and review rules come from there. Recorded samples are CC0 from Freesound, prepared by [Barty-Bart/motion-graphics](https://github.com/Barty-Bart/motion-graphics); sources in `sfx/samples/SOURCES.md`.

@@ -1,0 +1,61 @@
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <h1>NXAIR <b>Teardown</b></h1>
+      <p>Air-insulated MV switchgear · ≤ 17.5 kV · ≤ 40 kA · ≤ 4000 A · withdrawable 3AE breaker</p>
+    </div>
+    <div class="variant" aria-label="Panel configuration">
+      <div class="field"><label for="v-w">Width</label><select id="v-w"></select></div>
+      <div class="field"><label for="v-d">Depth</label><select id="v-d"></select></div>
+      <div class="field"><label for="v-bus">Busbar</label><select id="v-bus"></select></div>
+      <div class="field"><label for="v-ur">Ur</label><select id="v-ur"><option value="12">≤ 12 kV</option><option value="17.5">17.5 kV</option></select></div>
+      <div class="vnote" id="vnote" role="status"></div>
+    </div>
+  </header>
+  <div class="work">
+    <section class="stage" id="stage" aria-label="3D model of an NXAIR circuit-breaker panel">
+      <canvas id="gl"></canvas>
+      <div class="labels" id="labels"></div>
+      <div class="tip" id="tip" hidden></div>
+      <div class="tools">
+        <div class="seg" id="views" role="group" aria-label="Camera view"></div>
+        <div class="seg" role="group" aria-label="Breaker position">
+          <button type="button" data-truck="service" aria-pressed="true">Service</button>
+          <button type="button" data-truck="test" aria-pressed="false">Test</button>
+          <button type="button" data-truck="out" aria-pressed="false">Out</button>
+        </div>
+        <label class="slider" for="ex">Explode <input id="ex" type="range" min="0" max="100" value="0"></label>
+        <div class="seg" role="group" aria-label="Display">
+          <button type="button" id="t-cut" aria-pressed="false" title="Section through the panel centre">Cut</button>
+          <button type="button" id="t-glass" aria-pressed="true" title="See-through enclosure">X-ray</button>
+          <button type="button" id="t-row" aria-pressed="true" title="Show the neighbour panels">Row</button>
+          <button type="button" id="t-lab" aria-pressed="true" title="Bolt labels">Tags</button>
+        </div>
+        <div class="seg" role="group" aria-label="Bolts shown">
+          <button type="button" data-bolts="step" aria-pressed="true" title="All bolts dim, current step lit">Bolts</button>
+          <button type="button" data-bolts="all" aria-pressed="false" title="All bolts coloured by size">By size</button>
+          <button type="button" data-bolts="none" aria-pressed="false" title="Only the current step">Step only</button>
+        </div>
+      </div>
+      <div class="legend" aria-hidden="true">
+        <span><i class="dot hot"></i>this step</span>
+        <span><i class="dot m8"></i>M8</span><span><i class="dot m10"></i>M10</span><span><i class="dot m12"></i>M12</span><span><i class="dot m16"></i>M16</span>
+        <span class="lg-x muted">drag to orbit · wheel to zoom · ← → steps</span>
+      </div>
+    </section>
+    <aside class="rail">
+      <nav class="tabs" aria-label="Reference">
+        <a href="#steps" data-tab="steps">Steps</a>
+        <a href="#parts" data-tab="parts">Parts</a>
+        <a href="#torques" data-tab="torques">Torques</a>
+        <a href="#specs" data-tab="specs">Specs</a>
+        <a href="#sources" data-tab="sources">Sources</a>
+      </nav>
+      <div class="pane" id="pane-steps"></div>
+      <div class="pane" id="pane-parts" hidden></div>
+      <div class="pane" id="pane-torques" hidden></div>
+      <div class="pane" id="pane-specs" hidden></div>
+      <div class="pane" id="pane-sources" hidden></div>
+    </aside>
+  </div>
+</div>
