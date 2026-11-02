@@ -2,9 +2,8 @@
 // opened switching part (Abb. 23, 39): the galvanised base plate with its 10 fixing points, the copper earthing plate
 // that shorts the three poles, per pole a steel sleeve and a cycloaliphatic epoxy housing filled with insulating oil
 // around a fixed contact at the high-voltage terminal and a moving contact at earth; behind the plate, under the hood,
-// per pole a disc spring stack, a crosshead with two rods running forward out of it through a fixed spring seat, each
-// with a helical spring between the seat and a nut on the rod's end (the springs in front of the ribbed stack's face in
-// Abb. 39 item 2): charged when latched, they push the rods forward on release. The latch tongue (a blade through
+// per pole a disc spring stack with a helical spring on a guide rod either side of it (Abb. 39 item 2: the springs lie
+// beside the ribbed cylinder), all three pushing the crosshead forward on release. The latch tongue (a blade through
 // a slotted bracket that carries position switch S3, as in Abb. 39), S1/S2 and the charging spindle the Spannwerkzeug screws into. Outside: three busbars to the cable
 // compartment where the arc strikes, a point light sensor, and the charging tool with its SW24 spanner.
 //
@@ -435,21 +434,11 @@ export function buildDevice() {
 
   // ------------------------------------------------------------ the mechanism, one per pole
   const discG = discGeo();
-  // the helical springs of Abb. 39 item 2: in front of the stack's face, one on a rod coaxial with the stack and one on
-  // a parallel rod beside and below it. Both rods run forward from the crosshead through a fixed spring seat and end in
-  // hex nuts; each spring sits between the seat and the nut. Latched, the springs are compressed (25 mm); on release
-  // they push the nuts, and so the rods and the crosshead, forward with the disc stack (43 mm when closed).
-  // Proportions read off the drawing against the stack (no dimensions given); the seat, the nuts' travel and the rates
-  // are ASSUMED.
-  const HS = [
-    {x: 0, y: 0, r: 0.0105, w: 0.0033, n: 7, rod: 0.0065},
-    {x: 0.03, y: -0.008, r: 0.0088, w: 0.003, n: 8, rod: 0.0055},
-  ];
-  const helixGs = HS.map((h) => helixGeo(h.r, h.w, h.n));
-  const SEATZ = -0.088; // the fixed seat, just ahead of the crosshead's closed position
-  const SPRING0 = SEATZ + 0.0015 + 0.0025; // spring's rear end, on the seat's washer
-  const NUT0 = -0.056; // the nut's centre when latched
-  const rodLen = NUT0 + 0.003 - crossZ(0) - L.ch / 2;
+  // the helical springs of Abb. 39 item 2, on the same side as the ribbed cylinder: one on a guide rod either side of the
+  // disc stack, from the spring seat to the crosshead. Compressed with the stack when the pole is charged, they push the
+  // crosshead forward on release. Their size, the rods and their rates are ASSUMED.
+  const helix = helixGeo(0.0085, 0.0028, 9);
+  const guide = new THREE.CylinderGeometry(0.005, 0.005, L.frontZ - L.bulkZ, 14).rotateX(Math.PI / 2);
   const spindle = new THREE.CylinderGeometry(0.0075, 0.0075, 1, 16).rotateX(Math.PI / 2);
   const crossGeo = new RoundedBoxGeometry(0.13, 0.072, L.ch, 2, 0.003);
   const lipGeo = new RoundedBoxGeometry(0.03, 0.01, L.ch, 2, 0.002);
@@ -521,23 +510,14 @@ export function buildDevice() {
     const tip = add(mov, new THREE.SphereGeometry(0.0086, 20, 12, 0, TAU, 0, Math.PI / 2).rotateX(Math.PI / 2), M.silver);
     tip.position.z = ROD - 0.012;
     add(mov, new THREE.CylinderGeometry(0.0086, 0.0086, 0.012, 20).rotateX(Math.PI / 2), M.silver).position.z = ROD - 0.006;
-    // the fixed spring seat: a plate standing on the floor just ahead of the crosshead's closed position
-    add(g, new THREE.BoxGeometry(0.062, L.toolY + 0.018 - L.floorY - 0.004, 0.003), M.frame).position.set(0.015, (L.toolY + 0.018 + L.floorY + 0.004) / 2, SEATZ);
-    // the two spring rods out of the crosshead's front face (Abb. 39 item 2) through the seat, a nut on each end, a
-    // washer on the seat; the spring between washer and nut is compressed when latched and pushes the rod on release
+    // guide rods and their helical springs, both sides of the stack
     const springs = [];
-    HS.forEach((h, k) => {
-      const y = L.toolY + h.y;
-      const rod = add(mov, new THREE.CylinderGeometry(h.rod, h.rod, rodLen, 14).rotateX(Math.PI / 2), M.steel);
-      rod.position.set(h.x, y, L.ch / 2 + rodLen / 2);
-      add(mov, ring(h.r + 0.0025, h.rod + 0.0004, 0.0025, 28), M.steel).position.set(h.x, y, L.ch / 2 + rodLen - 0.0085);
-      add(mov, hexPrism(h.rod * 2.6, 0.006), M.steel).position.set(h.x, y, L.ch / 2 + rodLen - 0.003);
-      add(g, ring(h.rod + 0.003, h.rod + 0.0004, 0.006, 20), M.steel).position.set(h.x, y, SEATZ - 0.003);
-      add(g, ring(h.r + 0.0025, h.rod + 0.0004, 0.0025, 28), M.steel).position.set(h.x, y, SPRING0 - 0.0025);
-      const sp = add(g, helixGs[k], M.spring);
-      sp.position.set(h.x, y, SPRING0);
+    for (const sd of [-1, 1]) {
+      add(g, guide, M.steel).position.set(sd * 0.05, L.toolY, (L.frontZ + L.bulkZ) / 2);
+      const sp = add(g, helix, M.spring);
+      sp.position.set(sd * 0.05, L.toolY, L.bulkZ);
       springs.push(sp);
-    });
+    }
     // a flag that works the position switches
     const flag = add(mov, new THREE.BoxGeometry(0.014, 0.006, 0.008), crossM);
     flag.position.set(-0.045, 0.028, 0);
@@ -768,9 +748,8 @@ export function buildDevice() {
         d.scale.z = k;
         d.position.z = L.bulkZ + j * pitch + (j % 2 ? pitch : 0);
       });
-      // the helical springs from the seat's washer to the washer under the nut, which rides forward with the crosshead
-      const zEnd = zc + L.ch / 2 + rodLen - 0.0085;
-      for (const sp of m.springs) sp.scale.z = zEnd - SPRING0;
+      // the helical springs from the seat to the crosshead, alongside the stack
+      for (const sp of m.springs) sp.scale.z = len - 0.004;
       // the tongue is pulled up when the trip coil fires, rides the lip while it passes, drops in front of it at the end
       const lipFront = zc + L.ch / 2;
       const onLip = lipFront > PIV.z + 0.0008 && zc - L.ch / 2 < PIV.z + TB.t ? 1 : 0;
