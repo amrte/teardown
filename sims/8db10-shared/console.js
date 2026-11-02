@@ -56,7 +56,9 @@ export function createConsole(app) {
     add(`<div class="pn" style="right:${1600 - x - w + 14}px;top:${y + 15}px">${n}</div>`);
   };
 
-  // ------------------------------------------------------------ header
+  // ------------------------------------------------------------ header (a soft band keeps the type legible over close-ups)
+  add(`<div style="position:absolute;left:0;top:0;width:1600px;height:118px;background:linear-gradient(rgba(236,238,235,.94) 62%,rgba(236,238,235,0))"></div>`);
+  add(`<div style="position:absolute;left:0;top:862px;width:1600px;height:38px;background:linear-gradient(rgba(236,238,235,0),rgba(236,238,235,.92) 55%)"></div>`);
   add(`<div style="position:absolute;left:0;top:0;width:160px;height:89px;background:${C.acc}"></div>`);
   add(`<svg style="position:absolute;left:24px;top:28px" width="40" height="34"><g fill="none" stroke="#fff" stroke-width="3"><path d="M3 4h34M3 14h34"/><path d="M12 4v26M28 14v16"/></g></svg>`);
   add(`<div class="mo" style="position:absolute;left:78px;top:35px;color:#fff;font-size:16px;font-weight:600;letter-spacing:4px">8DB</div>`);
@@ -80,7 +82,7 @@ export function createConsole(app) {
   // ------------------------------------------------------------ 02 gas compartments
   panel(28, 440, 282, 196, 'GAS COMPARTMENTS', '02');
   const gasSvg = add(`<svg style="position:absolute;left:42px;top:474px" width="254" height="126"></svg>`);
-  add(`<div class="sm" style="position:absolute;left:42px;top:608px;font-size:8.2px">SF6 · RATED ${GAS.rated} kPa · LOW ${GAS.low} · CRITICAL ${GAS.critical}</div>`);
+  add(`<div class="sm" style="position:absolute;left:42px;top:608px;font-size:8.2px">SF6 kPa · RATED ${GAS.rated} · LOW ${GAS.low} · CRIT. ${GAS.critical}</div>`);
 
   // ------------------------------------------------------------ 03 circuit-breaker
   panel(1290, 126, 282, 262, 'CIRCUIT-BREAKER', '03');
@@ -377,14 +379,18 @@ function drawChart(s, events = []) {
   h += T(6, gapTop + 6, 'CONTACT GAP 0–20 mm');
   // the times read off the model
   if (f) {
-    const mark = (x, label, y) => (x >= a && x <= end ? `<line x1="${X(x)}" x2="${X(x)}" y1="${top}" y2="${gapTop + gapH}" stroke="${C.ink}" stroke-width=".8" stroke-dasharray="2 2"/>` + T(Math.min(W - 60, X(x) + 3), y, label, `fill="${C.ink}"`) : '');
+    const mark = (x, label, y) => {
+      if (x < a || x > end) return '';
+      const r = X(x) > W * 0.6;
+      return `<line x1="${X(x)}" x2="${X(x)}" y1="${top}" y2="${gapTop + gapH}" stroke="${C.ink}" stroke-width=".8" stroke-dasharray="2 2"/>` + T(r ? X(x) - 3 : X(x) + 3, y, label, `fill="${C.ink}"${r ? ' text-anchor="end"' : ''}`);
+    };
     h += mark(f.trip, `TRIP ${((f.trip - f.at) * 1000).toFixed(0)} ms`, 16);
     h += mark(f.sep, `OPEN ${((f.sep - f.trip) * 1000).toFixed(0)} ms`, 26);
     h += mark(f.ext, `CLEAR · ARC ${((f.ext - f.sep) * 1000).toFixed(1)} ms`, 92);
   }
   if (tau <= b) h += `<line x1="${X(end)}" x2="${X(end)}" y1="${top}" y2="${gapTop + gapH}" stroke="${C.acc}" stroke-width="1"/>`;
   // legend and the axis
-  h += `<g font-family="JetBrains Mono" font-size="7.4" letter-spacing="1">` + ['L1', 'L2', 'L3'].map((l, p) => `<rect x="${156 + p * 32}" y="${top + 1}" width="8" height="2.4" fill="${PC[p]}"/><text x="${167 + p * 32}" y="${top + 5}" fill="${C.mute}">${l}</text>`).join('') + `</g>`;
+  h += `<g font-family="JetBrains Mono" font-size="7.4" letter-spacing="1">` + ['L1', 'L2', 'L3'].map((l, p) => `<rect x="${150 + p * 32}" y="${gapTop + 2}" width="8" height="2.4" fill="${PC[p]}"/><text x="${161 + p * 32}" y="${gapTop + 6}" fill="${C.mute}">${l}</text>`).join('') + `</g>`;
   const rel = useF ? f : ev;
   h += T(4, gapTop + gapH + 14, rel ? `t = 0 AT ${rel.dev === 'fault' ? 'FAULT INCEPTION' : rel.to === 'closed' ? 'CLOSE COMMAND' : 'OPEN COMMAND'}` : 'LAST 60 ms · 50 Hz');
   h += T(W - 4, gapTop + gapH + 14, `${((b - a) * 1000).toFixed(0)} ms`, 'text-anchor="end"');

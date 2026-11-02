@@ -243,7 +243,17 @@ export function stateAt(events, tau, base = INITIAL) {
   const springBusy = s.closedAt > -99 && spring < 1;
   // the fault, pole by pole
   const f = s.fault;
-  const arc = [0, 1, 2].map((p) => !!f && tau >= f.sep && tau < f.clear[p]);
+  // a load break also arcs: each pole until its first current zero after separation (not for a protection trip,
+  // whose fault arc is handled below)
+  const sepL = s.q0At + CB.openT;
+  const nodeLive = q1.pos === 'closed' || q2.pos === 'closed';
+  const loadBreak = nodeLive && s.q0 === 'open' && s.q0Cause !== 'protection' && tau >= sepL && tau < sepL + 0.02;
+  const clearL = [0, 1, 2].map((p) => {
+    const x = sepL + CB.arcMin;
+    const n = Math.ceil((W * x - PH[p] - PHI_LOAD) / Math.PI);
+    return (n * Math.PI + PH[p] + PHI_LOAD) / W;
+  });
+  const arc = [0, 1, 2].map((p) => (!!f && tau >= f.sep && tau < f.clear[p]) || (loadBreak && tau < clearL[p]));
   const faultOn = [0, 1, 2].map((p) => !!f && tau >= f.at && tau < f.clear[p]);
   // energised path: both busbars are live (fed by their incomers); the feeder node above the CB takes whatever its
   // disconnectors connect it to; the cable follows through the CB
@@ -254,7 +264,7 @@ export function stateAt(events, tau, base = INITIAL) {
   const i = [0, 1, 2].map((p) => {
     if (!live || !conducts[p]) return 0;
     if (faultOn[p]) return iFault(tau, p, f.at);
-    return touching ? iLoad(tau, p) : 0;
+    return touching || arc[p] ? iLoad(tau, p) : 0;
   });
   return {
     tau, q0: s.q0, q0Cause: s.q0Cause, q0At: s.q0At, gap, touching, cbMoving, spring, springBusy, ops: s.ops,

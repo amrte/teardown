@@ -407,10 +407,10 @@ export function buildPanel() {
         const g = Math.max(s.gap, 0.002);
         a.core.scale.set(0.6 + kA / 60, g, 0.6 + kA / 60);
         a.core.position.y = G.viY - g / 2;
-        const hs = 0.05 + 0.13 * Math.min(1, kA / 60);
+        const hs = 0.07 + 0.2 * Math.min(1, kA / 60);
         a.halo.scale.set(hs, hs, 1);
         a.halo.position.y = G.viY - g / 2;
-        a.halo.material.opacity = 0.35 + 0.65 * Math.min(1, kA / 40);
+        a.halo.material.opacity = 0.55 + 0.45 * Math.min(1, kA / 40);
       }
     });
     for (const c of links) c.rotation.x = -(s.gap / CB.stroke) * 38 * D2R;
@@ -430,7 +430,7 @@ export function buildPanel() {
       m.opacity = 1 - 0.8 * xray;
       see(m, xray);
     }
-    for (const [m, k] of [[M.boltCover, 0.85], [M.aluDark, 0.88], [M.ceramic, 0.62], [M.bush, 0.8], [M.bushPerv, 0.8], [M.resin, 0.8]]) {
+    for (const [m, k] of [[M.boltCover, 0.85], [M.aluDark, 0.88], [M.ceramic, 0.5], [M.bush, 0.8], [M.bushPerv, 0.8], [M.resin, 0.8]]) {
       m.opacity = 1 - k * xray;
       see(m, xray);
     }

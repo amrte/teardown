@@ -36,13 +36,13 @@ export const easedDisplay = (key, t, dur = 0.7) => {
 
 // ------------------------------------------------------------ views; u = seconds on the view
 export const VIEW_FN = {
-  hero: (u) => ({tx: 0.05, ty: 1.12, tz: 0.08, az: 50 + 1.4 * u, el: 12, d: 9.9, sx: 0, sy: -34}),
-  front: (u) => ({tx: 0, ty: 1.2, tz: 1.3, az: 12 + 0.6 * u, el: 4, d: 6.0, sx: 0, sy: -30}),
+  hero: (u) => ({tx: 0.05, ty: 1.12, tz: 0.08, az: 50 + 1.4 * u, el: 12, d: 9.9, sx: 60, sy: -34}),
+  front: (u) => ({tx: 0, ty: 1.18, tz: 1.3, az: 14 + 0.6 * u, el: 4, d: 7.4, sx: 0, sy: -34}),
   side: (u) => ({tx: 0, ty: 1.17, tz: -0.05, az: 90 + 0.3 * u, el: 3, d: 9.7, sx: 0, sy: -34}),
-  disc: (u) => ({tx: 0, ty: 1.58, tz: 0.36, az: 78 + 0.6 * u, el: 7, d: 4.6, sx: 0, sy: -30}),
-  cb: (u) => ({tx: 0, ty: 1.04, tz: 0.7, az: 76 + 0.4 * u, el: 6, d: 2.5, sx: 0, sy: -30}),
-  cable: (u) => ({tx: 0, ty: 0.5, tz: 0.3, az: 62 + 1 * u, el: 8, d: 3.6, sx: 0, sy: -30}),
-  busbar: (u) => ({tx: -0.2, ty: 1.85, tz: 0.0, az: 35 + 1 * u, el: 26, d: 5.4, sx: 0, sy: -30}),
+  disc: (u) => ({tx: 0, ty: 1.55, tz: 0.2, az: 84 + 0.6 * u, el: 7, d: 5.6, sx: 0, sy: -40}),
+  cb: (u) => ({tx: 0, ty: 1.08, tz: G.poleZ[1], az: 84 + 0.4 * u, el: 6, d: 3.4, sx: 0, sy: -40}),
+  cable: (u) => ({tx: 0, ty: 0.72, tz: 0.0, az: 66 + 1 * u, el: 12, d: 6.8, sx: 0, sy: -34}),
+  busbar: (u) => ({tx: -0.1, ty: 1.7, tz: -0.25, az: 128 + 1 * u, el: 26, d: 7.2, sx: 0, sy: -34}),
 };
 const VIEWS = SCRIPT.filter((e) => e.view).map((e) => [e.t, e.view]);
 const blend = (a, b, k) => {
@@ -121,9 +121,28 @@ const PARTS = [
   {name: 'LOW-VOLTAGE COMPARTMENT', sub: 'PROTECTION AND CONTROL', at: () => new V3(0.3, 1.95, 1.13)},
 ];
 export function makeLabels(st) {
+  // a label only names a part the camera can see: the first opaque surface along the ray must be the part itself
+  const ray = new THREE.Raycaster();
+  const dir = new V3();
+  const seen = (q) => {
+    dir.copy(q).sub(st.camera.position);
+    const dist = dir.length();
+    ray.set(st.camera.position, dir.normalize());
+    ray.camera = st.camera;
+    ray.far = dist;
+    for (const h of ray.intersectObject(st.panel.root, true)) {
+      const m = h.object.material;
+      if (!h.object.visible || h.object.isSprite || (m && m.transparent && m.opacity < 0.6) || h.object.isLineSegments) continue;
+      return h.distance > dist - 0.16;
+    }
+    return true;
+  };
   return (o) => {
     if (o < 0.02) return [];
-    const pts = PARTS.map((p) => ({p, at: st.project(...p.at().toArray())})).filter((x) => x.at && x.at[0] > 330 && x.at[0] < 1270 && x.at[1] > 130 && x.at[1] < 745);
+    const pts = PARTS.map((p) => {
+      const q = p.at();
+      return {p, q, at: st.project(...q.toArray())};
+    }).filter((x) => x.at && x.at[0] > 330 && x.at[0] < 1270 && x.at[1] > 130 && x.at[1] < 745 && seen(x.q));
     const L = pts.filter((x) => x.at[0] < 800).sort((a, b) => a.at[1] - b.at[1]);
     const R = pts.filter((x) => x.at[0] >= 800).sort((a, b) => a.at[1] - b.at[1]);
     const out = [];

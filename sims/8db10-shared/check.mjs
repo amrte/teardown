@@ -97,6 +97,24 @@ ok(Math.abs(gasAt(20) - GAS.rated) < 1e-9 && gasAt(-5) > GAS.low, `manometer ${g
   ok(allowed(s2, 'q1', 'open').ok, 'Q1 may open with the CB open');
   ok(!allowed(stateAt(ev, 0.1 + 0.02), 'q1', 'open').ok, 'nothing moves while the CB is moving');
 }
+// 7. a load break arcs to the next current zero, an isolated feeder does not arc at all
+{
+  const ev = [{at: 1, dev: 'q0', to: 'open'}];
+  let first = -1;
+  let last = -1;
+  for (let x = 1; x < 1.1; x += 1e-5) {
+    const s = stateAt(ev, x);
+    if (s.arc.some(Boolean)) {
+      if (first < 0) first = x;
+      last = x;
+    }
+  }
+  ok(first > 0 && last - first <= 0.015 && Math.abs(first - 1 - CB.openT) < 1e-4, `load break: arc from separation, ${((last - first) * 1000).toFixed(1)} ms to the last current zero (≤ 15 ms)`);
+  const iso = [{at: 0.5, dev: 'q0', to: 'open'}, {at: 1, dev: 'q1', to: 'open'}, {at: 3.5, dev: 'q0', to: 'closed'}, {at: 5, dev: 'q0', to: 'open'}];
+  let any = false;
+  for (let x = 5; x < 5.1; x += 1e-4) any = any || stateAt(iso, x).arc.some(Boolean);
+  ok(!any, 'no arc when the breaker opens an isolated feeder');
+}
 console.log(fails ? `\n${fails} check(s) failed` : '\nall checks passed');
 process.exit(fails ? 1 : 0);
 void INITIAL;

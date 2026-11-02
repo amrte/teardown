@@ -9,6 +9,52 @@ Following SKILL.md, the order is: reference first, then numbers, then one input,
 comes from **Siemens catalog HA 35.11 · 2025** ("8DA10 and 8DB10 up to 40.5 kV, gas-insulated"), with page numbers.
 Anything the catalog does not give is marked **TBD** and has a named source to get it from.
 
+## Status: built
+
+Steps 1–7 and the review loop are done. Steps 8 and 9's video render were skipped on request: no score, no mp4.
+
+```
+node sims/8db10-shared/check.mjs        # 25 hand checks
+node sims/build.mjs 8db10-live          # the page you drive
+node sims/build.mjs 8db10-film          # the auto tour as a pure function of t, for review stills
+```
+
+**Measured from the reference** (catalog p. 20 drawing at 300 dpi, 3.58 mm/px):
+
+| | |
+|---|---|
+| Busbar housing centres | 1927 mm |
+| Busbar cover | 2088 mm |
+| Bushing, busbar → disconnector | 1701 mm |
+| Disconnector housing | 1515 mm |
+| Bushing, disconnector → CB | 1236 mm |
+| CB housing | 752–1211 mm, side cover at 1021 mm |
+| Frame | 602–738 mm |
+| CT | 423–602 mm |
+| Cable connection | 154–394 mm |
+| Operating cubicle | 401 mm deep |
+
+**Confirmed from the manual 864-5091.9:**
+- Gas levels for these ratings (manual p. 44): rated 120 kPa, low alarm 100, critical 90, high alarm 180.
+- The disconnector contact layout (Fig. 7).
+- The interlock rules (pp. 22–26).
+
+**Independent check:** the fault model's first peak comes out at 101.5 kA (X/R = 14, the IEC 45 ms time constant). That matches the catalog's 100/104 kA rated peak withstand without tuning.
+
+**Still assumed** (marked `ASSUMED` in `gis.js`; not in either document):
+
+| | |
+|---|---|
+| Contact gap | 20 mm |
+| Contact speeds | about 1.2–1.4 m/s |
+| Relay time | 30 ms |
+| Minimum arcing | 3 ms |
+| Spring recharge | 11 s (catalog: < 15 s) |
+| Disconnector travel time | 2 s |
+| Blade angles | read off Fig. 7, to about 10° |
+| Interrupter size | proportions only |
+| Load | 1250 A at power factor 0.9 |
+
 ---
 
 ## 1. What the reference says
