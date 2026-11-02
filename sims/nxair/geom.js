@@ -20,9 +20,14 @@ export class PartBuilder {
     this.bins = new Map();
   }
   add(geo, mat, label) {
+    const g = strip(flat(geo));
+    // keep each primitive for the clearance checker (check.mjs): its box, and with keepGeo the geometry itself so
+    // rotated parts can be measured exactly
+    g.computeBoundingBox();
+    (this.prims ||= []).push({label: label || '', mat, box: g.boundingBox.clone(), geo: PartBuilder.keepGeo ? g : null});
     const key = mat + '|' + (label || '');
     if (!this.bins.has(key)) this.bins.set(key, {mat, label, geos: []});
-    this.bins.get(key).geos.push(strip(flat(geo)));
+    this.bins.get(key).geos.push(g);
     return this;
   }
   finish() {
@@ -33,6 +38,8 @@ export class PartBuilder {
       this.group.add(mesh);
     }
     this.bins.clear();
+    this.group.userData.prims = (this.group.userData.prims || []).concat(this.prims || []);
+    this.prims = [];
     return this.group;
   }
 }

@@ -58,8 +58,11 @@ node sims/build.mjs strandbeest-live
 `sims/nxair/` is a different kind of page: a reference teardown of the Siemens NXAIR air-insulated medium-voltage switchgear (≤ 17.5 kV, ≤ 40 kA, ≤ 4000 A). A 3D circuit-breaker panel built to the Siemens dimension drawings (110-2300.9) sits next to a rail with installation, operation and service steps, every part and sub-component, every bolted joint (count, size, washers, tightening and control torque, dry or greased, source section) and the spec sheets, taken from the NXAIR installation and operating instructions, the drawing set, the catalogs and the 3AE circuit-breaker manual.
 
 ```
-node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~690 KB
+node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~780 KB
+node sims/nxair/check.mjs --all --bolts   # clearance check: no part or bolt penetrates another
 ```
+
+`check.mjs` builds every variant (3 widths x 3 depths x 3 busbar ratings, breaker in service and test, earthing switch open and closed, and the stand-alone breaker with spring and contacts in all states) and reports any two parts that interpenetrate by more than 2 mm. Real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits) are listed with a reason; coaxial fits are verified radially.
 
 ## Credits
 

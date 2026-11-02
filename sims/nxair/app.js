@@ -7,7 +7,7 @@ import {
   TOOLS, TORQUE_TABLE, WIDTHS, jointById, partById,
 } from './data.js';
 import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
-import {boltGeometry, buildPanel, makeMaterials, nutGeometry} from './model.js';
+import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeometry} from './model.js';
 import {BK_PARTS, buildBreaker} from './breaker.js';
 import {CB_JOINTS} from './ops.js';
 const bkById = Object.fromEntries(BK_PARTS.map((p) => [p.id, p]));
@@ -90,7 +90,7 @@ function applyThemeColors() {
 
 // -------------------------------------------------------------------------------------------- build world
 let world = null; // {row, subject, neighbors[], bolts:{jid:[InstancedMesh]}, partMats:{id:[mat]}}
-const VIS = 2.2; // bolt heads drawn larger than life so they read at switchgear scale
+const VIS = 1.6; // bolt heads drawn 1.6x life size so they read at switchgear scale (check.mjs verifies them at this size)
 
 function disposeTree(o) {
   o.traverse((c) => {
@@ -132,6 +132,7 @@ function build() {
         }
         c.material = cache.get(key);
         c.userData.part = pid;
+        if (c.userData.noEdges) return;
         const e = new THREE.LineSegments(new THREE.EdgesGeometry(c.geometry, 25), lineMat);
         e.raycast = () => {};
         c.add(e);
@@ -218,7 +219,7 @@ function build() {
 
 // ------------------------------------------------------------------------------------------- pose + looks
 const anim = {ex: 0, truck: 0, bkEx: 0, esw: 0, slide: 0, lever: 0};
-const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? 220 : 1150); // 3AE racking travel 220 mm (CB p.57)
+const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
   if (!world) return;
@@ -240,6 +241,14 @@ function applyPose(force) {
       g.position.copy(g.userData.dir).multiplyScalar(anim.ex);
     }
   }
+  // LV plug cable follows the truck while the plug stays in its socket (rebuilt when the truck has moved > 2 mm)
+  const dzc = Math.min(anim.truck, TRAVEL + 40);
+  for (const g of subject.parts.lvPlug || []) for (const c of g.children) if (c.userData.lvCable && Math.abs((c.userData.dz ?? -99) - dzc) > 2) {
+    c.geometry.dispose();
+    c.geometry = lvCableGeometry(subject.lvCable, dzc);
+    c.userData.dz = dzc;
+    c.visible = anim.truck < TRAVEL + 40;
+  }
   // shutters follow the truck; earthing switch, door slide, indicators and lever follow the drill state
   const open = THREE.MathUtils.clamp(1 - anim.truck / 160, 0, 1);
   for (const g of subject.parts.hvdoor || []) for (const c of g.children) {
@@ -254,10 +263,10 @@ function applyPose(force) {
       for (const c of g.children) {
         if (!c.userData.shut) continue;
         c.userData.y0 ??= c.position.y;
-        c.position.y = c.userData.y0 + c.userData.shut * 250 * (p === subject ? open : 1);
+        c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (p === subject ? open : 1);
       }
     }
-    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + 1.25 * (1 - (p === subject ? anim.esw : 0)); });
+    for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + c.userData.openDelta * (1 - (p === subject ? anim.esw : 0)); });
     if (p !== subject) for (const g of p.parts.breaker || []) g.position.z = 0;
   }
   neighbors.forEach((n, i) => { n.root.visible = state.row && !state.isolate && !(state.cut && i === 0); });
@@ -330,8 +339,8 @@ const BK_VIEWS = {
   top: {p: [0.2, 2.4, 0.5], t: [0, 0.3, 0]},
   vi: {p: [-0.62, 0.43, -0.05], t: [0, 0.39, -0.04]},
 };
-VIEWS.door = {p: [0.75, 0.85, 2.15], t: [0.07, 0.6, 0.6]};
-VIEWS.eswCut = {p: [-3.0, 0.95, -0.2], t: [0, 0.6, -0.25]};
+VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
+VIEWS.eswCut = {p: [-2.3, 1.0, -0.55], t: [0, 0.72, -0.42]};
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
 function goView(name, instant) {
@@ -775,7 +784,8 @@ function renderSources() {
     <ul class="plain">
       <li>Counts, sizes, washers and torques are copied from the manuals; the section reference sits on every row.</li>
       <li>Bolt positions in 3D are representative. The counts per joint match the manual. Bolt heads are drawn ${VIS}× life size so they can be seen.</li>
-      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. Breaker geometry uses the 3AE manual (pole centres, terminal distance, contact arm Ø, 13 / 26 tulip fingers, 220 mm racking travel). Shapes of poles, CTs, VTs and mechanisms are simplified.</li>
+      <li>Geometry is checked by <code>node sims/nxair/check.mjs --all --bolts</code>: no part or bolt penetrates another in any width, depth, busbar rating, truck position or earthing-switch state, except listed real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits verified radially).</li>
+      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. Breaker geometry uses the 3AE manual (pole centres, terminal distance, contact arm Ø, 13 / 26 tulip fingers); racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). Shapes of poles, CTs, VTs and mechanisms are simplified.</li>
       <li>Two torque regimes exist: panel joints with dry threads (M8 30 / 25, M12 70, M16 110 Nm) and breaker contact-arm joints with greased threads (M12 40 ±4, M16 100 ±10 Nm). Each row says which.</li>
       <li>A badge marks how each torque is known. "Maker of part" and "Not stated" rows need the part supplier's figure.</li>
       <li>The order documents, dimension drawings 110-2300.9 and the circuit diagrams of your switchgear take precedence over this page.</li>
@@ -1134,3 +1144,5 @@ setStep(state.step, {view: false});
 goView(STEPS[state.step].view || 'iso', true);
 showTab(location.hash.slice(1));
 requestAnimationFrame(frame);
+// scripted renders for geometry review (node sims/nxair/check.mjs covers clashes; this exposes the camera)
+if (location.hash === '#debug') window.__nxair = {state, anim, camera, controls, cutPlane, applyPose, applyGlass, applyFocus, get world() { return world; }};
