@@ -14,7 +14,7 @@ Anything the catalog does not give is marked **TBD** and has a named source to g
 Steps 1–7 and the review loop are done. Steps 8 and 9's video render were skipped on request: no score, no mp4.
 
 ```
-node sims/8db10-shared/check.mjs        # 25 hand checks
+node sims/8db10-shared/check.mjs        # 26 hand checks
 node sims/build.mjs 8db10-live          # the page you drive
 node sims/build.mjs 8db10-film          # the auto tour as a pure function of t, for review stills
 ```
