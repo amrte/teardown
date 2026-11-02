@@ -301,11 +301,11 @@ export function buildDevice() {
   root.add(poleG);
   for (const g of copperParts()) add(poleG, g, M.copper);
   // the earth connection (Abb. 1 item 7, Abb. 23): the customer's earthing bar on the plate's end, M12 hex screw with a
-  // washer, 105 Nm. The bar (40 x 5 mm here, MODELLED: the manual only asks that it carries the full Ik with at most
+  // washer, 105 Nm. The bar (copper, 40 x 5 mm here, MODELLED: the manual only asks that it carries the full Ik with at most
   // 3 V drop) runs out to the side and down to the switchgear's earth; the system view continues it to the earth bus.
   const EB = {x: -0.33, xr: -0.448, w: 0.04, t: 0.005, z: 0.006};
-  add(poleG, new RoundedBoxGeometry(EB.x + 0.022 - (EB.xr - EB.w / 2), EB.w, EB.t, 2, 0.001), M.zinc).position.set((EB.x + 0.022 + EB.xr - EB.w / 2) / 2, 0, EB.z + EB.t / 2);
-  add(poleG, new RoundedBoxGeometry(EB.w, EB.w / 2 - (L.floorY + 0.001), EB.t, 2, 0.001), M.zinc).position.set(EB.xr, (EB.w / 2 + L.floorY + 0.001) / 2, EB.z + EB.t / 2);
+  add(poleG, new RoundedBoxGeometry(EB.x + 0.022 - (EB.xr - EB.w / 2), EB.w, EB.t, 2, 0.001), M.bus).position.set((EB.x + 0.022 + EB.xr - EB.w / 2) / 2, 0, EB.z + EB.t / 2);
+  add(poleG, new RoundedBoxGeometry(EB.w, EB.w / 2 - (L.floorY + 0.001), EB.t, 2, 0.001), M.bus).position.set(EB.xr, (EB.w / 2 + L.floorY + 0.001) / 2, EB.z + EB.t / 2);
   add(poleG, ring(0.012, 0.0066, 0.0025, 24), M.steel).position.set(EB.x, 0, EB.z + EB.t);
   add(poleG, hexPrism(0.018, 0.008), M.steel).position.set(EB.x, 0, EB.z + EB.t + 0.0025 + 0.004);
   const boss = ring(0.09, 0.074, 0.008, 64);
@@ -613,8 +613,8 @@ export function buildDevice() {
   // the switchgear's earth: the earthing bar carried on down to an earth bus along the panel
   {
     const yb = L.arcY - 0.08;
-    add(sysG, new RoundedBoxGeometry(0.04, L.floorY - yb, 0.005, 2, 0.001), M.zinc).position.set(-0.448, (L.floorY + yb) / 2, 0.0085);
-    add(sysG, new RoundedBoxGeometry(0.86, 0.04, 0.008, 2, 0.002), M.zinc).position.set(-0.04, yb, 0.0085);
+    add(sysG, new RoundedBoxGeometry(0.04, L.floorY - yb, 0.005, 2, 0.001), M.bus).position.set(-0.448, (L.floorY + yb) / 2, 0.0085);
+    add(sysG, new RoundedBoxGeometry(0.86, 0.04, 0.008, 2, 0.002), M.bus).position.set(-0.04, yb, 0.0085);
     add(sysG, hexPrism(0.016, 0.006), M.steel).position.set(-0.448, yb, 0.0155);
   }
   const sensor = new THREE.Group();
