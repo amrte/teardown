@@ -13,14 +13,14 @@ node sims/build.mjs siquench-film     # the 45 s recorded tour (render(t) contra
 
 ## How it works in one paragraph
 
-Light sensors in the switchgear see the arc, and an arc flash relay signals the SIQuench controller. The controller fires a solenoid in each pole. Each plunger knocks a latch tongue off a crosshead, and a charged disc spring stack drives the crosshead forward. The crosshead carries a copper contact rod through insulating oil onto the fixed contact behind the high-voltage terminal. The moving contact is at earth through the copper earthing plate. Once all three poles close, the three phases are bolted together and to earth. The fault current takes that low-impedance metal path, and the arc has nothing left to burn on. The upstream circuit breaker, tripped by the same relay, clears the bolted fault tens of milliseconds later. To make the device ready again, an operator screws the charging tool into each pole's actuation opening. Turning it draws the spring stack back until the tongue drops in front of the crosshead again.
+Light sensors in the switchgear see the arc, and an arc flash relay signals the SIQuench controller. The controller fires the trip coil of each pole (X1 in the circuit diagram). The coil pulls the latch tongue up out of the way of the crosshead, and a charged disc spring stack drives the crosshead forward. The crosshead carries a copper contact rod through insulating oil onto the fixed contact behind the high-voltage terminal. The moving contact is at earth through the copper earthing plate. Once all three poles close, the three phases are bolted together on that plate, and the plate is earthed through the earthing bar on its M12 earth connection. The fault current takes that low-impedance metal path, and the arc has nothing left to burn on. The upstream circuit breaker, tripped by the same relay, clears the bolted fault tens of milliseconds later. To make the device ready again, an operator screws the charging tool into each pole's actuation opening. Turning it draws the spring stack back until the tongue drops in front of the crosshead again.
 
 ## The moving parts
 
 | Part | What moves it | What it does | Numbers |
 |---|---|---|---|
-| **Solenoid coil and plunger** (one per pole) | Controller output, after the arc flash relay picks up | The plunger drops onto the tongue's tail | Coil to strike 0.65 ms *(modelled)* |
-| **Latch tongue** (*Zunge*) | The plunger, about a pivot pin | Lifts its hook off the crosshead's lip and frees the spring | Clear in 0.2 ms *(modelled)*. Sliding surfaces greased with Isoflex Topas L32 *(sourced, manual 12.1.3)* |
+| **Trip coil** (*Magnetspule*, one per pole) | Controller output X1 1-2, after the arc flash relay picks up | Pulls the latch tongue | Exists per pole *(sourced: manual 4.1 and the circuit diagram)*. **Not drawn:** none of the manual's pictures show it, so its shape and location are unknown. Coil to tongue moving 0.65 ms *(modelled)* |
+| **Latch tongue** (*Zunge*) | The trip coil | A flat blade guided in the slot of a bracket. Latched, its lower end stands in front of the crosshead's lip. Pulled up 11 mm, it frees the spring | Blade and slotted bracket as in Abb. 39 *(sourced)*. Lift and clear time 0.2 ms *(modelled)*. Sliding surfaces greased with Isoflex Topas L32 *(sourced, manual 12.1.3)* |
 | **Disc spring stack** | Stored energy, charged by the tool | Drives the crosshead and contact rod forward | 20 discs Ø80/41 × 3.5 mm, k = 660 kN/m, 13.0 kN charged, 1.1 kN on the closed contact, 127 J released *(modelled)* |
 | **Helical springs on the guide rods** (*Federn*) | Compressed with the stack | Guide the crosshead and add to the drive | Shown in the manual's photo Abb. 39 *(sourced)*. Rate *(modelled)* |
 | **Crosshead** | The disc stack | Joins the charging spindle (lower axis) to the contact rod (pole axis) and carries the lip the tongue holds | Axis offset 37 mm: the actuation openings sit 114 mm above the floor, the pole axis 151.2 mm *(sourced, Abb. 9, 11)* |
@@ -28,7 +28,8 @@ Light sensors in the switchgear see the arc, and an arc flash relay signals the 
 | **Sliding contact** | Fixed | Keeps the moving rod at earth through the copper plate | |
 | **Fixed contact** (tulip) | Fixed, behind the HV terminal | Receives the moving contact | Terminal Ø55, 4 × M8, 12-20 mm thread engagement, 20 Nm *(sourced)* |
 | **Position switches S1 / S2** | A flag on the crosshead | Report contact position and charged state, which is the controller's *Quencher Ready* | Wiring per the manual's circuit diagram (S1 21-22, S2 13-14) *(sourced)* |
-| **Oil-leak switch S3** | Oil volume | Reports oil loss | *(sourced, function only)* |
+| **Position switch S3** (one per pole) | Sits on the tongue's bracket, its lever beside the blade | One NC contact (21-22) per pole, the three wired in series back to the controller | Location *(sourced, Abb. 39)* and wiring *(sourced, circuit diagram)*. The manual doesn't say what S3 senses (it lists an oil-leakage position switch in the switching part). The model moves its lever with the tongue *(modelled)* |
+| **Earthing plate, earth connection, earthing bar** | Fixed | The copper plate bonds the three moving contacts. At its end, the customer's earthing bar is fixed with an M12 hex screw and washer and runs to the switchgear's earth bus | Plate, earth point, M12 at 105 Nm *(sourced, Abb. 1, 23)*. The bar must carry the rated short-circuit current with at most 3 V drop *(sourced, 8.3)*. Bar size 40 × 5 mm and its route *(modelled)* |
 | **Charging spindle** | The tool's thread | Draws the crosshead back, compresses the stack and reopens the contact | Pitch 2.5 mm, 2 free turns then 7.2 loaded turns *(modelled)* |
 | **Spannwerkzeug** (charging tool, 3AX6210-1A) | The operator, with an SW24 spanner | Screwed clockwise into the actuation opening to the stop, then back out | Max 100 Nm at the stop. Torque is low at first, then rises steeply. While the tool is seated, the mechanical interlock is active *(sourced, manual 11.2)*. Torque curve shape *(modelled)* |
 
@@ -40,12 +41,16 @@ At the default 1.0 ms detection. The detection slider on the page moves it betwe
 |---|---|---|
 | 0 | Arc strikes phase to phase in the cable compartment | |
 | 1.00 ms | Light sensor → arc flash relay → controller | brochure: 0.6-1.5 ms |
-| 1.15 ms | Controller fires the three coils | modelled |
-| 1.80 ms | Plungers strike the tongues | modelled |
+| 1.15 ms | Controller fires the three trip coils (X1) | modelled |
+| 1.80 ms | Coils start pulling the tongues up | modelled |
 | 2.00 ms | Tongues clear, springs released | modelled |
 | 4.00 ms | Contacts touch: 3-phase metallic short to earth | brochure: earthing ~3 ms, arc out < ~4 ms from detection, ≤ 5 ms from ignition |
 | ~4.6 ms | Arc current has moved into the metal path | modelled: time constant 0.12 ms |
 | ~56 ms | Upstream circuit breaker clears the bolted fault | typical MV breaker, modelled |
+
+## Where the current goes
+
+The fault current comes in on the busbars, through each pole's high-voltage terminal, into the fixed contact. It crosses the closed moving contact and goes out through the sliding contact onto the copper earthing plate. The plate bonds all three phases. In a balanced three-phase fault the three currents add up to zero there, so most of the current circulates between the phases through the plate. Only any earth-fault share leaves on the earthing bar. The bar also holds the plate, and so every moving contact, at earth potential. The current dots show both paths: denser dots meet on the plate, and sparser ones run out along the earthing bar.
 
 ## What the panels compute
 

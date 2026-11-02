@@ -94,7 +94,7 @@ export function compose({tau, kc = [null, null, null], quench = true, det = DET,
   else if (!quench) chip = tau < ev.cb ? ['Arc burning', `NO QUENCHER · ${Math.round(sum.arc / 3)} KA PER PHASE`, 'off'] : ['Cleared by the CB', `${Math.round(ev.cb)} MS OF ARCING`, 'off'];
   else if (tau < ev.det) chip = ['Arc burning', 'NOT YET SEEN · LIGHT SENSOR', 'arc'];
   else if (tau < ev.coil) chip = ['Arc detected', 'RELAY SIGNALS THE CONTROLLER', 'arc'];
-  else if (tau < ev.release) chip = ['Trigger', tau < ev.strike ? 'COILS PULL THE PLUNGERS' : 'PLUNGERS KNOCK THE TONGUES', 'arc'];
+  else if (tau < ev.release) chip = ['Trigger', tau < ev.strike ? 'TRIP COILS ENERGISED' : 'TONGUES PULLED OFF THE LIPS', 'arc'];
   else if (tau < ev.close) chip = ['Earthing', `CONTACTS IN FLIGHT · ${p.v.toFixed(1)} M/S`, 'move'];
   else if (tau < ev.out) chip = ['Earthed', 'CURRENT LEAVES THE ARC', 'earthed'];
   else if (tau < ev.cb) chip = ['Arc quenched', `3-PHASE SHORT TO EARTH · CB AT ${Math.round(ev.cb)} MS`, 'earthed'];
@@ -177,7 +177,8 @@ export const CALLOUTS = {
   hero: (st) => [
     ['High-voltage connection', 'Ø55 · 4 × M8 · 20 NM', [POLES[0], 0.02, 0.276], [360, 196], 150],
     ['Epoxy housing', 'CYCLOALIPHATIC RESIN · OIL INSIDE', [POLES[1], 0.084, 0.2], [700, 150], 168],
-    ['Earthing plate', 'COPPER · SHORTS THE 3 POLES', [-0.33, -0.02, 0.012], [330, 560], 160],
+    ['Earthing plate', 'COPPER · BONDS THE 3 POLES', [-0.25, -0.03, 0.007], [330, 560], 160],
+    ['Earth connection', 'M12 · 105 NM · EARTHING BAR', [-0.33, 0, 0.017], [330, 640], 150],
     ['Switching part', 'THE MECHANISM UNDER THE HOOD', [0.1, 0.04, -0.12], [1060, 210], 170],
     ['Base plate', '10 × M8 FIXING POINTS · 24 NM', [0.345, -0.045, 0.004], [1110, 560], 168],
   ],
@@ -186,11 +187,12 @@ export const CALLOUTS = {
     ['Point light sensor', 'FIBRE TO THE ARC FLASH RELAY', [-0.36, -0.42, 0.32], [360, 470], 172],
     ['Busbars', 'BOLTED ON THE HV TERMINALS', [POLES[2], -0.2, 0.282], [1080, 420], 150],
     ['SIQuench Core', 'ONE POLE PER PHASE, TO EARTH', [0.1, 0.07, 0.14], [1060, 196], 160],
+    ['Earthing bar', 'TO THE SWITCHGEAR EARTH', [-0.448, -0.3, 0.011], [360, 300], 190],
   ],
   mech: (st) => [
     ['Disc spring stack', `${(DRIVE.Fcharged / 1000).toFixed(0)} KN WHEN CHARGED`, [POLES[0], -0.037, -0.17], [360, 560], 150, Math.max(...st.active.cross) > 0],
     ['Latch tongue', 'HOLDS THE CROSSHEAD BACK', [POLES[1], 0.04, -0.09], [690, 150], 150, st.active.tongue > 0],
-    ['Solenoid', 'FIRED BY THE CONTROLLER', [POLES[2], 0.075, -0.06], [1050, 170], 150, st.active.coil > 0],
+    ['Position switch S3', 'ON THE TONGUE BRACKET · 3 IN SERIES', [POLES[2] - 0.016, 0.058, -0.095], [1050, 170], 190],
     ['Helical springs', 'ON THE GUIDE RODS · GREASE: ISOFLEX', [POLES[1] + 0.05, -0.037, -0.17], [1080, 600], 190],
     ['Actuation opening', 'Ø16.1 · FOR THE SPANNWERKZEUG', [POLES[1], -0.037, -0.27], [690, 690], 170],
     ['Position switches', 'S1 · S2 · QUENCHER READY SIGNAL', [POLES[0] - 0.045, 0.05, -0.11], [400, 300], 170],
@@ -202,16 +204,16 @@ export const CALLOUTS = {
     ['Sliding contact', 'EARTHED THROUGH THE COPPER PLATE', [P3, -0.017, 0.022], [480, 630], 180],
   ],
   latch: (st) => [
-    ['Solenoid coil', 'ENERGISED BY THE CONTROLLER', [P3, 0.074, -0.056], [480, 170], 160, st.active.coil > 0],
-    ['Plunger', 'STRIKES THE TONGUE', [P3, 0.05, -0.055], [1060, 190], 120, st.active.coil > 0],
-    ['Latch tongue', 'ZUNGE · LIFTS OFF THE LIP', [P3, 0.036, -0.09], [1080, 380], 150, st.active.tongue > 0],
+    ['Position switch S3', 'ON THE TONGUE BRACKET', [P3 - 0.016, 0.058, -0.095], [480, 170], 160],
+    ['Latch tongue', 'ZUNGE · PULLED UP BY THE TRIP COIL', [P3, 0.04, -0.109], [1080, 380], 190, st.active.coil > 0 || st.active.tongue > 0],
+    ['Slotted bracket', 'GUIDES THE TONGUE', [P3 + 0.02, 0.041, -0.07], [1060, 200], 150],
     ['Crosshead', 'CARRIES THE CONTACT ROD', [P3, -0.03, crossZ0()], [500, 600], 150, Math.max(...st.active.cross) > 0],
   ],
   charge: (st) => [
     ['Spannwerkzeug', 'SW24 · CLOCKWISE TO THE STOP · ≤ 100 NM', [P3, -0.037, -0.33], [440, 600], 220, st.active.tool > 0],
     ['Charging spindle', 'DRAWN BACK BY THE THREAD', [P3, -0.037, -0.235], [460, 250], 160],
     ['Disc spring stack', 'COMPRESSED 18 MM', [P3, -0.037, -0.17], [1060, 200], 140, Math.max(...st.active.cross) > 0],
-    ['Solenoid', 'RE-ARMED · WAITS FOR THE NEXT TRIGGER', [P3, 0.075, -0.06], [1060, 560], 150],
+    ['Latch tongue', 'DROPS IN FRONT OF THE LIP · RE-ARMED', [P3, 0.04, -0.109], [1060, 560], 200],
   ],
 };
 CALLOUTS.open = CALLOUTS.hero;

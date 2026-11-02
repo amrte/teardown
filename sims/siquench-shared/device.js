@@ -2,12 +2,15 @@
 // opened switching part (Abb. 23, 39): the galvanised base plate with its 10 fixing points, the copper earthing plate
 // that shorts the three poles, per pole a steel sleeve and a cycloaliphatic epoxy housing filled with insulating oil
 // around a fixed contact at the high-voltage terminal and a moving contact at earth; behind the plate, under the hood,
-// per pole a disc spring stack, a crosshead on two guide rods with helical springs, the latch tongue, the solenoid,
-// the position switches and the charging spindle the Spannwerkzeug screws into. Outside: three busbars to the cable
+// per pole a disc spring stack, a crosshead on two guide rods with helical springs, the latch tongue (a blade through
+// a slotted bracket that carries position switch S3, as in Abb. 39), S1/S2 and the charging spindle the Spannwerkzeug screws into. Outside: three busbars to the cable
 // compartment where the arc strikes, a point light sensor, and the charging tool with its SW24 spanner.
 //
 // The housing, plate, hood and drawings are to scale. The mechanism inside is a schematic reading of the manual's
-// photos, sized to fit the switching part; its numbers come from quench.js (DRIVE).
+// photos, sized to fit the switching part; its numbers come from quench.js (DRIVE). The trip coil (X1 in the circuit
+// diagram, the Magnetspule of section 4.1) is not visible in any of the manual's pictures, so it is not drawn.
+// Earthing per Abb. 1 and 23: the copper earthing plate bonds the three poles; at its end, the earth connection takes
+// the customer's earthing bar on an M12 screw (105 Nm), which runs to the switchgear's earth.
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
 import {DEV, DRIVE, POLES} from './quench.js';
@@ -191,6 +194,25 @@ function plateTex() {
   t.anisotropy = 8;
   return t;
 }
+function labelTex(text) {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d9dcdf';
+  g.fillRect(0, 0, 128, 64);
+  g.fillStyle = '#16181b';
+  g.fillRect(22, 10, 84, 44);
+  g.fillStyle = '#f4f5f6';
+  g.font = 'bold 34px Arial, Helvetica, sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(text, 64, 33);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
 function glowTex() {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
@@ -222,13 +244,14 @@ export function buildDevice() {
     disc: new THREE.MeshStandardMaterial({color: '#a3a9b0', roughness: 0.32, metalness: 0.85}),
     dark: new THREE.MeshStandardMaterial({color: '#232427', roughness: 0.55, metalness: 0.3}),
     black: new THREE.MeshStandardMaterial({color: '#141517', roughness: 0.6, metalness: 0.1}),
-    coil: new THREE.MeshStandardMaterial({color: '#b5672f', roughness: 0.32, metalness: 0.9, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     tongue: new THREE.MeshStandardMaterial({color: '#4c5157', roughness: 0.35, metalness: 0.9, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     cross: new THREE.MeshStandardMaterial({color: '#8b9097', roughness: 0.36, metalness: 0.9, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     contact: new THREE.MeshStandardMaterial({color: '#c98a5c', roughness: 0.3, metalness: 1, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     silver: new THREE.MeshStandardMaterial({color: '#e2e4e6', roughness: 0.22, metalness: 1}),
     oil: new THREE.MeshPhysicalMaterial({color: '#d9a53c', roughness: 0.1, metalness: 0, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide}),
     switchBody: new THREE.MeshStandardMaterial({color: '#2f3a33', roughness: 0.6, metalness: 0.1}),
+    s3Body: new THREE.MeshStandardMaterial({color: '#d4d7da', roughness: 0.55, metalness: 0.15}),
+    s3Label: new THREE.MeshStandardMaterial({map: labelTex('S3'), roughness: 0.6}),
     tool: new THREE.MeshStandardMaterial({color: '#3c3f44', roughness: 0.35, metalness: 0.9, emissive: new THREE.Color(ACCENT), emissiveIntensity: 0}),
     spanner: new THREE.MeshStandardMaterial({color: '#a9aeb4', roughness: 0.3, metalness: 1}),
     sensor: new THREE.MeshStandardMaterial({color: '#2b8fd6', roughness: 0.5, metalness: 0.1}),
@@ -272,8 +295,14 @@ export function buildDevice() {
   const poleG = new THREE.Group();
   root.add(poleG);
   for (const g of copperParts()) add(poleG, g, M.copper);
-  add(poleG, new THREE.CylinderGeometry(0.0075, 0.0075, 0.0015, 20).rotateX(Math.PI / 2), M.black, false).position.set(-0.33, 0, 0.0065);
-  add(poleG, hexPrism(0.018, 0.008), M.steel).position.set(-0.33, 0, 0.011);
+  // the earth connection (Abb. 1 item 7, Abb. 23): the customer's earthing bar on the plate's end, M12 hex screw with a
+  // washer, 105 Nm. The bar (40 x 5 mm here, MODELLED: the manual only asks that it carries the full Ik with at most
+  // 3 V drop) runs out to the side and down to the switchgear's earth; the system view continues it to the earth bus.
+  const EB = {x: -0.33, xr: -0.448, w: 0.04, t: 0.005, z: 0.006};
+  add(poleG, new RoundedBoxGeometry(EB.x + 0.022 - (EB.xr - EB.w / 2), EB.w, EB.t, 2, 0.001), M.zinc).position.set((EB.x + 0.022 + EB.xr - EB.w / 2) / 2, 0, EB.z + EB.t / 2);
+  add(poleG, new RoundedBoxGeometry(EB.w, EB.w / 2 - (L.floorY + 0.001), EB.t, 2, 0.001), M.zinc).position.set(EB.xr, (EB.w / 2 + L.floorY + 0.001) / 2, EB.z + EB.t / 2);
+  add(poleG, ring(0.012, 0.0066, 0.0025, 24), M.steel).position.set(EB.x, 0, EB.z + EB.t);
+  add(poleG, hexPrism(0.018, 0.008), M.steel).position.set(EB.x, 0, EB.z + EB.t + 0.0025 + 0.004);
   const boss = ring(0.09, 0.074, 0.008, 64);
   const housingG = housingGeo();
   const collar = ring(0.088, 0.072, 0.024, 64);
@@ -404,31 +433,17 @@ export function buildDevice() {
   const spindle = new THREE.CylinderGeometry(0.0075, 0.0075, 1, 16).rotateX(Math.PI / 2);
   const crossGeo = new RoundedBoxGeometry(0.13, 0.072, L.ch, 2, 0.003);
   const lipGeo = new RoundedBoxGeometry(0.03, 0.01, L.ch, 2, 0.002);
-  const tongueShape = (() => {
-    // the latch tongue in its own frame: pivot at the origin, the hook reaching back (-z) and down, the tail forward
-    const s = new THREE.Shape();
-    s.moveTo(0.022, -0.004);
-    s.lineTo(0.022, 0.006);
-    s.lineTo(-0.032, 0.006);
-    s.lineTo(-0.038, 0.0);
-    s.lineTo(-0.038, -0.016);
-    s.lineTo(-0.033, -0.016);
-    s.lineTo(-0.03, -0.006);
-    s.lineTo(0.0, -0.006);
-    s.closePath();
-    const g = new THREE.ExtrudeGeometry(s, {depth: 0.018, bevelEnabled: true, bevelThickness: 0.001, bevelSize: 0.001, bevelSegments: 1});
-    g.translate(0, 0, -0.009);
-    g.rotateY(-Math.PI / 2); // shape x -> world z, shape y -> world y
-    return g;
-  })();
-  const coilBody = new THREE.CylinderGeometry(0.016, 0.016, 0.03, 28);
-  const yokePlate = new THREE.BoxGeometry(0.046, 0.004, 0.04);
-  const yokeBack = new THREE.BoxGeometry(0.004, 0.038, 0.04);
-  const plunger = new THREE.CylinderGeometry(0.0055, 0.0055, 0.045, 16);
+  // the latch tongue (Zunge, Abb. 39 item 1): a flat blade standing in front of the crosshead's lip, guided in the slot of
+  // a bracket that carries S3. Latched, its lower end blocks the lip; pulled up 11 mm it clears it.
+  const TB = {w: 0.014, t: 0.004, y0: 0.0215, y1: 0.049, lift: 0.011};
+  const tongueGeo = new RoundedBoxGeometry(TB.w, TB.y1 - TB.y0, TB.t, 2, 0.0008);
+  const BR = {y: 0.041, t: 0.002, z0: -0.128, z1: -0.03};
+  const s3Geo = new RoundedBoxGeometry(0.024, 0.016, 0.026, 2, 0.0025);
   const swBox = new RoundedBoxGeometry(0.022, 0.026, 0.012, 2, 0.002);
   const swLever = new THREE.BoxGeometry(0.0015, 0.004, 0.022);
   const bush = ring(0.012, 0.0075, 0.012, 24);
-  const PIV = {y: 0.038, z: crossZ(0) + L.ch / 2 + 0.038}; // hook's rear face on the charged lip's front face // the tongue's pivot; its hook rests on the crosshead's lip
+  // the blade's rear face sits on the charged lip's front face
+  const PIV = {y: TB.y0, z: crossZ(0) + L.ch / 2};
   const mechs = POLES.map((px, i) => {
     const g = new THREE.Group();
     g.position.x = px;
@@ -482,25 +497,31 @@ export function buildDevice() {
     // bushings in the front bulkhead (contact rod) and spring seat (spindle)
     add(g, bush, M.steel).position.set(0, 0, L.frontZ - 0.006);
     add(g, ring(0.014, 0.0078, 0.01, 24), M.steel).position.set(0, L.toolY, L.bulkZ - 0.01);
-    // the latch tongue on its pivot pin
+    // the bracket from the front bulkhead over the crosshead, slotted for the tongue (Abb. 39)
+    const slot = {z0: PIV.z - 0.002, z1: PIV.z + TB.t + 0.002, x: TB.w / 2 + 0.002};
+    const plate = (x0, x1, z0, z1) => add(g, new THREE.BoxGeometry(x1 - x0, BR.t, z1 - z0), M.frame).position.set((x0 + x1) / 2, BR.y, (z0 + z1) / 2);
+    plate(-0.026, 0.026, slot.z1, BR.z1);
+    plate(-0.026, 0.026, BR.z0, slot.z0);
+    plate(-0.026, -slot.x, slot.z0, slot.z1);
+    plate(slot.x, 0.026, slot.z0, slot.z1);
+    add(g, new THREE.BoxGeometry(0.052, 0.03, 0.002), M.frame).position.set(0, BR.y - 0.015, BR.z1 - 0.001);
+    // the tongue blade
     const tongueG = new THREE.Group();
-    tongueG.position.set(0, PIV.y, PIV.z);
+    tongueG.position.set(0, 0, PIV.z + TB.t / 2);
     g.add(tongueG);
-    add(tongueG, tongueShape, M.tongue);
-    const pin = add(g, new THREE.CylinderGeometry(0.0035, 0.0035, 0.034, 12).rotateZ(Math.PI / 2), M.steel);
-    pin.position.set(0, PIV.y, PIV.z);
-    for (const s of [-1, 1]) add(g, new THREE.BoxGeometry(0.003, 0.03, 0.02), M.frame).position.set(s * 0.015, PIV.y + 0.006, PIV.z);
-    // the solenoid over the tongue's tail: coil, yoke, plunger
-    const solG = new THREE.Group();
-    solG.position.set(0, PIV.y + 0.0335, PIV.z + 0.016);
-    g.add(solG);
-    for (const s of [-1, 1]) add(solG, yokePlate, M.dark).position.y = s * 0.017;
-    add(solG, yokeBack, M.dark).position.x = -0.021;
-    const coil = add(solG, coilBody, M.coil);
-    coil.position.y = 0.0;
-    coil.scale.set(1.02, 1.02, 1.02);
-    const plng = add(solG, plunger, M.steel);
-    // the switches: S1 (contact position) and S2 (charged) on a bracket beside the crosshead, S3 (oil) near the plate
+    add(tongueG, tongueGeo, M.tongue).position.y = (TB.y0 + TB.y1) / 2;
+    // S3 on the bracket beside the tongue, its roller lever on the blade's side (Abb. 39: the box marked S3)
+    const s3 = add(g, s3Geo, M.s3Body);
+    s3.position.set(-0.016, BR.y + BR.t / 2 + 0.008, PIV.z + 0.016);
+    const lbl = add(g, new THREE.PlaneGeometry(0.014, 0.007).rotateX(-Math.PI / 2), M.s3Label, false);
+    lbl.position.set(-0.016, BR.y + BR.t / 2 + 0.0161, PIV.z + 0.016);
+    for (const dz of [-0.008, 0.008]) add(g, hexPrism(0.005, 0.004).rotateX(-Math.PI / 2), M.steel).position.set(-0.008, BR.y + BR.t / 2 + 0.018, PIV.z + 0.016 + dz);
+    const s3Lever = new THREE.Group();
+    s3Lever.position.set(-0.0045, BR.y + 0.012, PIV.z + 0.006);
+    g.add(s3Lever);
+    add(s3Lever, new THREE.BoxGeometry(0.0015, 0.003, 0.012), M.steel).position.z = -0.004;
+    add(s3Lever, new THREE.CylinderGeometry(0.0022, 0.0022, 0.003, 12).rotateZ(Math.PI / 2), M.steel).position.set(0, 0, -0.009);
+    // the switches: S1 (contact position) and S2 (charged) on a bracket beside the crosshead
     const sw = [];
     for (const z of [crossZ(0) - 0.003, crossZ(DRIVE.L) + 0.003]) {
       const b = add(g, swBox, M.switchBody);
@@ -510,9 +531,7 @@ export function buildDevice() {
       sw.push(lv);
     }
     add(g, new THREE.BoxGeometry(0.03, 0.003, 0.06), M.frame).position.set(-0.045, 0.0615, crossZ(DRIVE.L / 2));
-    const s3 = add(g, swBox, M.switchBody);
-    s3.position.set(-0.05, 0.03, L.frontZ - 0.012);
-    return {g, mov, discs, springs, tongueG, plng, coil, sw, solG, crossM};
+    return {g, mov, discs, springs, tongueG, s3Lever, sw, crossM};
   });
 
   // ------------------------------------------------------------ the charging tool and the SW24 spanner
@@ -547,6 +566,13 @@ export function buildDevice() {
     bar.position.set(x, (top + bot) / 2, DEV.poleLen + 0.006);
     for (const dy of [0.016, -0.016]) for (const dx of [-0.016, 0.016]) add(sysG, hexPrism(0.013, 0.006), M.steel).position.set(x + dx * 0.71, dy * 0.71, DEV.poleLen + 0.014);
   }
+  // the switchgear's earth: the earthing bar carried on down to an earth bus along the panel
+  {
+    const yb = L.arcY - 0.08;
+    add(sysG, new RoundedBoxGeometry(0.04, L.floorY - yb, 0.005, 2, 0.001), M.zinc).position.set(-0.448, (L.floorY + yb) / 2, 0.0085);
+    add(sysG, new RoundedBoxGeometry(0.86, 0.04, 0.008, 2, 0.002), M.zinc).position.set(-0.04, yb, 0.0085);
+    add(sysG, hexPrism(0.016, 0.006), M.steel).position.set(-0.448, yb, 0.0155);
+  }
   const sensor = new THREE.Group();
   sysG.add(sensor);
   add(sensor, new RoundedBoxGeometry(0.03, 0.05, 0.018, 2, 0.004), M.sensor);
@@ -580,14 +606,22 @@ export function buildDevice() {
   flash.position.set(0, L.arcY, L.busZ + 0.12);
   sysG.add(flash);
 
-  // current in the metal path: dots that run up the bars, along the pole into the contact and out over the copper
-  const FLOW_N = 26;
+  // current in the metal path: up each bar, along the pole into the closed contact, out through the sliding contact onto
+  // the copper plate. The plate bonds the three phases: in a balanced 3-phase fault their currents cancel there, so
+  // most of the current circulates between the phases through the plate (paths 0-2 meet at the middle pole). Only the
+  // residual (any earth-fault share) leaves on the earthing bar (path 3, fewer dots), which also holds the plate at earth.
+  const FLOW_N = [24, 24, 24, 12];
+  const yB = -0.03;
   const flowPaths = POLES.map((x, i) => {
-    const pts = [new V3(x, L.arcY - 0.06, L.busZ), new V3(x, -0.04, L.busZ), new V3(x, 0.0, DEV.poleLen + 0.004), new V3(x, 0, L.fixedZ + 0.02), new V3(x, 0, 0.02), new V3(x, 0.07, 0.012), new V3(0 + (i - 1) * 0.06, 0.06, 0.012)];
+    const pts = [new V3(x, L.arcY - 0.06, L.busZ), new V3(x, -0.04, L.busZ), new V3(x, 0.0, DEV.poleLen + 0.004), new V3(x, 0, L.fixedZ + 0.02), new V3(x, 0, 0.03), new V3(x, 0, 0.016), new V3(x, -0.06, 0.0095)];
+    if (i !== 1) pts.push(new V3(x * 0.55, yB, 0.0085), new V3(x * 0.12, yB - 0.02, 0.0085));
+    else pts.push(new V3(0, -0.068, 0.0085));
     return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.1);
   });
+  flowPaths.push(new THREE.CatmullRomCurve3([new V3(-0.12, yB, 0.0085), new V3(-0.3, yB, 0.0085), new V3(-0.33, 0, 0.0135), new V3(-0.44, 0, 0.0135), new V3(-0.448, -0.03, 0.0135), new V3(-0.448, L.floorY, 0.0135), new V3(-0.448, L.arcY - 0.08, 0.0135), new V3(-0.2, L.arcY - 0.08, 0.0135)], false, 'catmullrom', 0.05));
+  const FLOW_TOTAL = FLOW_N.reduce((a, b) => a + b, 0);
   const flowGeo = new THREE.BufferGeometry();
-  const flowPos = new Float32Array(3 * FLOW_N * 3);
+  const flowPos = new Float32Array(3 * FLOW_TOTAL);
   flowGeo.setAttribute('position', new THREE.BufferAttribute(flowPos, 3));
   const flowMat = new THREE.PointsMaterial({color: ACCENT, size: 0.014, map: glowTex(), transparent: true, depthWrite: false, depthTest: false, sizeAttenuation: true, toneMapped: false});
   const flow = new THREE.Points(flowGeo, flowMat);
@@ -627,13 +661,13 @@ export function buildDevice() {
     return x - Math.floor(x);
   };
   const tmp = new V3();
-  const out = {flowCurves: flowPaths, PIV, flowObj: flow, arcObj: arcG};
+  const out = {flowCurves: flowPaths, PIV, EB, flowObj: flow, arcObj: arcG};
 
   /**
    * s: {poles: [poleState x3] (from quench.js), tool: {pole, in, turns} | null, hood 0..1 (1 on), xray 0..1,
    *     section pole index | -1, explode 0..1, sys 0..1 (busbars and arc context), arc 0..1 (arc brightness),
    *     arcTick (an integer that changes the arc's shape), flow 0..1, flowPhase (dots' phase), active {coil, tongue,
-   *     cross, contact, tool} 0..1 glow on the part doing the work}
+   *     cross, contact, tool} (coil lights the tongue: the coil itself is not drawn) 0..1 glow on the part doing the work}
    */
   const update = (s) => {
     setXray(s.xray ?? 0);
@@ -645,8 +679,7 @@ export function buildDevice() {
     frameG.position.y = -0.05 * e;
     toolG.position.y = -0.05 * e;
     const act = s.active || {};
-    M.coil.emissiveIntensity = 0.5 * (act.coil ?? 0);
-    M.tongue.emissiveIntensity = 0.9 * (act.tongue ?? 0);
+    M.tongue.emissiveIntensity = 0.9 * Math.max(act.coil ?? 0, act.tongue ?? 0);
     M.contact.emissiveIntensity = 0.45 * (act.contact ?? 0);
     M.tool.emissiveIntensity = 0.6 * (act.tool ?? 0);
 
@@ -666,12 +699,13 @@ export function buildDevice() {
         d.position.z = L.bulkZ + j * pitch + (j % 2 ? pitch : 0);
       });
       for (const sp of m.springs) sp.scale.z = len - 0.004;
-      // the tongue lifts when the plunger strikes it, rides the lip while it passes, drops behind it at the end
+      // the tongue is pulled up when the trip coil fires, rides the lip while it passes, drops in front of it at the end
       const lipFront = zc + L.ch / 2;
-      const onLip = lipFront > PIV.z - 0.038 + 0.0008 && zc - L.ch / 2 < PIV.z - 0.03 ? 1 : 0;
-      const lift = Math.max(p.tongue ?? 0, p.latched ? 0 : onLip * 0.75);
-      m.tongueG.rotation.x = -0.42 * lift;
-      m.plng.position.y = -0.001 - 0.007 * (p.plunger ?? 0);
+      const onLip = lipFront > PIV.z + 0.0008 && zc - L.ch / 2 < PIV.z + TB.t ? 1 : 0;
+      const lift = Math.max(p.tongue ?? 0, p.latched ? 0 : onLip * 0.9);
+      m.tongueG.position.y = TB.lift * lift;
+      // S3's lever follows the blade (MODELLED: the manual shows where S3 sits, not what it senses)
+      m.s3Lever.rotation.x = 0.5 * lift;
       // switch levers: pressed when the flag sits on them
       m.sw[0].rotation.x = Math.abs(zc - crossZ(0)) < 0.004 ? -0.35 : 0;
       m.sw[1].rotation.x = Math.abs(zc - crossZ(DRIVE.L)) < 0.004 ? -0.35 : 0;
@@ -730,11 +764,13 @@ export function buildDevice() {
       const ph = s.flowPhase ?? 0;
       let n = 0;
       flowPaths.forEach((c, i) => {
-        for (let j = 0; j < FLOW_N; j++) {
-          const u = (((j / FLOW_N + ph + i * 0.11) % 1) + 1) % 1;
+        const nDots = FLOW_N[i];
+        for (let j = 0; j < nDots; j++) {
+          const u = (((j / nDots + ph * (i === 3 ? 0.6 : 1) + i * 0.11) % 1) + 1) % 1;
           c.getPointAt(u, tmp);
           tmp.z += 0.16 * e;
-          if (u < 0.32 && sys < 0.5) tmp.set(0, -9, 0);
+          // without the switchgear context, hide the dots on the busbars and below the floor on the earthing bar
+          if (sys < 0.5 && ((i < 3 && u < 0.32) || (i === 3 && tmp.y < L.floorY))) tmp.set(0, -9, 0);
           flowPos[n++] = tmp.x;
           flowPos[n++] = tmp.y;
           flowPos[n++] = tmp.z;

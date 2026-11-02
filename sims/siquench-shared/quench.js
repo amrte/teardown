@@ -40,8 +40,8 @@ export const POLES = [-1, 0, 1].map((k) => k * DEV.pcd);
 export const T = {
   detMin: 0.6,
   detMax: 1.5,
-  coil: 0.15, // controller output to coil current (MODELLED)
-  strike: 0.65, // coil energised to plunger striking the latch tongue (MODELLED)
+  coil: 0.15, // controller output to trip coil current, X1 per pole (MODELLED)
+  strike: 0.65, // coil energised to the latch tongue starting to move (MODELLED)
   release: 0.2, // tongue swings clear of the crosshead (MODELLED)
   travel: 2.0, // contact travel under the disc springs (MODELLED, so the three add up to the brochure's ~3 ms)
   commute: 0.12, // arc current time constant once the metal path is closed (MODELLED)
@@ -96,7 +96,7 @@ export function stroke(tau, ev) {
   if (th >= DRIVE.thEnd) return {x: DRIVE.L, v: 0};
   return {x: DRIVE.A * (1 - Math.cos(th)), v: DRIVE.A * DRIVE.w * Math.sin(th)};
 }
-/** solenoid plunger 0..1 (1 = struck), latch tongue angle 0..1 (1 = clear) */
+/** coil armature 0..1 (1 = pulled in; the coil is not drawn), latch tongue lift 0..1 (1 = clear of the lip) */
 export function trigger(tau, ev) {
   const plunger = tau < ev.coil ? 0 : smooth((tau - ev.coil) / T.strike) ** 1.6;
   const tongue = tau < ev.strike ? 0 : smooth((tau - ev.strike) / T.release);
@@ -246,8 +246,8 @@ export function poleState(tau, ev, kc) {
 export const STEPS = [
   ['ign', 'ARC IGNITES', 'CABLE COMPARTMENT'],
   ['det', 'ARC DETECTED', 'LIGHT SENSOR → ARC FLASH RELAY'],
-  ['coil', 'TRIGGER', 'CONTROLLER FIRES 3 COILS'],
-  ['strike', 'LATCH STRUCK', 'PLUNGER HITS THE TONGUE'],
+  ['coil', 'TRIGGER', 'CONTROLLER FIRES 3 TRIP COILS (X1)'],
+  ['strike', 'LATCH PULLED', 'TONGUE LIFTS OFF THE LIP'],
   ['release', 'SPRINGS RELEASED', 'DISC STACK DRIVES THE ROD'],
   ['close', 'EARTHED', 'CONTACT TOUCHES · 3-PHASE SHORT'],
   ['out', 'ARC QUENCHED', 'CURRENT IN THE METAL PATH'],
