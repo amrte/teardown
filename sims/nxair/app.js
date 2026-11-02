@@ -10,8 +10,11 @@ import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
 import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeometry} from './model.js';
 import {BK_PARTS, buildBreaker} from './breaker.js';
 import {CB_JOINTS} from './ops.js';
+import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
+import {CHECKS, FRONT, IO, LV_JOINTS, LV_TOUR, X0, FUNCS, SETTINGS, analogSvg, controlSvg} from './lvpane.js';
 const bkById = Object.fromEntries(BK_PARTS.map((p) => [p.id, p]));
-const partInfo = (id) => partById[id] || bkById[id];
+const lvById = Object.fromEntries(LV_PARTS.map((p) => [p.id, p]));
+const partInfo = (id) => partById[id] || bkById[id] || lvById[id];
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
@@ -25,12 +28,16 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, bk: {c: 0, s: 0, count: 0, aux: true}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
 };
 state.step = Math.min(store.get('step', 0), STEPS.length - 1);
+// per-mode state keys: the panel, the stand-alone breaker (Breaker tab) and the stand-alone LV compartment (LV tab)
+const MK = {panel: {f: 'focus', e: 'ex', c: 'cut'}, breaker: {f: 'bkFocus', e: 'bkEx', c: 'bkCut'}, lv: {f: 'lvFocus', e: 'lvEx', c: 'lvCut'}};
+const mk = () => MK[state.mode];
+const solo = () => state.mode !== 'panel';
 
 // -------------------------------------------------------------------------------------------- scene setup
 const stage = $('#stage');
@@ -207,7 +214,16 @@ function build() {
   scene.add(bkHolder);
   cloneMats(bk.parts, partMats);
 
-  world = {row, subject, neighbors, bolts, partMats, bk, bkHolder};
+  // the stand-alone low-voltage compartment with the protection device for the LV tab
+  if (world?.lvHolder) { scene.remove(world.lvHolder); disposeTree(world.lvHolder); }
+  const lv = buildLV(mats, {W: state.W});
+  const lvHolder = new THREE.Group();
+  lvHolder.scale.setScalar(0.001);
+  lvHolder.add(lv.root);
+  scene.add(lvHolder);
+  cloneMats(lv.parts, partMats);
+
+  world = {row, subject, neighbors, bolts, partMats, bk, bkHolder, lv, lvHolder};
   applyMode();
   anim.ex = state.ex;
   anim.truck = truckZ(state.truck);
@@ -218,7 +234,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {ex: 0, truck: 0, bkEx: 0, esw: 0, slide: 0, lever: 0};
+const anim = {ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -258,6 +274,7 @@ function applyPose(force) {
     if (c.userData.eswLever) { c.visible = anim.lever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.lever); c.rotation.z = -Math.PI * anim.esw; }
   }
   if (world.bk) for (const g of Object.values(world.bk.parts)) g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx);
+  if (world.lv) world.lv.pose({ex: anim.lvEx, door: anim.lvDoor});
   for (const p of [subject, ...neighbors]) {
     for (const g of p.parts.shutters || []) {
       for (const c of g.children) {
@@ -274,7 +291,7 @@ function applyPose(force) {
 
 function applyFocus() {
   if (!world) return;
-  const focus = new Set(state.selPart ? [state.selPart] : state.mode === 'breaker' ? state.bkFocus : state.focus);
+  const focus = new Set(state.selPart ? [state.selPart] : state[mk().f]);
   for (const [pid, list] of Object.entries(world.partMats)) {
     const on = focus.has(pid);
     for (const m of list) {
@@ -299,10 +316,10 @@ function applyGlassLite() { if (state.isolate) applyGlass(); }
 
 // parts drawn see-through in X-ray: the panel enclosure, or on the Breaker tab the mechanism cover, housing and pole shells
 const BK_SHELLS = new Set(['bkCover', 'bkFrame', 'bkShell']);
-const shellSet = () => (state.mode === 'breaker' ? BK_SHELLS : world.subject.shellIds);
+const shellSet = () => (state.mode === 'breaker' ? BK_SHELLS : state.mode === 'lv' ? LV_SHELLS : world.subject.shellIds);
 function applyGlass() {
   if (!world) return;
-  const focus = new Set(state.selPart ? [state.selPart] : state.mode === 'breaker' ? state.bkFocus : state.focus);
+  const focus = new Set(state.selPart ? [state.selPart] : state[mk().f]);
   const iso = state.isolate && focus.size > 0;
   for (const [pid, list] of Object.entries(world.partMats)) {
     const ghost = iso && !focus.has(pid);
@@ -319,7 +336,7 @@ function applyGlass() {
 }
 
 function applyCut() {
-  cutPlane.constant = (state.mode === 'breaker' ? state.bkCut : state.cut) ? 0 : 1e5;
+  cutPlane.constant = state[mk().c] ? 0 : 1e5;
   applyPose();
 }
 
@@ -342,15 +359,16 @@ const BK_VIEWS = {
   top: {p: [0.2, 2.4, 0.5], t: [0, 0.3, 0]},
   vi: {p: [-0.62, 0.43, -0.05], t: [0, 0.39, -0.04]},
 };
+// LV compartment (stand-alone, origin at the floor of the compartment, front = door plane at z = 0)
 VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
 VIEWS.eswCut = {p: [-2.3, 1.0, -0.55], t: [0, 0.72, -0.42]};
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
 function goView(name, instant) {
-  const bkMode = state.mode === 'breaker';
-  const v = (bkMode ? BK_VIEWS[name] : VIEWS[name]) || (bkMode ? BK_VIEWS.iso : VIEWS.iso);
+  const VS = state.mode === 'breaker' ? BK_VIEWS : state.mode === 'lv' ? world.lv.views : VIEWS; // LV views are computed for the width
+  const v = VS[name] || VS.iso;
   const k = state.W / 800;
-  const to = new THREE.Vector3(...v.p).multiplyScalar(name === 'top' || bkMode || name === 'door' ? 1 : 0.85 + 0.15 * k);
+  const to = new THREE.Vector3(...v.p).multiplyScalar(state.mode !== 'panel' || name === 'top' || name === 'door' ? 1 : 0.85 + 0.15 * k);
   const tt = new THREE.Vector3(...v.t);
   if (state.crane && name === 'iso') to.multiplyScalar(1.15);
   if (instant || reduced) {
@@ -375,16 +393,16 @@ function jointLabel(j, n) {
 // Tags: bolt-joint tags ("11× M8 · 25 Nm") for the active joints, part-name tags for the focused / selected parts.
 // Each tag anchors to the visible instance (or part centre) nearest its centroid; tags are nudged apart on screen.
 function activeJoints() {
-  if (state.mode === 'breaker') return [];
+  if (solo()) return [];
   if (state.selJoint) return [state.selJoint];
   if (state.selPart) return partInfo(state.selPart)?.joints || [];
   return state.joints;
 }
 function activeTagParts() {
-  if (state.mode === 'breaker') {
+  if (solo()) {
     if (state.selPart) return [state.selPart];
-    if (state.bkFocus.length) return state.bkFocus;
-    return state.bkEx > 0.3 ? BK_PARTS.map((p) => p.id) : [];
+    if (state[mk().f].length) return state[mk().f];
+    return state[mk().e] > 0.3 ? (state.mode === 'lv' ? LV_PARTS : BK_PARTS).map((p) => p.id) : [];
   }
   if (state.selPart) return [state.selPart];
   return state.joints.length ? [] : state.focus.filter((id) => partById[id]);
@@ -408,12 +426,12 @@ let labelFrame = 0;
 const partCentre = new Map();
 const tmpBox = new THREE.Box3();
 function partAnchor(pid) {
-  const groups = bkById[pid] ? [world.bk.parts[pid]] : world.subject.parts[pid] || [];
+  const groups = bkById[pid] ? [world.bk.parts[pid]] : lvById[pid] ? world.lv.parts[pid] || [] : world.subject.parts[pid] || [];
   tmpBox.makeEmpty();
   for (const g of groups) if (g && g.visible !== false) tmpBox.expandByObject(g);
   if (tmpBox.isEmpty()) return null;
   const c = tmpBox.getCenter(new THREE.Vector3());
-  const cutOn = state.mode === 'breaker' ? state.bkCut : state.cut;
+  const cutOn = state[mk().c];
   if (cutOn && c.x < 0) c.x = Math.min(tmpBox.max.x, 0.002);
   return c;
 }
@@ -425,7 +443,7 @@ function toScreen(v, w, h) {
 function placeLabels() {
   if (!world || !state.labels || !labelLayer.children.length) return;
   const w = stage.clientWidth, h = stage.clientHeight;
-  const cutOn = state.mode === 'breaker' ? state.bkCut : state.cut;
+  const cutOn = state[mk().c];
   // part centres are costly: refresh every 8th frame
   if (labelFrame++ % 8 === 0) for (const el of labelLayer.children) if (el.dataset.p) partCentre.set(el.dataset.p, partAnchor(el.dataset.p));
   const placed = [];
@@ -477,9 +495,9 @@ function pick(ev) {
   const r = canvas.getBoundingClientRect();
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
-  const hits = ray.intersectObject(state.mode === 'breaker' ? world.bk.root : world.subject.root, true);
+  const hits = ray.intersectObject(state.mode === 'breaker' ? world.bk.root : state.mode === 'lv' ? world.lv.root : world.subject.root, true);
   for (const h of hits) {
-    if ((state.mode === 'breaker' ? state.bkCut : state.cut) && h.point.x < -0.0005) continue;
+    if (state[mk().c] && h.point.x < -0.0005) continue;
     let o = h.object;
     if (!o.visible || o.isLineSegments) continue;
     let hidden = false;
@@ -500,6 +518,7 @@ canvas.addEventListener('pointerup', (e) => {
   const hit = pick(e);
   if (hit?.joint) selectJoint(hit.joint, true);
   else if (hit?.part && bkById[hit.part]) { state.selLabel = hit.label || null; selectBk(hit.part); }
+  else if (hit?.part && lvById[hit.part]) { state.selLabel = hit.label || null; selectLv(hit.part); }
   else if (hit?.part && partById[hit.part]) { state.selLabel = hit.label || null; selectPart(hit.part, true); }
   else { state.selPart = null; state.selJoint = null; applyFocus(); syncSelection(); }
 });
@@ -542,7 +561,7 @@ function frame(now) {
   // drill + breaker animations
   const kd = reduced ? 1 : 1 - Math.exp(-dt * 4);
   let moved = false;
-  for (const [a, b] of [['bkEx', 'bkEx'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
+  for (const [a, b] of [['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
   if (moved) applyPose();
@@ -590,11 +609,11 @@ function jointRow(j, {sel} = {}) {
 }
 
 // ---------------------------------------------------------------- tabs + hash routing
-const TABS = ['steps', 'breaker', 'parts', 'torques', 'specs', 'sources'];
+const TABS = ['steps', 'breaker', 'lv', 'parts', 'torques', 'specs', 'sources'];
 function showTab(name) {
   if (!TABS.includes(name)) name = 'steps';
-  const mode = name === 'breaker' ? 'breaker' : 'panel';
-  if (mode !== state.mode) { state.mode = mode; applyMode(); goView(mode === 'breaker' ? 'iso' : STEPS[state.step].view || 'iso'); }
+  const mode = name === 'breaker' || name === 'lv' ? name : 'panel';
+  if (mode !== state.mode) { state.mode = mode; state.selPart = null; applyMode(); goView(mode !== 'panel' ? 'iso' : STEPS[state.step].view || 'iso'); }
   for (const t of TABS) {
     $('#pane-' + t).hidden = t !== name;
     $(`[data-tab="${t}"]`).setAttribute('aria-current', t === name ? 'page' : 'false');
@@ -679,7 +698,7 @@ function renderParts() {
 }
 function framePart(id) {
   const box = new THREE.Box3();
-  const gs = bkById[id] ? [world?.bk.parts[id]] : world?.subject.parts[id] || [];
+  const gs = bkById[id] ? [world?.bk.parts[id]] : lvById[id] ? world?.lv.parts[id] || [] : world?.subject.parts[id] || [];
   for (const g of gs) if (g && g.visible !== false) box.expandByObject(g);
   if (box.isEmpty()) return;
   const c = box.getCenter(new THREE.Vector3());
@@ -791,6 +810,7 @@ function renderSources() {
       <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. Breaker geometry uses the 3AE manual (pole centres, terminal distance, contact arm Ø, 13 / 26 tulip fingers); racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). Shapes of poles, CTs, VTs and mechanisms are simplified.</li>
       <li>Two torque regimes exist: panel joints with dry threads (M8 30 / 25, M12 70, M16 110 Nm) and breaker contact-arm joints with greased threads (M12 40 ±4, M16 100 ±10 Nm). Each row says which.</li>
       <li>A badge marks how each torque is known. "Maker of part" and "Not stated" rows need the part supplier's figure.</li>
+      <li>LV tab: the SIPROTEC 5 7SJ82 is drawn and described from the SIPROTEC 5 hardware and operation manuals and catalog; the 3AE plug pins from the 3AE sample circuit diagrams. The equipment of the LV compartment, the device tags, the I/O allocation and the settings are a typical cable-feeder example, not a Siemens drawing. Trip-circuit supervision and breaker-control rules are quoted from the SIPROTEC 5 7SY82 manual, which shares the SIPROTEC 5 function text (the 7SJ82 device manual could not be retrieved).</li>
       <li>The order documents, dimension drawings 110-2300.9 and the circuit diagrams of your switchgear take precedence over this page.</li>
     </ul>
     <p class="small muted">Independent study aid built from Siemens' publicly available documentation. Not a Siemens publication. Work on medium-voltage switchgear only as qualified personnel under the five safety rules.</p>`;
@@ -802,8 +822,11 @@ function applyMode() {
   if (!world) return;
   world.row.visible = state.mode === 'panel';
   world.bkHolder.visible = state.mode === 'breaker';
-  for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = state.mode === 'breaker'; }
-  $('#t-row').hidden = state.mode === 'breaker';
+  world.lvHolder.visible = state.mode === 'lv';
+  for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo(); }
+  $('#t-row').hidden = solo();
+  $('#lvDoorSeg').hidden = state.mode !== 'lv';
+  document.querySelector('.legend').hidden = solo();
   applyCut();
   applyFocus();
   applyGlass();
@@ -970,6 +993,94 @@ function componentsOfBk(id) {
   world?.bk.parts[id]?.traverse((c) => { if (c.isMesh && c.userData.label) set.add(c.userData.label); });
   return [...set];
 }
+// ================================================================================ LV tab
+let lvSel = null;
+let lvTour = -1;
+function componentsOfLv(id) {
+  const set = new Set();
+  for (const g of world?.lv.parts[id] || []) g.traverse((c) => { if (c.isMesh && c.userData.label) set.add(c.userData.label); });
+  return [...set];
+}
+function renderLv() {
+  const sel = lvSel && lvById[lvSel];
+  const comps = sel ? componentsOfLv(sel.id) : [];
+  const groups = [...new Set(LV_PARTS.map((p) => p.grp))];
+  const table = (head, rows) => `<div class="scroll-x"><table class="grid4"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  $('#pane-lv').innerHTML = `
+    <span class="eyebrow">Low-voltage compartment (E) · ${state.W} mm panel · 630 × 406 mm</span>
+    <h2>What Siemens documents</h2>
+    <ul class="body">
+      <li>The LV compartment holds all protection, control, measuring and metering equipment and is partitioned safe-to-touch from the high-voltage part. Options: a higher compartment (980 mm, panel 2350 mm) and a separation wall from panel to panel. <span class="ref">HA 25.73 p. 30</span></li>
+      <li>It can be removed as a whole: all bus wires and control cables are plugged. Withdrawable-part and panel wiring arrive on 10-pole coded plug connections; bus wires plug from panel to panel; LV cables are flexible and run under metal covers. <span class="ref">HA 25.73 p. 30</span></li>
+      <li>EMC: the compartment is metal-enclosed with the devices in defined zones, wiring in metal ducts, inductive loads suppressed (diode, varistor, RC), cable shields earthed all round in the LV compartment. <span class="ref">I §5.11</span></li>
+      <li>Control cables come up the wiring duct on the left inner side of the switching-device compartment and are connected per the circuit diagrams kept in the compartment; bus wires are clamped or plugged on the bus-wire terminal block. <span class="ref">I §10.12–10.13</span></li>
+      <li>Protection devices are typically SIPROTEC 5; with an arc protection module (3 optical point or line sensors) the arc is cleared within 100 ms including the breaker. Update the protection-device firmware before commissioning and register for the SIPROTEC / SICAM security notices. <span class="ref">HA 25.73 p. 31 · I §14</span></li>
+    </ul>
+    <div class="note-box small"><b>Typical example, not an order drawing.</b> What is fitted in a given panel, the device tags and the terminal numbers come from that panel's circuit diagrams. This page shows a cable feeder with a SIPROTEC 5 7SJ82 (PS101 + IO102) drawn to the SIPROTEC 5 hardware manual, wired to the 3AE breaker pins of the 3AE sample circuit diagrams.</div>
+    <h3>Walk through it on the model</h3>
+    <ol class="tear">${LV_TOUR.map((x, k) => `<li><button type="button" class="tearbtn${lvTour === k ? ' on' : ''}" data-lvtour="${k}"><span class="tt">${esc(x.t)}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
+    ${sel ? `<div class="pcard" style="margin-top:14px"><span class="eyebrow">${esc(sel.grp)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>${comps.length ? `<h3>Components</h3><ul class="plain small">${comps.map((l) => `<li${l === state.selLabel ? ' style="color:var(--accent-ink);font-weight:600"' : ''}>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+    <h3>Parts</h3>
+    ${groups.map((g) => `<div class="group-h">${esc(g)}</div><div class="plist">${LV_PARTS.filter((p) => p.grp === g).map((p) => `<button type="button" data-lvpart="${p.id}" class="${lvSel === p.id ? 'sel' : ''}"><span class="sw" style="background:#9a7fb8"></span>${esc(p.name)}</button>`).join('')}</div>`).join('')}
+    <h3>SIPROTEC 5 7SJ82: the device</h3>
+    ${kv([
+      ['Type', 'Non-modular 1/3 × 19" device. Standard variant V3: PS101 + IO102 = 4 I, 4 V, 11 BI, 8 BO + life contact (V4 adds IO110: 23 BI, 15 BO). V1/V2 without VTs, V5 with 8 I'],
+      ['Supply PS101', 'DC 24/48 V, DC 60/110/125 V, or DC 110–250 V / AC 100–230 V; 7 W; hold-up ≥ 50 ms at ≥ DC 60 V'],
+      ['Inputs', 'CT 1 A / 5 A set in software, 0.1 VA, 20 A continuous, 500 A for 1 s; VT 0–200 V; BI DC 24–250 V with software thresholds (≥ 19 / 88 / 176 V)'],
+      ['Communication', 'Port J RJ45 (DIGSI 5, IEC 61850); 2 plug-in slots E/F for Ethernet (IEC 61850, IEC 60870-5-104, DNP3, Modbus, PROFINET, PRP/HSR) or serial (IEC 60870-5-103, DNP3, Modbus RTU) modules; time sync G (IRIG-B / DCF77)'],
+      ['Front', '150 × 266 mm, 34 mm proud of the door; housing 145 × 244 mm'],
+      ['Depth', '163 mm behind the door + 34 mm terminals = 231 mm; installation depth ≥ 275 mm; ≥ 50 mm bend radius for RJ45 / fibre. The USB cover adds 15 mm in front'],
+      ['Protection', 'IP54 front, IP2x rear terminals'],
+      ['Door cut-out', '146 +2 × 245 +1 mm, 4 holes Ø 6 or M4; mount vertically'],
+      ['Weight', '3.6 kg'],
+      ['Earthing', 'Protection class I: PE terminal ≥ 4 mm², M4, ≥ 1.2 Nm, before switching on'],
+    ])}
+    <h3>Front panel</h3>${table(['Element', 'Use'], FRONT)}
+    <h3>Protection and control functions</h3>
+    ${table(['ANSI', 'Function', 'Use on a cable feeder'], FUNCS)}
+    <h3>Example: I/O allocation</h3>
+    ${table(['Input / output', 'Signal', 'Terminals', 'Wired to'], IO)}
+    <h3>Example: control circuits</h3>
+    <div class="scroll-x sch-wrap">${controlSvg()}</div><button type="button" class="btn sch-btn" data-enlarge="0">Enlarge diagram</button>
+    <p class="small muted">Trip-circuit supervision with one isolated binary input: BI 1.1 lies across the trip contact; the resistor R in series with a spare NC contact of -S1 (31-32) bridges -S1 23-24, so the -Y1 coil and its wiring are monitored with the breaker open and closed. Control voltage must exceed 2 × the BI threshold (≥ 38 V). R between R<sub>min</sub> = R<sub>coil</sub>·(V<sub>ctrl</sub> − V<sub>coil,max off</sub>)/V<sub>coil,max off</sub> (so -Y1 does not trip) and R<sub>max</sub> = (V<sub>ctrl</sub> − V<sub>BI,min</sub>)/I<sub>BI</sub> − R<sub>coil</sub> (so BI 1.1 still picks up); take the mean. With two binary inputs the second BI replaces R. All 7SJ82 outputs are standard relays (5 A continuous, break 30 W at L/R 40 ms): the -Y1 coil current is broken by -S1 23-24 inside the breaker, not by BO 1.1. Routing of BIs / BOs is free in DIGSI 5; CB position should be wired as a double-point indication (closed + open). <span class="ref">S5F p. 669–686, 780–786 · S5H p. 237</span></p>
+    <h3>Example: CT and VT inputs</h3>
+    <div class="scroll-x sch-wrap">${analogSvg()}</div><button type="button" class="btn sch-btn" data-enlarge="1">Enlarge diagram</button>
+    <p class="small muted">CT secondaries earthed at one point on -X2 (installation report 9.1), never opened under load: close the shorting jumpers on -X2 before opening a test slider. VT secondaries earthed at the terminal strip (10.6), damping resistor in the open-delta winding (10.9).</p>
+    <h3>Example: settings for a cable feeder</h3>
+    ${table(['Function', 'Example setting', 'Why'], SETTINGS)}
+    <p class="small muted">Illustrative numbers only. Real settings come from the network protection study (grading with the incomer and the downstream devices, CT saturation, cable short-circuit withstand).</p>
+    <h3>Breaker plug -X0 (64-pole): pins</h3>
+    ${table(['Circuit', 'Path (pins)', 'Note'], X0)}
+    <p class="small muted">From the 3AE sample circuit diagrams Fig. 59–63 (non-binding examples). The order-specific diagram in the LV compartment governs.</p>
+    <h3>Terminals, wires, torques</h3><div class="joints">${LV_JOINTS.map((j) => jointRow(j)).join('')}</div>
+    <h3>Commissioning checks (installation report)</h3>
+    <ul class="plain small checks">${CHECKS.map(([n, t]) => `<li><b>${esc(n)}</b> ${esc(t)}</li>`).join('')}</ul>
+    <h3>Testing the protection</h3>
+    <ul class="body">
+      <li>Connect DIGSI 5 to the USB-B front port or the Ethernet port J; check the firmware and the parameter set against the protection study.</li>
+      <li>Secondary injection through -X2 / -X3: close the CT shorting jumpers, open the test sliders, inject on the device side. Check pickup, times, LEDs, the trip and close commands on the breaker in TEST position (LV plug in, primary isolated).</li>
+      <li>Trip-circuit supervision: switch off -F02 or pull the LV plug: the TCS alarm must come after its delay; switch on again and it resets.</li>
+      <li>Primary injection or load check: CT polarity and the direction of the directional functions, earth-fault path through the core-balance CT (cable screens returned through the CT).</li>
+      <li>Alarms: MCB trip, VT MCB trip, breaker trip, device fault (life contact) up to the terminal strip or SCADA (report 8.1 / 8.2).</li>
+    </ul>`;
+}
+function selectLv(id) {
+  lvSel = id;
+  state.selPart = id;
+  state.isolate = true;
+  applyFocus();
+  applyGlass();
+  syncTools();
+  location.hash = 'lv';
+  renderLv();
+}
+function lvTourGo(k) {
+  const x = LV_TOUR[k];
+  lvTour = k;
+  lvSel = null; state.selPart = null; state.lvFocus = x.focus; state.lvEx = x.ex; state.lvDoor = x.door; state.lvCut = false; state.isolate = false; state.glass = x.glass !== false;
+  applyCut(); applyFocus(); applyGlass(); syncTools(); goView(x.view); renderLv();
+}
+
 function selectBk(id) {
   bkSel = id;
   state.selPart = id;
@@ -1068,13 +1179,14 @@ function renderBreakerReadout() {
 function syncTools() {
   for (const b of document.querySelectorAll('[data-truck]')) b.setAttribute('aria-pressed', String(b.dataset.truck === state.truck));
   for (const b of document.querySelectorAll('[data-esw]')) b.setAttribute('aria-pressed', String(b.dataset.esw === (state.eswT > 0.5 ? 'closed' : 'open')));
-  $('#ex').value = String(Math.round((state.mode === 'breaker' ? state.bkEx : state.ex) * 100));
-  $('#t-cut').setAttribute('aria-pressed', String(state.mode === 'breaker' ? state.bkCut : state.cut));
+  $('#ex').value = String(Math.round(state[mk().e] * 100));
+  $('#t-cut').setAttribute('aria-pressed', String(state[mk().c]));
   $('#t-row').setAttribute('aria-pressed', String(state.row));
   $('#t-glass').setAttribute('aria-pressed', String(state.glass));
   $('#t-iso').setAttribute('aria-pressed', String(state.isolate));
   $('#t-lab').setAttribute('aria-pressed', String(state.labels));
   for (const b of document.querySelectorAll('[data-bolts]')) b.setAttribute('aria-pressed', String(b.dataset.bolts === state.bolts));
+  for (const b of document.querySelectorAll('[data-lvdoor]')) b.setAttribute('aria-pressed', String((b.dataset.lvdoor === 'open') === state.lvDoor > 0.5));
 }
 function variantNote() {
   const notes = [];
@@ -1092,7 +1204,7 @@ function wire() {
     else if (t.dataset.truck) rackTo(t.dataset.truck);
     else if (t.dataset.esw) setEsw(t.dataset.esw);
     else if (t.dataset.bolts) { state.bolts = t.dataset.bolts; syncTools(); applyFocus(); }
-    else if (t.id === 't-cut') { if (state.mode === 'breaker') state.bkCut = !state.bkCut; else state.cut = !state.cut; applyCut(); syncTools(); }
+    else if (t.id === 't-cut') { state[mk().c] = !state[mk().c]; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
     else if (t.id === 't-glass') { state.glass = !state.glass; applyGlass(); syncTools(); }
     else if (t.id === 't-iso') { state.isolate = !state.isolate; applyGlass(); syncTools(); }
@@ -1101,6 +1213,11 @@ function wire() {
     else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
     else if (t.dataset.bk) bkDo(t.dataset.bk);
     else if (t.dataset.bkpart) { selectBk(t.dataset.bkpart); framePart(t.dataset.bkpart); }
+    else if (t.dataset.lvpart) { selectLv(t.dataset.lvpart); framePart(t.dataset.lvpart); }
+    else if (t.dataset.lvtour) lvTourGo(+t.dataset.lvtour);
+    else if (t.dataset.enlarge) { const d = $('#schDlg'); $('.dlg-body', d).innerHTML = [controlSvg, analogSvg][+t.dataset.enlarge](); d.showModal(); }
+    else if (t.dataset.dlgclose != null) $('#schDlg').close();
+    else if (t.dataset.lvdoor) { state.lvDoor = t.dataset.lvdoor === 'open' ? 1 : 0; syncTools(); }
     else if (t.dataset.tear) {
       const x = BK_TEAR[+t.dataset.tear];
       bkSel = null; state.selPart = null; state.bkFocus = x.focus; state.bkEx = x.ex; state.bkCut = !!x.cut; state.isolate = !!x.iso;
@@ -1114,7 +1231,7 @@ function wire() {
     else if (t.dataset.joint) selectJoint(t.dataset.joint);
     else if (t.dataset.f) { torqueFilter[t.dataset.f] = t.dataset.v; renderTorques(); }
   });
-  $('#ex').addEventListener('input', (e) => { if (state.mode === 'breaker') { state.bkEx = +e.target.value / 100; renderLabels(); } else state.ex = +e.target.value / 100; });
+  $('#ex').addEventListener('input', (e) => { state[mk().e] = +e.target.value / 100; if (solo()) renderLabels(); });
   for (const [id, key, parse] of [['v-w', 'W', Number], ['v-d', 'D', Number], ['v-bus', 'bus', Number], ['v-ur', 'ur', Number]]) {
     const el = $('#' + id);
     el.value = String(state[key]);
@@ -1126,6 +1243,7 @@ function wire() {
       renderStep();
       renderSpecs();
       renderTorques();
+      renderLv();
       if (state.selPart) renderParts();
     });
   }
@@ -1152,6 +1270,7 @@ renderTorques();
 renderSpecs();
 renderSources();
 renderBreaker();
+renderLv();
 applyThemeColors();
 setStep(state.step, {view: false});
 goView(STEPS[state.step].view || 'iso', true);

@@ -7,6 +7,7 @@
 // same general torque table. Section numbers point into those documents.
 
 import {CB_DOCS, CB_JOINTS, OPS_JOINTS, OPS_STEPS} from './ops.js';
+import {LV_DOCS} from './lvpane.js';
 
 const BASE_DOCS = [
   {k: 'I', t: 'Installation Instructions NXAIR ≤ 17.5 kV / ≤ 40 kA / ≤ 4000 A', no: '110-0084.9', rev: 'Rev. 15, Dec 2020', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:33c1a0b8-3ac8-4cbe-8923-0fc9568e6a41/110-0084-9-e.pdf'},
@@ -18,7 +19,7 @@ const BASE_DOCS = [
   {k: 'C', t: 'Catalog HA 25.71 NXAIR and NXAIR M', no: 'HA 25.71', rev: 'Edition 2019', url: 'https://assets.new.siemens.com/siemens/assets/api/uuid:35caf0b0-ed6f-474f-846c-8f5545a6fddb/catalogue-nxair-en.pdf'},
 ];
 
-export const DOCS = [...BASE_DOCS, ...CB_DOCS];
+export const DOCS = [...BASE_DOCS, ...CB_DOCS, ...LV_DOCS];
 
 // I §7.1 and §12.2. Applies to every bolted joint that has no torque stated in its own step.
 export const TORQUE_TABLE = [
@@ -163,7 +164,7 @@ export const PARTS = [
   {id: 'breaker', comp: 'truck', name: 'Vacuum circuit-breaker 3AE (3AE1 / SION 3AE5)', desc: 'Three vacuum interrupter poles with upper and lower contact arms ending in tulip contacts (greased thin with Molykote Longterm 2 plus). Spring-stored operating mechanism, motor-charged; by hand ≈ 50 turns of the hand crank. Rack with the racking crank after unlocking with the 5 mm double-bit key (90°).', joints: []},
   {id: 'truck', comp: 'truck', name: 'Truck / withdrawable chassis', desc: 'Positions: service (connected), test (disconnected, LV plug in), disconnected (LV plug out). Taken out with the service truck. Solenoid-interlock locking bolts are removed once auxiliary voltage is available (I §13.2).', joints: []},
   {id: 'hvdoor', comp: 'sdc', name: 'High-voltage door', desc: 'Pressure-resistant front door with control board: racking opening and slide, double-bit key opening, earthing-switch opening and slide, mimic with mechanical position indicators, inspection window, spring indicator, operations counter, CLOSE / OPEN openings. Opens only with the truck in test position.', joints: []},
-  {id: 'lv', comp: 'lv', name: 'Low-voltage compartment', desc: 'Protection relay, terminals, MCBs, bus wires panel to panel. Height 630 mm standard (980 mm high version: panel 2350 mm). Door key: 3 mm double-bit. Bolted to the neighbour with 3 or 5 × M8x20.', joints: ['lv']},
+  {id: 'lv', comp: 'lv', name: 'Low-voltage compartment', desc: 'Protection relay (example: SIPROTEC 5 7SJ82, 1/3 × 19", detailed with wiring in the LV + relay tab), terminals, MCBs, bus wires panel to panel. Height 630 mm standard (980 mm high version: panel 2350 mm). Door key: 3 mm double-bit. Bolted to the neighbour with 3 or 5 × M8x20.', joints: ['lv']},
   {id: 'prc', comp: 'prc', name: 'Pressure relief duct (PRC)', desc: 'Collects arc gases from all compartments through flaps and leads them sideways or to the rear (evacuation duct) or into an absorber. Bolted panel to panel with 14 + 8 × M8x20, 30 Nm. Relief flaps must lie flush on top of the busbar compartment.', joints: ['prcLow', 'prcUp', 'evac', 'fan']},
   {id: 'shellB', comp: 'busbar', name: 'Fixed compartment walls + relief flaps', desc: 'Galvanised walls that stay on the panel: busbar compartment rear wall, the bushing plate between busbar and switching-device compartment, the partition to the LV compartment, and the pressure relief flaps on top of each high-voltage compartment that open into the pressure relief duct in an internal arc. The flaps must rest flush (installation report 2.6).', joints: []},
   {id: 'shutterMech', comp: 'sdc', name: 'Shutter mechanism (left + right)', desc: 'Drive slides and cranked levers on both side walls of the switching-device compartment. The truck pushes the slides while racking in; the levers lift the upper shutter and lower the lower shutter. Do not reach into it. Linkage cleaned with WD-40 on a cloth, never sprayed.', joints: []},

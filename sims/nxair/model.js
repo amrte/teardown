@@ -48,6 +48,11 @@ export function makeMaterials(planes) {
     grey: m({color: 0x5e6569, roughness: 0.6}),
     white: m({color: 0xeef0ee, roughness: 0.5}),
     spring: m({color: 0x3f4447, roughness: 0.35, metalness: 0.8}),
+    orange: m({color: 0xd9822b, roughness: 0.55}), // test-disconnect sliders
+    slate: m({color: 0x34404c, roughness: 0.45, metalness: 0.1}), // SIPROTEC 5 front panel
+    beige: m({color: 0xe4ddc8, roughness: 0.6}), // keys, label strips, terminal housings
+    termGrey: m({color: 0xa7abad, roughness: 0.6}), // terminal blocks
+    ledOff: m({color: 0x56606a, roughness: 0.4}),
   };
 }
 
@@ -566,14 +571,21 @@ export function buildPanel(mats, opts) {
     p.add(RB(-hw + 4, hw - 4, yLV + 6, LVTOP - 6, D - 24, D, 4, 1), 'ral', 'LV door');
     for (const y of [yLV + 80, LVTOP - 80]) p.add(C(6, 6, 60, 'y', -hw + 10, y, D + 5), 'steel', 'Door hinge');
     p.add(RB(hw - 60, hw - 30, 1660, 1760, D, D + 16, 4), 'black', 'Door lock (3 mm double-bit)');
-    const rx = -60, ry = 1720;
-    p.add(RB(rx - 75, rx + 75, ry - 130, ry + 140, D, D + 18, 4), 'grey', 'Protection device');
-    p.add(B(rx - 55, rx + 55, ry + 40, ry + 120, D + 18, D + 19), 'screen', 'Protection device display');
-    for (let i = 0; i < 8; i++) p.add(C(3, 3, 3, 'z', rx - 63, ry + 110 - i * 14, D + 19.5), i < 2 ? 'green' : 'red', 'LED');
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) p.add(RB(rx - 28 + c * 22, rx - 12 + c * 22, ry - 100 + r * 22, ry - 84 + r * 22, D + 18, D + 21, 2, 1), 'white', 'Keypad');
-    for (let i = 0; i < 3; i++) p.add(C(7, 7, 6, 'z', -60 + i * 40, yLV + 50, D + 4), ['yellow', 'green', 'red'][i], 'LRM test socket');
-    p.add(B(-90, 90, yLV + 30, yLV + 70, D, D + 1), 'black', 'Test socket panel');
-    p.add(B(rx + 100, rx + 210, 1880, 1930, D, D + 1), 'white', 'Panel designation label');
+    // SIPROTEC 5 7SJ82, 1/3 x 19" flush-mounted (detailed in lv.js): front 150 x 266 mm, 34 mm proud, housing 145 x 244 mm
+    // 163 mm deep + 34 mm terminals
+    const rx = 0, ry = yLV + 380;
+    p.add(RB(rx - 75, rx + 75, ry - 133, ry + 133, D, D + 30, 5, 2), 'black', 'SIPROTEC 5 7SJ82 protection device');
+    p.add(B(rx - 70, rx + 70, ry - 128, ry + 128, D + 30, D + 33), 'slate', 'SIPROTEC 5 7SJ82 protection device');
+    p.add(B(rx - 25, rx + 47, ry - 25, ry + 85, D + 33, D + 34), 'screen', 'Protection device display');
+    for (let i = 0; i < 16; i++) p.add(B(rx - 65, rx - 61, ry + 90 - i * 6.9, ry + 94 - i * 6.9, D + 33, D + 34), i < 2 ? 'green' : 'red', 'LED');
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) p.add(B(rx - 9.5 + c * 14, rx + 1.5 + c * 14, ry - 67.5 - r * 14, ry - 56.5 - r * 14, D + 33, D + 35), 'beige', 'Keypad');
+    for (const [y, m] of [[-67, 'yellow'], [-86, 'green'], [-105, 'red']]) p.add(B(rx + 36, rx + 52, ry + y - 8, ry + y + 8, D + 33, D + 35), m, 'Ctrl / CLOSE / OPEN keys');
+    p.add(B(rx - 72.5, rx + 72.5, ry - 122, ry + 122, D - 163, D - 24), 'grey', 'Protection device housing');
+    p.add(B(rx - 70, rx + 7, ry + 32, ry + 120, D - 197, D - 163), 'termGrey', 'Protection device terminals');
+    p.add(B(rx - 64, rx + 51, ry - 122, ry + 68, D - 189, D - 163), 'termGrey', 'Protection device terminals');
+    for (let i = 0; i < 3; i++) p.add(C(7, 7, 8, 'z', -50 + i * 50, yLV + 50, D + 4), ['yellow', 'green', 'red'][i], 'LRM test socket');
+    p.add(B(-90, 90, yLV + 30, yLV + 70, D, D + 2), 'black', 'Test socket panel');
+    p.add(B(rx + 110, rx + 220, 1880, 1930, D, D + 1), 'white', 'Panel designation label');
     p.add(B(-(hw - 20), hw - 20, yLV + 30, LVTOP - 30, zLV + 2, zLV + 4), 'galv', 'Mounting plate');
     for (const [y, n, mat, lab] of [[1880, 6, 'white', 'MCB (3RV)'], [1715, 4, 'grey', 'Auxiliary relay'], [1525, Math.round((W - 160) / 14), 'grey', 'Terminal block']]) {
       p.add(B(-(hw - 80), hw - 80, y - 18, y + 18, zLV + 4, zLV + 12), 'steel', 'DIN rail');

@@ -30,6 +30,10 @@
           <button type="button" data-esw="closed" aria-pressed="false" title="Close (earth) the feeder earthing switch">ES earthed</button>
           <button type="button" data-esw="howto" aria-pressed="false" title="Step-by-step procedure on the model">How?</button>
         </div>
+        <div class="seg" id="lvDoorSeg" role="group" aria-label="LV door" hidden>
+          <button type="button" data-lvdoor="closed" aria-pressed="false">Door closed</button>
+          <button type="button" data-lvdoor="open" aria-pressed="true">Door open</button>
+        </div>
         <label class="slider" for="ex">Explode <input id="ex" type="range" min="0" max="100" value="0"></label>
         <div class="seg" role="group" aria-label="Display">
           <button type="button" id="t-cut" aria-pressed="false" title="Section through the panel centre">Cut</button>
@@ -50,10 +54,12 @@
         <span class="lg-x muted">drag to orbit · wheel to zoom · ← → steps</span>
       </div>
     </section>
+    <dialog id="schDlg" class="sch-dlg" aria-label="Diagram"><div class="dlg-head"><span class="eyebrow">Example diagram · typical, not an order drawing</span><button type="button" class="btn" data-dlgclose>Close</button></div><div class="dlg-body"></div></dialog>
     <aside class="rail">
       <nav class="tabs" aria-label="Reference">
         <a href="#steps" data-tab="steps">Steps</a>
         <a href="#breaker" data-tab="breaker">Breaker</a>
+        <a href="#lv" data-tab="lv">LV + relay</a>
         <a href="#parts" data-tab="parts">Parts</a>
         <a href="#torques" data-tab="torques">Torques</a>
         <a href="#specs" data-tab="specs">Specs</a>
@@ -61,6 +67,7 @@
       </nav>
       <div class="pane" id="pane-steps"></div>
       <div class="pane" id="pane-breaker" hidden></div>
+      <div class="pane" id="pane-lv" hidden></div>
       <div class="pane" id="pane-parts" hidden></div>
       <div class="pane" id="pane-torques" hidden></div>
       <div class="pane" id="pane-specs" hidden></div>

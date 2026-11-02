@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import {buildPanel, lvCableGeometry, makeMaterials, SIZES, TRAVEL} from './model.js';
 import {buildBreaker} from './breaker.js';
+import {LV_PARTS, buildLV} from './lv.js';
 import {PartBuilder} from './geom.js';
 PartBuilder.keepGeo = true;
 import {JOINTS, WIDTHS} from './data.js';
@@ -189,4 +190,38 @@ if (args.includes('--breaker') || args.includes('--all')) {
   }
   console.log(`\nbreaker: ${bt ? 'CLASHES: ' + bt : 'clean'}`);
   if (bt) process.exitCode = 1;
+}
+
+// ------------------------------------------------------------------------------------------------ LV tab
+const LV_ALLOW = [
+  [/^loom:Door loom/, /^(relay|relayTerm|lvDoor|lrm|lvBox|lvPlate|auxDev|busWire):/, 'curved loom: its box spans half the door; checked in renders'],
+  [/^loom:Single wire/, /^(mcb|terms|auxDev|lvPlate):/, 'wire leaves the device terminal and enters the duct'],
+  [/^relay:Housing|^relay:Heat-sink/, /^lvDoor:Door$/, 'housing passes through the door cut-out (148 × 246 vs 145 × 244)'],
+  [/^socket:/, /^lvBox:Floor/, 'socket hangs under the floor opening'],
+  [/^plugs:Cable from the panel/, /^lvBox:Floor/, 'cable comes through the floor opening'],
+];
+if (args.includes('--lv') || args.includes('--all')) {
+  let lt = 0;
+  for (const W of [600, 800, 1000]) for (const door of [0, 1]) for (const ex of [0]) {
+    const lv = buildLV(mats, {W});
+    lv.pose({ex, door});
+    // with the door open, door-mounted parts are rotated and their boxes inflate: they were checked against each other
+    // with the door closed, so only door-mounted vs fixed parts are checked open
+    const doorIds = new Set(LV_PARTS.filter((p) => p.door).map((p) => p.id).concat(['loom']));
+    const res = clashes(collect(lv.root)).filter((r) => !LV_ALLOW.some(([x, y]) => (x.test(r.a) && y.test(r.b)) || (x.test(r.b) && y.test(r.a))))
+      .filter((r) => !(door && doorIds.has(r.a.split(':')[0]) && doorIds.has(r.b.split(':')[0])));
+    if (res.length) {
+      console.log(`\n== LV W${W} door ${door ? 'open' : 'closed'}: ${res.length}`);
+      const seen = new Set();
+      for (const r of res.sort((x, y) => y.pen - x.pen)) {
+        const k = [r.a, r.b].sort().join(' × ');
+        if (seen.has(k)) continue;
+        seen.add(k);
+        console.log(`  ${String(r.pen).padStart(4)} mm  ${r.a}  ×  ${r.b}  @ ${r.at.join(',')}`);
+      }
+    }
+    lt += res.length;
+  }
+  console.log(`\nLV: ${lt ? 'CLASHES: ' + lt : 'clean'}`);
+  if (lt) process.exitCode = 1;
 }

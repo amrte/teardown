@@ -55,14 +55,14 @@ node sims/build.mjs strandbeest-live
 
 ## NXAIR switchgear teardown
 
-`sims/nxair/` is a different kind of page: a reference teardown of the Siemens NXAIR air-insulated medium-voltage switchgear (≤ 17.5 kV, ≤ 40 kA, ≤ 4000 A). A 3D circuit-breaker panel built to the Siemens dimension drawings (110-2300.9) sits next to a rail with installation, operation and service steps, every part and sub-component, every bolted joint (count, size, washers, tightening and control torque, dry or greased, source section) and the spec sheets, taken from the NXAIR installation and operating instructions, the drawing set, the catalogs and the 3AE circuit-breaker manual.
+`sims/nxair/` is a different kind of page: a reference teardown of the Siemens NXAIR air-insulated medium-voltage switchgear (≤ 17.5 kV, ≤ 40 kA, ≤ 4000 A). A 3D circuit-breaker panel built to the Siemens dimension drawings (110-2300.9) sits next to a rail with installation, operation and service steps, every part and sub-component, every bolted joint (count, size, washers, tightening and control torque, dry or greased, source section) and the spec sheets, taken from the NXAIR installation and operating instructions, the drawing set, the catalogs and the 3AE circuit-breaker manual. The LV + relay tab adds a stand-alone low-voltage compartment with a SIPROTEC 5 7SJ82 drawn to the SIPROTEC 5 hardware manual (front panel, rear terminals, cut-out, terminal torques), a typical MCB / relay / terminal-strip layout, and example control and CT/VT diagrams wired to the 3AE breaker's 64-pole plug pins.
 
 ```
-node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~780 KB
+node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~840 KB
 node sims/nxair/check.mjs --all --bolts   # clearance check: no part or bolt penetrates another
 ```
 
-`check.mjs` builds every variant (3 widths x 3 depths x 3 busbar ratings, breaker in service and test, earthing switch open and closed, and the stand-alone breaker with spring and contacts in all states) and reports any two parts that interpenetrate by more than 2 mm. Real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits) are listed with a reason; coaxial fits are verified radially.
+`check.mjs` builds every variant (3 widths x 3 depths x 3 busbar ratings, breaker in service and test, earthing switch open and closed, the stand-alone breaker with spring and contacts in all states, and the LV compartment in every width with the door closed and open) and reports any two parts that interpenetrate by more than 2 mm. Real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits) are listed with a reason; coaxial fits are verified radially.
 
 ## Credits
 
