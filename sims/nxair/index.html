@@ -25,6 +25,11 @@
           <button type="button" data-truck="test" aria-pressed="false">Test</button>
           <button type="button" data-truck="out" aria-pressed="false">Out</button>
         </div>
+        <div class="seg" id="eswSeg" role="group" aria-label="Feeder earthing switch">
+          <button type="button" data-esw="open" aria-pressed="true" title="Open (de-earth) the feeder earthing switch">ES open</button>
+          <button type="button" data-esw="closed" aria-pressed="false" title="Close (earth) the feeder earthing switch">ES earthed</button>
+          <button type="button" data-esw="howto" aria-pressed="false" title="Step-by-step procedure on the model">How?</button>
+        </div>
         <label class="slider" for="ex">Explode <input id="ex" type="range" min="0" max="100" value="0"></label>
         <div class="seg" role="group" aria-label="Display">
           <button type="button" id="t-cut" aria-pressed="false" title="Section through the panel centre">Cut</button>

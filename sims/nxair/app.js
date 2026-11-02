@@ -789,7 +789,7 @@ function applyMode() {
   if (!world) return;
   world.row.visible = state.mode === 'panel';
   world.bkHolder.visible = state.mode === 'breaker';
-  for (const id of ['truckSeg', 'boltSeg']) { const el = $('#' + id); if (el) el.hidden = state.mode === 'breaker'; }
+  for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = state.mode === 'breaker'; }
   $('#t-row').hidden = state.mode === 'breaker';
   applyCut();
   applyFocus();
@@ -814,6 +814,29 @@ function rackTo(pos) {
   syncTools();
   applyPose();
   return true;
+}
+
+// quick earthing-switch operation from the toolbar: the same interlocks and the same lever sequence, played in one go
+let eswBusy = false;
+function setEsw(cmd) {
+  if (cmd === 'howto') {
+    const i = STEPS.findIndex((x) => x.id === 'earthing');
+    location.hash = 'steps';
+    setStep(i);
+    drill = {dir: state.eswT > 0.5 ? 'deearth' : 'earth', i: 0};
+    renderStep();
+    requestAnimationFrame(() => document.querySelector('.drill')?.scrollIntoView({block: 'start'}));
+    return;
+  }
+  const want = cmd === 'closed' ? 1 : 0;
+  if (eswBusy) return toast('The earthing switch is being operated.');
+  if (Math.abs(state.eswT - want) < 0.5) return toast(want ? 'The feeder is already earthed (indicator vertical I).' : 'The earthing switch is already open (indicator horizontal).', 'ok');
+  if (state.truck === 'service') return toast('Interlocked: the earthing switch can only be operated with the breaker in TEST position. Click Test first (racking needs the breaker OPEN).');
+  eswBusy = true;
+  toast(want ? 'Earthing: slide up, lever in (pins horizontal), 180° clockwise, lever out, slide down. Indicator turns vertical I.' : 'De-earthing: slide up, lever in (pins horizontal), 180° counter-clockwise, lever out, slide down. Indicator turns horizontal.', 'ok');
+  const seq = [[0, () => { state.slide = 1; }], [500, () => { state.lever = 1; }], [1100, () => { state.eswT = want; }], [2900, () => { state.lever = 0; }], [3400, () => { state.slide = 0; eswBusy = false; syncTools(); }]];
+  for (const [ms, f] of seq) setTimeout(() => { f(); applyPose(); }, reduced ? 0 : ms);
+  syncTools();
 }
 
 // ================================================================================ earthing-switch drill
@@ -1021,6 +1044,7 @@ function renderBreakerReadout() {
 // -------------------------------------------------------------------------------------------- tools wiring
 function syncTools() {
   for (const b of document.querySelectorAll('[data-truck]')) b.setAttribute('aria-pressed', String(b.dataset.truck === state.truck));
+  for (const b of document.querySelectorAll('[data-esw]')) b.setAttribute('aria-pressed', String(b.dataset.esw === (state.eswT > 0.5 ? 'closed' : 'open')));
   $('#ex').value = String(Math.round((state.mode === 'breaker' ? state.bkEx : state.ex) * 100));
   $('#t-cut').setAttribute('aria-pressed', String(state.mode === 'breaker' ? state.bkCut : state.cut));
   $('#t-row').setAttribute('aria-pressed', String(state.row));
@@ -1043,6 +1067,7 @@ function wire() {
     if (!t) return;
     if (t.dataset.view) goView(t.dataset.view);
     else if (t.dataset.truck) rackTo(t.dataset.truck);
+    else if (t.dataset.esw) setEsw(t.dataset.esw);
     else if (t.dataset.bolts) { state.bolts = t.dataset.bolts; syncTools(); applyFocus(); }
     else if (t.id === 't-cut') { if (state.mode === 'breaker') state.bkCut = !state.bkCut; else state.cut = !state.cut; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
