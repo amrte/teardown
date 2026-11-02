@@ -49,24 +49,18 @@ export const SETTINGS = [
 // guided views for the 3D model: door state, explode, focus, camera
 export const LV_TOUR = [
   {t: 'Door closed: the operator side', door: 0, ex: 0, glass: false, focus: ['relay', 'lrm'], view: 'front', text: 'The protection device is flush-mounted in the LV door, the voltage detecting sockets L1–L3 sit below it, the lock on the right takes the 3 mm double-bit key. Everything the operator reads or presses is on this door.'},
-  {t: 'SIPROTEC 5 on-site operation panel', door: 0, ex: 0, glass: false, focus: [], view: 'relay', text: 'RUN / ERROR LEDs, 16 configurable two-colour LEDs with label strip, large display, softkeys and navigation keys, numeric keypad with function keys F1–F9, Ctrl, I (CLOSE) and O (OPEN), USB-B service port for DIGSI 5.'},
+  {t: 'SIPROTEC 5 front: every element', door: 0, ex: 0, glass: false, focus: [], view: 'relayFront', text: 'Top: Run / Error LEDs and the device designation. Left: 16 two-colour LEDs and their label strip (example texts). Right: the large display, here the control display with the feeder mimic and measured values. Below: LED reset key, two softkeys, navigation keys, USB port cover. Hover any LED or key for its name and example use.'},
+  {t: 'LEDs and display close-up', door: 0, ex: 0, glass: false, focus: [], view: 'relayTop', text: 'Each LED is two-colour (red / green), latched or unlatched, routed in DIGSI 5. LED 11 shows the breaker position (green = open). The softkey captions sit at the bottom of the display, above the two round softkeys.'},
+  {t: 'Keypad close-up: keys 0–9, F1–F9, Fn, Ctrl, I, O', door: 0, ex: 0, glass: false, focus: [], view: 'relayKeys', text: 'Blue Fn turns keys 1–9 into function keys F1–F9 (small blue print on each key, example meanings on the strip on the left). Ctrl (yellow) opens control; I (green) closes, O (red) opens the selected device after confirmation.'},
   {t: 'Open the door: device rear and door loom', door: 1, ex: 0, focus: ['relayTerm', 'loom'], view: 'relayRear', text: 'Behind the door: the 1/3 × 19" housing (163 mm + 34 mm terminals), plug-in terminal blocks A (CT), B and D (VT, binary I/O), L (power supply), plug-in module positions E / F, Ethernet J, protective earth. The flexible door loom runs to the hinge.'},
-  {t: 'Pull the terminal blocks', door: 1, ex: 0.6, focus: ['relayTerm', 'relay'], view: 'relayRear', text: 'Terminal blocks are held by spring clips: bend the clips outwards and pull the wired blocks off the rear plate; the device can then be taken out to the front after removing the 4 screw covers and M4 screws. The current terminal shorts the CT circuits when pulled; still short them on -X2 first.'},
+  {t: 'Rear close-up: every terminal', door: 1, ex: 0, glass: true, focus: [], view: 'rearClose', text: 'Block letters on the rear plate, terminal numbers on each block (odd numbers on the left seen from behind). Every screw is labelled with its designation, function and the example connection: hover it. Wires with ferrules and markers are drawn on the terminals this example uses; spare contacts stay empty.'},
+  {t: 'Blocks B and D close-up', door: 1, ex: 0, glass: true, focus: [], view: 'rearBlocks', text: 'B: V1 (B1), V2 (B3), V3 (B4), common B2, V4 (B5–B6), BO 1.1 (B7–B8), BO 1.2 (B9 NC / B10 common / B11 NO), BO 1.3 (B12 / B13 / B14). D: BO 1.4–1.6 (D1, D3, D5, common D2), BI 1.1 isolated (D4–D6), BI 1.2–1.8 (D7–D13, common D14).'},
+  {t: 'Current block A close-up', door: 1, ex: 0, glass: true, focus: [], view: 'rearA', text: 'A1–A8 = I1–I4, the dot terminal (●) is the odd one. Insulated ring lugs D 5.0 mm, 2.0–4.0 mm², 2.7 Nm, at most 2 lugs per screw. The CTs sit inside this block, so pulling it does not open the CT circuits; short them on -X2 anyway before work.'},
+  {t: 'Pull the terminal blocks', door: 1, ex: 0.6, focus: ['relayTerm', 'relay'], view: 'relayRear', text: 'Terminal blocks are held by spring clips: bend the clips outwards and pull the wired blocks off the rear plate; the device can then be taken out to the front after removing the 4 screw covers and M4 screws.'},
   {t: 'Mounting plate: MCBs, relays, terminal strips', door: 1, ex: 0, focus: ['mcb', 'auxDev', 'terms', 'lvPlate'], view: 'inside', text: 'Three DIN-rail rows with slotted ducts: top row climate control and interposing relays, middle row the MCBs (supply, control, motor, heater, VT MCBs), bottom row terminal strips -X1 / -X2 / -X3 with the shield bar below.'},
   {t: 'Where the wires come in', door: 1, ex: 0.5, focus: ['plugs', 'busWire', 'socket'], view: 'iso', text: 'From below: 10-pole coded plug connections for the withdrawable-part and panel wiring, the customer cable grommet over the wiring duct (left), and under the floor the 64-pole socket for the breaker plug. At the sides: bus-wire plug connectors to the neighbour panels.'},
 ];
 
-// the operating elements of the front panel (hardware manual Fig. 2-1, on-site operation panel with large display)
-export const FRONT = [
-  ['RUN (green) / ERROR (red)', 'Device ready / device fault. ERROR lit = protection may be blocked: check the life contact alarm.'],
-  ['16 LEDs, two-colour', 'Freely assigned in DIGSI 5 (pickup, trip, CB position, alarms), latched or unlatched; text on the label strip next to them.'],
-  ['Large display', 'Menus, measured values, fault records, and the control display with the feeder mimic.'],
-  ['Softkeys + navigation keys', 'Context functions shown at the bottom of the display; arrows move through the menus.'],
-  ['LED test / reset key', 'Tests all LEDs, resets latched LEDs and the latched trip indication.'],
-  ['Keypad 0–9 with F1–F9, Fn', 'Numbers and passwords; with Fn the keys act as function keys F1–F9 (e.g. local/remote, display pages).'],
-  ['Ctrl, I, O', 'Ctrl opens control; select the switching device, then I = CLOSE, O = OPEN and confirm. Switching authority (local / remote) and interlocking conditions are checked by the device.'],
-  ['USB type B', 'Service port for DIGSI 5 (settings, fault records, firmware). Keep the cover closed in service.'],
-];
 
 // example I/O allocation, 7SJ82 with PS101 + IO102 (terminal numbers from the hardware manual / catalog)
 export const IO = [

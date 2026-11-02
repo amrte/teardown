@@ -18,6 +18,7 @@
 // closed door's outer face at z = 0. The door (and everything on it) hangs in a hinge group that pose() rotates.
 import * as THREE from 'three';
 import {B, C, EY, EZ, PartBuilder, RB, TU, rect, rectHole, spread} from './geom.js';
+import {buildSiprotec, siprotecMaterials} from './siprotec.js';
 
 export const LV_PARTS = [
   {id: 'lvBox', name: 'Compartment housing', grp: 'Compartment', dir: [0, 0, 0], door: false, desc: 'Galvanised sheet-steel box, 630 mm high (980 mm option), 406 mm deep, the full panel width. It sits on the switching-device compartment and is partitioned safe-to-touch from the high-voltage part. Bolted to the neighbour LV compartment through the side wall with 3 × M8x20 (5 × at 980 mm), contact washers and nuts, 30 Nm (I §7.9). Floor openings: cable grommet for the customer wiring duct (left), the 64-pole socket wiring and the 10-pole plug connections. It can be removed as a whole because all bus wires and control cables are plugged (HA 25.73 p. 30).'},
@@ -55,6 +56,7 @@ export function buildLV(mats, {W = 800} = {}) {
   doorFrame.position.set(-hingeX, 0, -hingeZ);
   hinge.add(doorFrame);
 
+  const MX = {...mats, ...siprotecMaterials(mats)}; // + textured SIPROTEC materials (browser only)
   const part = (id) => {
     const meta = LV_PARTS.find((p) => p.id === id);
     const g = new THREE.Group();
@@ -62,7 +64,7 @@ export function buildLV(mats, {W = 800} = {}) {
     g.userData.dir = new THREE.Vector3(...(meta?.dir || [0, 0, 0]));
     (meta?.door ? doorFrame : root).add(g);
     (parts[id] ||= []).push(g);
-    return new PartBuilder(g, mats);
+    return new PartBuilder(g, MX);
   };
 
   // ------------------------------------------------------------------------------------------------ housing
@@ -122,63 +124,12 @@ export function buildLV(mats, {W = 800} = {}) {
   }
 
   // ------------------------------------------------------------------------------------------------ SIPROTEC 5 7SJ82
+  // every key, LED and terminal as its own element, printed legends as textures (siprotec.js)
   {
-    const p = part('relay');
-    const fx = 75, fy = 133; // front 150 x 266
-    p.add(RB(rx - fx, rx + fx, ry - fy, ry + fy, 0, 30, 5, 2), 'black', 'Front frame');
-    p.add(B(rx - 70, rx + 70, ry - 128, ry + 128, 30, 33), 'slate', 'On-site operation panel');
-    // housing through the cut-out, heat-sink ribs on both sides, rear plate
-    p.add(B(rx - 62, rx + 62, ry - 122, ry + 122, -163, 0), 'grey', 'Housing (1/3 × 19")');
-    for (const s of [-1, 1]) for (const y of spread(ry - 110, ry + 110, 6)) p.add(B(Math.min(rx + s * 62, rx + s * 72.5), Math.max(rx + s * 62, rx + s * 72.5), y - 6, y + 6, -160, -8), 'grey', 'Heat-sink ribs');
-    p.add(B(rx - 62, rx + 62, ry - 122, ry + 122, -165, -163), 'galvDark', 'Rear plate');
-    // front elements (positions read from the hardware manual Fig. 2-1)
-    const F = 33, f = (x, y, w, h, d, mat, lab) => p.add(B(rx + x - w / 2, rx + x + w / 2, ry + y - h / 2, ry + y + h / 2, F, F + d), mat, lab);
-    f(-61, 106, 3.5, 3.5, 1.2, 'green', 'RUN LED');
-    f(-47, 106, 3.5, 3.5, 1.2, 'red', 'ERROR LED');
-    for (let i = 0; i < 16; i++) f(-63, 92 - i * 6.9, 3.2, 3.2, 1.2, i < 2 ? 'green' : 'red', 'LED 1–16 (two-colour, configurable)');
-    f(-44, 38, 22, 110, 0.6, 'white', 'LED label strip');
-    f(11, 30, 72, 110, 0.8, 'screen', 'Large display');
-    f(-63, -28, 10, 10, 1.5, 'beige', 'LED test / reset key');
-    f(-27, -31, 10, 10, 1.5, 'beige', 'Softkey (left)');
-    f(48, -34, 10, 10, 1.5, 'beige', 'Softkey (right)');
-    for (const [x, y] of [[10, -29], [10, -51], [-2, -40], [22, -40]]) f(x, y, 11, 11, 2, 'beige', 'Navigation keys');
-    f(-61, -76, 20, 30, 4, 'black', 'USB type B port with cover (DIGSI 5)');
-    f(-26, -84, 22, 62, 0.6, 'white', 'Function-key label strip');
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) {
-      const fn = r === 3 && c === 0;
-      f(-4 + c * 14, -62 - r * 14, 11, 11, 2, fn ? 'blue' : 'beige', fn ? 'Fn key' : r === 3 ? 'Keypad (0, .)' : 'Keypad 1–9 / function keys F1–F9');
-    }
-    f(44, -67, 16, 17, 2, 'yellow', 'Ctrl key');
-    f(44, -86, 16, 17, 2, 'green', 'Control key I (CLOSE)');
-    f(44, -105, 16, 17, 2, 'red', 'Control key O (OPEN)');
-    f(0, -122, 120, 6, 0.6, 'white', 'Device label strip');
-    for (const y of [ry + 124, ry - 124]) for (const x of [rx - 52, rx + 52]) p.add(C(3.5, 3.5, 2, 'z', x, y, 31), 'black', 'Screw cover (M4 fastening screw behind, 1.2 Nm)');
-    p.finish();
-  }
-  {
-    // rear terminals, positions read from the rear view of a 7xx82 with IO102 (Fig. 2-4 / 3-86). Seen from behind,
-    // the device's +x side is on the left.
-    const p = part('relayTerm');
-    const zr = -165;
-    const blk = (x0, x1, y0, y1, d, mat, lab) => p.add(B(rx + x0, rx + x1, ry + y0, ry + y1, zr - d, zr), mat, lab);
-    blk(-70, 7, 32, 120, 30, 'termGrey', 'Current terminal A (I1–I4, ring lugs, 2.7 Nm)');
-    for (let i = 0; i < 8; i++) {
-      const x = i % 2 ? -52 : -12, y = 110 - Math.floor(i / 2) * 22 - (i % 2 ? 6 : 0);
-      p.add(C(4.5, 4.5, 4, 'z', rx + x, ry + y, zr - 32), 'steel', 'Clamping screw (current terminal)');
-    }
-    blk(-64, -19, -21, 30, 24, 'termGrey', 'Voltage terminal B (14-pole: V1–V4, BO 1.1–1.3)');
-    blk(-64, -19, -122, -71, 24, 'termGrey', 'Voltage terminal D (14-pole: BI 1.1–1.8, BO 1.4–1.6)');
-    blk(9, 51, 17, 68, 24, 'termGrey', 'Voltage terminal L (PS101: supply, BI 2.1–2.3, BO 2.1–2.2, life contact)');
-    for (const [x0, x1, y0, y1] of [[-64, -19, -21, 30], [-64, -19, -122, -71], [9, 51, 17, 68]]) for (const y of spread(y0 + 4, y1 - 4, 7)) {
-      p.add(B(rx + x0 + 2, rx + x0 + 8, ry + y - 1.5, ry + y + 1.5, zr - 26, zr - 24), 'orange', 'Spring clip / screw (1.0 Nm, PZ1)');
-    }
-    blk(19, 65, -57, 6, 3, 'galvDark', 'Plug-in module positions E / F (communication, arc protection)');
-    for (const y of [-12, -42]) blk(28, 48, y - 8, y + 8, 14, 'black', 'Plug-in module port (e.g. Ethernet)');
-    blk(9, 17, -17, 8, 10, 'grey', 'Time synchronisation G (D-sub 9)');
-    blk(7, 19, -86, -62, 6, 'black', 'Battery compartment');
-    blk(5, 19, -115, -100, 16, 'black', 'Integrated Ethernet J (RJ45, DIGSI 5)');
-    blk(-14, -4, -120, -109, 8, 'zinc', 'Protective earth terminals (≥ 4 mm², M4, ≥ 1.2 Nm)');
-    p.finish();
+    const pr = part('relay'), pt = part('relayTerm');
+    buildSiprotec(pr, pt, {rx, ry, textured: !!MX.sipFront});
+    pr.finish();
+    pt.finish();
   }
 
   // ------------------------------------------------------------------------------------------------ LRM sockets
@@ -340,7 +291,7 @@ export function buildLV(mats, {W = 800} = {}) {
     root.add(g);
     parts.loom = [g, gd];
     const pd = new PartBuilder(gd, mats);
-    pd.add(TU([[rx - 88, ry + 40, -150], [rx - 100, ry + 100, -135], [-hw + 120, ry + 150, -110], [-hw + 66, 560, -60], [-hw + 58, 565, -45]], 11, 40, 10), 'black', 'Door loom (spiral-wrapped)');
+    pd.add(TU([[rx - 94, ry - 70, -125], [rx - 112, ry + 30, -115], [-hw + 120, ry + 150, -100], [-hw + 66, 560, -60], [-hw + 58, 565, -45]], 11, 40, 10), 'black', 'Door loom (spiral-wrapped)');
     pd.finish();
     const pl = new PartBuilder(g, mats);
     pl.add(TU([[-hw + 58, 565, -52], [-hw + 58, 565, -150], [-hw + 56, 565, -290], [-hw + 52, 560, -345]], 11, 30, 10), 'black', 'Door loom into the duct');
@@ -364,7 +315,15 @@ export function buildLV(mats, {W = 800} = {}) {
   const [rcx, rcz] = relayOpen(rx, -100);
   const [rbx, rbz] = relayOpen(rx, -850); // a point behind the relay rear, where the camera looks from
   const k = W / 800;
+  // a door-local point (closed coordinates) seen with the door open
+  const op = (lx, ly, lz) => { const [x, z] = relayOpen(lx, lz); return m(x, ly, z); };
   const views = {
+    relayFront: {p: m(rx + 40, ry + 25, 440), t: m(rx, ry, 33)},
+    relayKeys: {p: m(rx + 25, ry - 45, 235), t: m(rx + 4, ry - 72, 33)},
+    relayTop: {p: m(rx + 10, ry + 30, 250), t: m(rx + 5, ry + 50, 33)},
+    rearClose: {p: op(rx - 5, ry + 10, -720), t: op(rx - 5, ry, -190)},
+    rearBlocks: {p: op(rx - 30, ry - 35, -540), t: op(rx - 35, ry - 45, -190)},
+    rearA: {p: op(rx - 25, ry + 85, -400), t: op(rx - 30, ry + 76, -195)},
     iso: {p: m(1100 * k - 100, 1000, 1850 * k), t: m(-150 * k, 300, 50)},
     front: {p: m(0, 330, 1700 * k + 300), t: m(0, 315, -150)},
     side: {p: m(-1650 * k - 250, 420, 120), t: m(0, 315, -150)},

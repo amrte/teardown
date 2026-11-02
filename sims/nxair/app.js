@@ -11,7 +11,8 @@ import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeo
 import {BK_PARTS, buildBreaker} from './breaker.js';
 import {CB_JOINTS} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
-import {CHECKS, FRONT, IO, LV_JOINTS, LV_TOUR, X0, FUNCS, SETTINGS, analogSvg, controlSvg} from './lvpane.js';
+import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
+import {CHECKS, IO, LV_JOINTS, LV_TOUR, X0, FUNCS, SETTINGS, analogSvg, controlSvg} from './lvpane.js';
 const bkById = Object.fromEntries(BK_PARTS.map((p) => [p.id, p]));
 const lvById = Object.fromEntries(LV_PARTS.map((p) => [p.id, p]));
 const partInfo = (id) => partById[id] || bkById[id] || lvById[id];
@@ -823,6 +824,7 @@ function applyMode() {
   world.row.visible = state.mode === 'panel';
   world.bkHolder.visible = state.mode === 'breaker';
   world.lvHolder.visible = state.mode === 'lv';
+  controls.minDistance = state.mode === 'lv' ? 0.12 : state.mode === 'breaker' ? 0.25 : 0.6; // LV close-ups of keys and terminals
   for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo(); }
   $('#t-row').hidden = solo();
   $('#lvDoorSeg').hidden = state.mode !== 'lv';
@@ -1035,7 +1037,26 @@ function renderLv() {
       ['Weight', '3.6 kg'],
       ['Earthing', 'Protection class I: PE terminal ≥ 4 mm², M4, ≥ 1.2 Nm, before switching on'],
     ])}
-    <h3>Front panel</h3>${table(['Element', 'Use'], FRONT)}
+    <h3>Front panel, element by element</h3>
+    <p class="small muted">Use the tour steps above for close-ups; hover any key or LED in 3D for its name.</p>
+    ${table(['Element', 'Use'], FRONT_ELEMENTS)}
+    <h3>LED allocation (example)</h3>
+    ${table(['LED', 'Example text on the label strip'], LEDS.map((t, i) => [String(i + 1), t]))}
+    <h3>Function keys F1–F9 (example)</h3>
+    ${table(['Key', 'Example function'], FKEYS.map((t, i) => [`Fn + ${i + 1} = F${i + 1}`, t]))}
+    <h3>Rear terminals, all ${TERMINALS.length}</h3>
+    <p class="small muted">Designations from the IO102 and PS101 terminal diagrams; ● marks the polarity terminal of each CT / VT input. Hover a terminal screw in 3D for the same text.</p>
+    ${table(['Terminal', 'Function', 'Example connection'], TERMINALS)}
+    <h3>Rear: other connections</h3>
+    ${table(['Item', 'Use'], [
+      ['E (plug-in module position)', 'Example: Ethernet module ETH-BA-2EL, 2 × RJ45 (CH1, CH2): IEC 61850, IEC 60870-5-104, DNP3 TCP, Modbus TCP, PRP / HSR'],
+      ['F (plug-in module position)', 'Free: serial (IEC 60870-5-103, DNP3, Modbus RTU, RS485 or fibre), another Ethernet module, or the arc-protection module ARC-CD-3FO'],
+      ['G (D-sub 9)', 'Time synchronisation IRIG-B / DCF77 at 5 / 12 / 24 V, PPS; ≤ 10 m'],
+      ['J (RJ45)', 'Integrated Ethernet 100Base-TX: DIGSI 5, IEC 61850 reporting / GOOSE; CAT6 S/FTP ≤ 20 m'],
+      ['Battery', 'CR2032 for the clock and fault records, pull the compartment out to change'],
+      ['Protective earth', '2 × M4 terminals, ≥ 4 mm², ≥ 1.2 Nm, to the shield / PE bar'],
+      ['Name plate (housing top)', 'Order number, serial number, auxiliary voltage range, rated current, binary-input range'],
+    ])}
     <h3>Protection and control functions</h3>
     ${table(['ANSI', 'Function', 'Use on a cable feeder'], FUNCS)}
     <h3>Example: I/O allocation</h3>
