@@ -98,6 +98,37 @@ The manual names none of the device makers and gives no setpoints for gas volume
 level MIN, no PT100 characteristic and no fuse curves. Those are typical values marked **est.** (PT100 to IEC 60751;
 fuse curves are a generic shape, to be replaced by the fuse maker's curves).
 
+## The tap changers
+
+**Off-circuit** (manual p.12, 37, 41, 51–52, 57): ±2 × 2.5 %, positions 1–5, de-energised only (the page warns and
+isolates the unit if you switch under load), a second knob for level I/II on HV-switchable units, switch back and
+forth for a good contact. The manual does not show the switch's inside, so the model does not either.
+
+**On-load, MR ECOTAP VPD** (manual p.18–19, and Maschinenfabrik Reinhausen's own documents):
+
+- Principle, in MR's words: "based on the high-speed resistor-type tap-changer principle and uses vacuum cells to
+  change the tap position under load … the arc is extinguished while isolated in a vacuum cell" (MR 8209941 p.13).
+  Per phase a selector assembly and a diverter switch assembly with transition resistor and vacuum interrupter
+  (MR 6107891 p.19); the 3D layout follows that figure (proportions est.).
+- Variants and limits (MR 6107891 p.65, MR 8209941 p.131–132): VPD III 30D-24 (Um 24 kV, 30 A, ≤ 550 V/step), VPD III 30
+  and VPD I 100 (Um 36 / 40.5 kV, 30 / 100 A, ≤ 825 V/step; 550 V with change-over selector, 17 positions). The page
+  picks the variant from the unit's Um, step voltage and HV winding current and checks both — confirm with MR.
+- Control (MR 8209941 p.13–14, 127, 138): one measured phase against the desired voltage (default 230 V); outside
+  bandwidth B1 (2 %) for delay T1 (10 s), or outside B2 (4 %) for T2 (2 s), it makes one tap change of approx. 420 ms,
+  then keeps approx. 3 s cooling time; voltage blocking under 85 V / over 264 V; ≤ 20 changes per minute (flyer p.3);
+  replace after 500,000 operations, the control unit after ≤ 20 years (p.124). The live page runs exactly this logic.
+- The connection diagram in WIRING is MR drawing 8049432_01 (ECOTAP VPD III 30D-24-09 09 0): main winding TW_0, tap
+  winding TW_1 with 8 steps, customer connections to selector contacts 9…1, take-off C to the delta (TS_1_U → V),
+  adjustment position 5; the contact of the present position is lit.
+- Not published by MR, so not modelled: the switching sequence inside the diverter, transition resistor values, the
+  regulating range in % (the 2.5 % step stays an estimate).
+- Rules: R&S offers the regulated unit hermetic or free-breathing, hermetic and plug-in bushings standard (p.18–19);
+  MR allows an air cushion only with a special variant on request, and esters on request (MR 6107891 p.65) — both are
+  shown as notes, not blocked.
+
+MR documents used: operating instructions 6107891/02 EN (ECOTAP VPD, 36/40.5 kV) and 8209941/05 EN (VPD III 30D-24),
+flyer IN10321801/01 EN, all from https://www.reinhausen.com/fileadmin/downloadcenter/products/oltc/ecotap_vpd/.
+
 ## Estimates (not in the manual)
 
 Tank and core dimensions, masses, fluid volume, wave depth, uk for 315/500/800/≥1250 kVA,

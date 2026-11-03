@@ -14,7 +14,7 @@ import {
 } from './film.js';
 import {FAULTS, fitted, protInit, protReset, protStep, SET} from './protect.js';
 import {createTrafoStage} from './stage.js';
-import {defaultConfig, LIMITS, oltcPosition, OPTION_KEYS, OPTIONS, PARTS, resolve, spec, thermalStep, ultimate} from './trafo.js';
+import {defaultConfig, LIMITS, MR, lvVoltage, OPTION_KEYS, OPTIONS, PARTS, resolve, spec, thermalStep, ultimate} from './trafo.js';
 
 const W = 1600;
 const H = 900;
@@ -127,6 +127,8 @@ export function runLive() {
   let lastHist = 0;
   let tapStepAt = 0;
   let prot = protInit(sp);
+  // the ECOTAP control unit (MR 8209941 p.13, parameters p.127): one measured phase against the desired voltage
+  const avr = {t1: 0, t2: 0, busy: 0, to: 0, cool: 0, ops: 0, state: 'IN BAND', ua: 230, du: 0, blocked: false};
   const faults = {overload: 0, cooling: 0, leak: 0, gassing: 0};
   let pendArc = false;
   let pendSc = false;
@@ -510,12 +512,44 @@ export function runLive() {
         seenEv = prot.events.length;
         say(`${e.kind === 'trip' ? '⚡ ' : e.kind === 'alarm' ? '⚑ ' : ''}${e.text}`);
       }
-      // the ECOTAP steps one position at a time toward the band (p.18)
-      if (sp.oltc && T - tapStepAt > 0.6) {
-        const want = oltcPosition(sp, ug, K, pf);
-        if (want !== tap) {
-          tap += Math.sign(want - tap);
-          tapStepAt = T;
+      // the ECOTAP control unit: dU = Uactual − Udesired on one phase; outside B1 for T1, or outside B2 for T2, it starts
+      // one tap change (approx. 420 ms), then keeps approx. 3 s of cooling time before the next (MR 8209941 p.13–14, 127, 138)
+      if (sp.oltc) {
+        const A = MR.avr;
+        avr.ua = lvVoltage(sp, ug, tap, on ? K : 0, pf) / Math.sqrt(3);
+        avr.du = ((avr.ua - A.desired.def) / A.desired.def) * 100;
+        avr.blocked = avr.ua < A.block.under || avr.ua > A.block.over || !on;
+        const want = avr.du > 0 ? tap - 1 : tap + 1; // position 1 carries the most HV turns: the lowest LV
+        if (avr.busy > 0) {
+          avr.busy -= dt;
+          avr.state = 'TAP CHANGE';
+          if (avr.busy <= 0) {
+            tap = avr.to;
+            avr.ops++;
+            avr.cool = MR.coolingS;
+          }
+        } else if (avr.cool > 0) {
+          avr.cool -= dt;
+          avr.state = 'COOLING TIME';
+        } else if (avr.blocked) {
+          avr.t1 = avr.t2 = 0;
+          avr.state = on ? 'VOLTAGE BLOCKING' : 'DE-ENERGISED';
+        } else {
+          const ad = Math.abs(avr.du);
+          if (ad > A.b2.def) avr.t2 += dt;
+          else avr.t2 = 0;
+          if (ad > A.b1.def) avr.t1 += dt;
+          else avr.t1 = 0;
+          const go = (ad > A.b2.def && avr.t2 >= A.t2.def) || (ad > A.b1.def && avr.t1 >= A.t1.def);
+          avr.state = ad > A.b2.def ? 'OUTSIDE B2 · T2' : ad > A.b1.def ? 'OUTSIDE B1 · T1' : 'IN BAND';
+          if (go) {
+            if (want < 1 || want > sp.positions) avr.state = 'END POSITION';
+            else {
+              avr.busy = MR.tapChangeMs / 1000;
+              avr.to = want;
+              avr.t1 = avr.t2 = 0;
+            }
+          }
         }
       }
       // without contacts only the dial shows the temperature (p.38)
@@ -535,6 +569,7 @@ export function runLive() {
       energised,
       faults: {...faults},
       time: T,
+      avr: sp.oltc ? {...avr} : null,
       pf,
       ta,
       ug,

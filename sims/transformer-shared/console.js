@@ -5,7 +5,7 @@
 // view, cutaway, subsystem and overlay toggles bottom right; the tap changer strip bottom centre; the manual's part
 // numbers (Fig. 6) as callouts into the model. update(s) redraws every live part from the frame's state.
 import {coordination, FAULTS, fitted, FUSE_CURVE, fuseTime, pt100Err, pt100R, SET, statusOf} from './protect.js';
-import {FLAGS, ORDER_CODES, PT100_COLOURS, RS_DOCS, THERMOMETER_RS} from './trafo.js';
+import {ecotapVariant, FLAGS, MR, ORDER_CODES, PT100_COLOURS, RS_DOCS, THERMOMETER_RS} from './trafo.js';
 import {BUCHHOLZ, ECOTAP, efficiency, FLUIDS, LIMITS, MAINT, OPTION_KEYS, OPTIONS, optText, PARTS, SAFETY_RULES, UT1_STANDARD} from './trafo.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', blue: '#3d8fe0', grey: '#5d6670', orange: '#f05a23', hot: '#ff7a2e', cool: '#5aa7e6', est: '#a3a7ad'};
@@ -460,7 +460,7 @@ export function createConsole(app) {
       if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = datasheetHTML(s)));
       if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
       for (const f of FAULTS) setBtn('f_' + f.key, !!s.faults?.[f.key], true);
-      if (s.tab === 'wiring') once('wr', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${JSON.stringify(s.prot?.contacts ?? {})}|${Math.round(s.thermal.top)}`, () => (wrBox.innerHTML = wiringHTML(s)));
+      if (s.tab === 'wiring') once('wr', `${cfg.design}|${cfg.monitor}|${cfg.hv}|${cfg.rating}|${s.tap}|${s.avr?.state}|${(s.buchholz ?? 0).toFixed(2)}|${JSON.stringify(s.prot?.contacts ?? {})}|${Math.round(s.thermal.top)}`, () => (wrBox.innerHTML = wiringHTML(s)));
       if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${s.prot?.contacts?.buchAlarm}|${s.prot?.contacts?.buchTrip}`, () => (svBox.innerHTML = serviceHTML(s)));
 
       // ---------------------------------------------------------------- toggles
@@ -470,7 +470,7 @@ export function createConsole(app) {
       for (const k of OVERLAYS) setBtn(k, !!s.overlays[k], true);
 
       // ---------------------------------------------------------------- tap changer strip
-      once('tap', `${sp.positions}|${s.tap}|${s.ulv.toFixed(0)}|${sp.oltc}|${s.ug.toFixed(3)}`, () => {
+      once('tap', `${sp.positions}|${s.tap}|${s.ulv.toFixed(0)}|${sp.oltc}|${s.ug.toFixed(3)}|${s.avr ? `${s.avr.state}|${Math.floor(s.avr.t1)}|${Math.floor(s.avr.t2)}|${s.avr.ops}|${s.avr.ua.toFixed(1)}|${s.avr.to}` : ''}`, () => {
         tapN = sp.positions;
         tapHead.innerHTML = sp.oltc
           ? `<span style="color:${C.ink}">${ECOTAP.name}</span> &nbsp;— &nbsp;ON-LOAD, ${ECOTAP.positions} POSITIONS, AUTOMATIC`
@@ -489,7 +489,10 @@ export function createConsole(app) {
         }
         tapSvg.innerHTML = h;
         const pct = (((sp.positions + 1) / 2 - s.tap) * LIMITS.tapStep);
-        tapFoot.innerHTML = `POSITION ${s.tap}: HV TURNS ${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)} % &nbsp;·&nbsp; GRID ${(s.ug * sp.un1).toFixed(2)} KV → LV <span style="color:${Math.abs(s.ulv - 400) > 20 ? C.red : C.ink}">${s.ulv.toFixed(0)} V</span>`;
+        const a = s.avr;
+        tapFoot.innerHTML = a
+          ? `<span style="color:${a.state === 'IN BAND' ? C.mute : C.red}">${a.state}${a.state === 'TAP CHANGE' ? ` ${s.tap} → ${a.to} · ${MR.tapChangeMs} MS` : a.state.endsWith('T1') ? ` ${Math.floor(a.t1)} / ${MR.avr.t1.def} S` : a.state.endsWith('T2') ? ` ${a.t2.toFixed(0)} / ${MR.avr.t2.def} S` : ''}</span> &nbsp;·&nbsp; U ${a.ua.toFixed(1)} V vs ${MR.avr.desired.def} V (${a.du >= 0 ? '+' : '−'}${Math.abs(a.du).toFixed(1)} %) &nbsp;·&nbsp; B1 ±${MR.avr.b1.def} % · B2 ±${MR.avr.b2.def} % &nbsp;·&nbsp; ${a.ops} OPS`
+          : `POSITION ${s.tap}: HV TURNS ${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)} % &nbsp;·&nbsp; GRID ${(s.ug * sp.un1).toFixed(2)} KV → LV <span style="color:${Math.abs(s.ulv - 400) > 20 ? C.red : C.ink}">${s.ulv.toFixed(0)} V</span>`;
       });
 
       // ---------------------------------------------------------------- the part card
@@ -727,6 +730,10 @@ function wiringHTML(s) {
   const m = (t) => `<span class="m">${t}</span>`;
   const code = (k) => `<b>${k}</b> ${ORDER_CODES[k]}`;
   const out = [];
+  if (sp.oltc) {
+    out.push(...ecotapBlock(s));
+    if (!f.buchholz) return out.join('') + P(m('Protection wiring: open WIRING with the off-load tap changer, or see PROTECT.'));
+  }
   out.push(h(`BUCHHOLZ · CODE B · p.43${f.buchholz ? '' : ' · NOT FITTED'}`));
   out.push(buchholzSVG(s));
   if (f.buchholz) out.push(P(`Live: alarm 3–4 <b style="color:${c.buchAlarm ? C.red : C.ink}">${c.buchAlarm ? 'closed' : 'open'}</b> · trip 1–2 <b style="color:${c.buchTrip ? C.red : C.ink}">${c.buchTrip ? 'closed' : 'open'}</b> · plate runs the test`));
@@ -780,4 +787,58 @@ function pt100SVG(s) {
     h += `<text x="${x0 + 28}" y="73" font-size="6.4" text-anchor="middle" letter-spacing=".8" font-weight="600" fill="${C.ink}">${name}</text>`;
   });
   return h + '</svg>';
+}
+
+// the ECOTAP VPD after MR's own documents: the connection diagram 8049432_01 (one phase; V and W the same), the
+// variant from MR's technical data, the control settings, the principle as MR words it. No internal switching sequence:
+// MR does not publish one.
+function ecotapBlock(s) {
+  const sp = s.sp;
+  const h = (t) => `<h4>${t}</h4>`;
+  const P = (t) => `<p>${t}</p>`;
+  const m = (t) => `<span class="m">${t}</span>`;
+  const ev = ecotapVariant(sp);
+  const v = ev.v;
+  const a = s.avr;
+  const A = MR.avr;
+  const out = [h(`ECOTAP · ${v ? v.type : 'NO MR VARIANT FITS'} · DWG 8049432`)];
+  // the diagram
+  const W = 224;
+  const H = 112;
+  const pos = s.tap;
+  const busy = a && a.state === 'TAP CHANGE';
+  let g = `<svg width="${W}" height="${H}" style="display:block;margin:2px 0 3px"><rect x=".5" y=".5" width="${W - 1}" height="${H - 1}" fill="#fff" stroke="${C.faint}"/>`;
+  // main winding TW_0 and tap winding TW_1 (8 steps, taps 1..9)
+  g += `<rect x="8" y="94" width="60" height="5" fill="${C.ink}"/><text x="38" y="107" font-size="6" text-anchor="middle" fill="${C.mute}">TW_0_U</text>`;
+  g += `<rect x="76" y="94" width="140" height="5" fill="${C.ink}"/><text x="146" y="107" font-size="6" text-anchor="middle" fill="${C.mute}">TW_1_U · 8 STEPS / STUFEN</text>`;
+  g += `<line x1="68" x2="76" y1="96.5" y2="96.5" stroke="${C.ink}"/><text x="8" y="90" font-size="6" fill="${C.mute}">U,V,W</text>`;
+  const tapX = (i) => 82 + i * 16; // the taps along the tap winding
+  const cX = (i) => 82 + i * 16; // selector contacts, MR's order 9 … 1
+  // MR's drawing reads 9 … 1 from left to right, taps and contacts alike; tap n goes to contact n
+  const ix = (n) => 9 - n;
+  for (let i = 0; i < 9; i++) {
+    const n = 9 - i;
+    const on = n === pos;
+    // the customer connection (dashed in MR's drawing) from tap n up to selector contact n
+    g += `<line x1="${tapX(i)}" x2="${tapX(i)}" y1="94" y2="30" stroke="${on ? C.red : C.faint}" stroke-width="${on ? 1.3 : 0.8}" stroke-dasharray="3 2"/><text x="${tapX(i) + 2}" y="91" font-size="5.4" fill="${C.mute}">${n}</text>`;
+    g += `<circle cx="${cX(i)}" cy="24" r="6" fill="${on ? C.red : '#fff'}" stroke="${on ? C.red : C.ink}" stroke-width="1"/><text x="${cX(i)}" y="26.5" font-size="6.6" text-anchor="middle" font-weight="700" fill="${on ? '#fff' : C.ink}">${n}</text>`;
+  }
+  // take-off C of the selector, to the delta connection (TS_1_U → V)
+  // the selector's moving contact on the chosen position, its take-off C, the connection on to V (TS_1_U → V)
+  g += `<rect x="${cX(0) - 8}" y="34" width="${cX(8) - cX(0) + 16}" height="22" fill="none" stroke="${C.line}" stroke-dasharray="2 2"/>`;
+  g += `<line x1="${cX(ix(pos))}" x2="${cX(ix(pos))}" y1="30" y2="44" stroke="${C.red}" stroke-width="1.8"/><line x1="${cX(ix(pos))}" x2="${cX(4)}" y1="44" y2="44" stroke="${C.red}" stroke-width="1.4"/>`;
+  g += `<circle cx="${cX(4)}" cy="64" r="5" fill="#fff" stroke="${C.ink}"/><text x="${cX(4)}" y="66.5" font-size="6.4" text-anchor="middle" font-weight="700">C</text><line x1="${cX(4)}" x2="${cX(4)}" y1="44" y2="59" stroke="${C.red}" stroke-width="1.4"/>`;
+  g += `<line x1="${cX(4)}" x2="${cX(4)}" y1="69" y2="78" stroke="${C.ink}"/><text x="${cX(4) + 4}" y="78" font-size="6" fill="${C.mute}">→ V (MR: TS_1_U to V)</text>`;
+  g += `<text x="6" y="12" font-size="6" fill="${C.mute}" letter-spacing=".5">TS_1_U · SELECTOR CONTACTS 9…1 · ADJ. POS. 5</text><text x="6" y="34" font-size="5.6" fill="${C.mute}">— — customer</text><text x="6" y="42" font-size="5.6" fill="${C.mute}">connections</text>`;
+  if (busy) g += `<text x="${W - 6}" y="78" font-size="6.4" text-anchor="end" fill="${C.red}" font-weight="700">${s.tap} → ${a.to} · ${MR.tapChangeMs} MS</text>`;
+  g += '</svg>';
+  out.push(g);
+  out.push(P(`${m('MR:')} “${MR.principle}” ${m('(MR 8209941 p.13)')}`));
+  out.push(P(`Per phase: ${MR.assemblies[1].toLowerCase()} + ${MR.assemblies[0].toLowerCase()} ${m('(MR 6107891 p.19)')}. ${m('The order of the switching steps inside is not published by MR.')}`));
+  if (v)
+    out.push(P(`<b>${v.type}</b>: Um ${v.um} kV · Ir ${v.ir} A · Uir ≤ ${v.uir} V · ${v.positions} pos. · ${v.va.toLocaleString('en-US')} VA ${m('(' + v.doc + ')')}<br>This unit: step ${ev.step.toFixed(0)} V ${ev.stepOk ? '✓' : '✗'} (2.5 % est.) · winding current ${ev.iw.toFixed(1)} A ${ev.ampsOk ? '✓' : '✗'} ${m('· variant picked from MR tables, confirm with MR')}`));
+  else out.push(P(`<span style="color:${C.red}">No ECOTAP variant in MR's documents covers ${ev.step.toFixed(0)} V per step and ${ev.iw.toFixed(1)} A.</span>`));
+  out.push(P(`Control: desired ${A.desired.def} V (P1) · B1 ±${A.b1.def} % after T1 ${A.t1.def} s · B2 ±${A.b2.def} % after T2 ${A.t2.def} s · blocking < ${A.block.under} V / > ${A.block.over} V · one measured phase · ${MR.tapChangeMs} ms per change, ≈ ${MR.coolingS} s cooling, ≤ ${MR.perMinute}/min ${m('(MR 8209941 p.13–14, 127, 138; flyer p.3)')}`));
+  out.push(P(`${a ? a.ops : 0} of ${MR.life.ops.toLocaleString('en-US')} operations, then replace the tap changer; control unit after ≤ ${MR.life.controlYears} years ${m('(MR 8209941 p.124)')}`));
+  return out;
 }

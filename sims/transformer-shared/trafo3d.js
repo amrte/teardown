@@ -414,13 +414,17 @@ export function buildTrafo(sp) {
     }
   } else {
     // ECOTAP VPD motor drive on the lid [18]
+    // the motor-drive housing on its cover flange, as in MR's Figure 2 (6107891 p.19); proportions est.
     ecotapDrive = new THREE.Group();
-    ecotapDrive.position.set(tapX, yTop, tapZ - 10);
+    ecotapDrive.position.set(tapX - 20, yTop, -5);
     G.lid.add(ecotapDrive);
-    add(ecotapDrive, new THREE.CylinderGeometry(70, 70, 40, 24), M.zinc).position.y = 20;
-    add(ecotapDrive, new THREE.BoxGeometry(150, 200, 120), M.dark).position.y = 140;
-    add(ecotapDrive, new THREE.BoxGeometry(110, 40, 4), M.white).position.set(0, 190, 61);
-    add(ecotapDrive, new THREE.CylinderGeometry(24, 24, 110, 16), M.dark).position.set(0, 290, 0);
+    add(ecotapDrive, new THREE.BoxGeometry(230, 12, 112), M.zinc).position.y = 6;
+    add(ecotapDrive, extrude(roundRect(200, 100, 26), 92, 3).rotateX(Math.PI / 2).translate(0, 0, 0), M.dark).position.y = 58;
+    add(ecotapDrive, new THREE.BoxGeometry(150, 6, 70), std('#3b4046', 0.5, 0.3)).position.y = 106;
+    add(ecotapDrive, new THREE.BoxGeometry(120, 26, 2), M.white).position.set(0, 66, 47.5);
+    const gland = add(ecotapDrive, new THREE.CylinderGeometry(12, 12, 40, 12), M.black);
+    gland.rotation.z = Math.PI / 2;
+    gland.position.set(118, 58, 0);
   }
   anchors.tap = [tapX, yTop + 90, tapZ];
   // lifting lugs, lashing eyes [40]
@@ -692,8 +696,22 @@ export function buildTrafo(sp) {
   anchors.lvw = [-C.pitch + Wd.lvR[1], coilY + Wd.h + 4, Wd.lvR[1] * 0.4];
   anchors.screen = Wd.screen ? [Wd.screen, coilY + Wd.h * 0.8, 0] : null;
   // the off-circuit tap changer barrel under its knob, or the OLTC in the tank
-  const barrel = add(G.leads, new THREE.CylinderGeometry(sp.oltc ? 90 : 46, sp.oltc ? 90 : 46, sp.oltc ? 420 : 300, 24), sp.oltc ? M.dark : M.paper);
-  barrel.position.set(tapX, yLid - (sp.oltc ? 240 : 170), tapZ + (sp.oltc ? 0 : 0));
+  // off-circuit: the switch barrel under its knob; ECOTAP: three phase modules under a support beam, each a selector
+  // assembly and a diverter switch assembly with transition resistor and vacuum interrupter (MR 6107891 p.19)
+  const barrel = add(G.leads, new THREE.CylinderGeometry(46, 46, sp.oltc ? 10 : 300, 24), M.paper);
+  barrel.position.set(tapX, yLid - 170, tapZ);
+  barrel.visible = !sp.oltc;
+  const modX = [-95, 0, 95].map((d) => tapX - 20 + d);
+  const modY = yLid - 70 - 95;
+  if (sp.oltc) {
+    add(G.leads, new THREE.BoxGeometry(300, 30, 40), M.dark).position.set(tapX - 20, yLid - 45, 0);
+    for (const x of modX) {
+      add(G.leads, new THREE.BoxGeometry(70, 190, 58), M.cream).position.set(x, modY, -34);
+      add(G.leads, new THREE.BoxGeometry(70, 160, 58), std('#4a5058', 0.5, 0.35)).position.set(x, modY + 15, 34);
+      add(G.leads, new THREE.CylinderGeometry(16, 16, 60, 14), M.glass).position.set(x, modY + 40, 66);
+    }
+    anchors.ecotap = [modX[2] + 35, modY, 64];
+  }
   // leads: HV from the top of each HV coil to its bushing, LV bars from the LV coils to the LV bushings
   const leadMat = M.paper;
   const leadsTo = (from, to, r, mat, mid = 0.55) => {
@@ -708,7 +726,7 @@ export function buildTrafo(sp) {
     const hvTop = hvTops[i];
     leadsTo([x + Wd.hvR[1] * 0.7, coilY + Wd.h - 10, Wd.hvR[1] * 0.4], [hvTop[0], yLid - 4, hvTop[2]], 9, leadMat);
     // tap leads from mid-coil to the barrel
-    leadsTo([x + Wd.hvR[1] * 0.9, coilY + Wd.h * 0.5, Wd.hvR[1] * 0.5], [tapX, barrel.position.y - 80 + i * 40, tapZ + 30], 5, leadMat, 0.3);
+    leadsTo([x + Wd.hvR[1] * 0.9, coilY + Wd.h * 0.5, Wd.hvR[1] * 0.5], sp.oltc ? [modX[i], modY - 95, -30] : [tapX, barrel.position.y - 80 + i * 40, tapZ + 30], 5, leadMat, 0.3);
   });
   const lvCount = lvTops.length;
   for (let j = 0; j < lvCount; j++) {

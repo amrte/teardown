@@ -136,6 +136,55 @@ export const SEISMIC = {
 };
 // the regulated transformer's on-load tap changer [18][19]
 export const ECOTAP = {name: 'MR ECOTAP VPD', positions: 9, stepMaxV: 825, um: 36, amps: [30, 100], ops: 500000, ratings: [400, 1000], stepPct: 2.5};
+// What Maschinenfabrik Reinhausen publishes (PDF page numbers):
+//   A  Operating instructions ECOTAP VPD 6107891/02 EN (2019), VPD III 30 / VPD I 100, Um 36 / 40.5 kV
+//   B  Operating instructions ECOTAP VPD III 30D-24 8209941/05 EN (12/2025), Um 24 kV
+//   F  Flyer ECOTAP VPD 24 kV IN10321801/01 EN (03/2025)
+// The internal switching sequence, transition resistor values and the regulating range in % are not published; the
+// model shows no invented sequence and keeps the 2.5 % step as an estimate.
+export const MR = {
+  docs: {
+    A: 'MR 6107891/02 EN, ECOTAP VPD operating instructions (36/40.5 kV)',
+    B: 'MR 8209941/05 EN, ECOTAP VPD III 30D-24 operating instructions (24 kV)',
+    F: 'MR IN10321801/01 EN, ECOTAP VPD 24 kV flyer',
+    D: 'MR connection diagram 8049432_01, ECOTAP VPD III 30D-24-09 09 0 (in B)',
+  },
+  principle: 'The on-load tap-changer is based on the high-speed resistor-type tap-changer principle and uses vacuum cells to change the tap position under load. In this process, the arc is extinguished while isolated in a vacuum cell, preventing contaminants from entering the oil.', // B p.13
+  assemblies: ['Diverter switch assembly with transition resistor and vacuum interrupter', 'Selector assembly', 'Change-over selector assembly (17 positions)'], // A p.19–21
+  variants: [
+    {type: 'VPD III 30D-24', um: 24, ir: 30, uir: 550, positions: 9, va: 16500, doc: 'B p.131–132'},
+    {type: 'VPD III 30', um: 36, ir: 30, uir: 825, positions: 9, va: 24750, isc: 600, ipk: 1500, doc: 'A p.65'},
+    {type: 'VPD I 100', um: 36, ir: 100, uir: 825, positions: 9, va: 82500, isc: 2000, ipk: 5000, doc: 'A p.65'},
+  ],
+  withChangeOver: {uir: 550, positions: 17, um: 40.5, doc: 'A p.65'},
+  tapChangeMs: 420, // B p.138
+  coolingS: 3, // B p.14: the control keeps a cooling time of approx. 3 s after each operation
+  perMinute: 20, // F p.3
+  switchCapacity: 2, // × Ir at Uir, A p.11
+  uirOverload: 10, // % short-time over Uir if Ir is not exceeded, A p.11
+  oilTemp: [-25, 105], // °C mineral oil for tap-change operations; esters on request, A p.65
+  types: 'Free breathing with oil conservator; entirely oil-filled sealed (no gas cushion); free breathing with air cushion only with a special variant, on request', // A p.65
+  life: {ops: 500000, controlYears: 20}, // B p.124
+  // voltage regulation (B p.13, parameters p.127): one measured phase, the supply voltage (p.138)
+  avr: {
+    desired: {range: [100, 240], def: 230},
+    b1: {range: [0.5, 8], def: 2}, t1: {range: [3, 1800], def: 10},
+    b2: {range: [3, 9], def: 4, minOverB1: 0.5}, t2: {range: [2, null], def: 2},
+    block: {under: 85, over: 264},
+  },
+};
+/** The ECOTAP variant MR documents for this unit: Um class, step voltage and the HV winding current. */
+export function ecotapVariant(sp) {
+  // the tap winding is part of the HV winding: in delta (Dyn) it sees the line voltage and In/√3, in star (Yzn) the
+  // phase voltage and In
+  const delta = sp.cfg.vector.startsWith('D');
+  const step = ((sp.un1 * 1000) / (delta ? 1 : Math.sqrt(3)) * ECOTAP.stepPct) / 100;
+  const iw = delta ? sp.i1 / Math.sqrt(3) : sp.i1;
+  const um = sp.cls.um;
+  const fits = MR.variants.filter((v) => v.um >= um && v.ir >= iw && v.uir >= step);
+  const v = fits[0] ?? null;
+  return {v, step, iw, um, stepOk: v ? step <= v.uir : false, ampsOk: v ? iw <= v.ir : false};
+}
 export const MAINT = [
   {every: '12 months', who: 'Expert', what: 'Inspection: oil level, drag-pointer temperature (max 100 °C), load, bushings and connections, tank leaks / rust, noise, room ≤ 40 °C', p: 57},
   {every: '5 years', who: 'Expert', what: 'Function check: switches and disconnectors, bushing bolts, earthing measurement, tap changer (switch back and forth), cleaning, protective devices', p: 57},
@@ -204,17 +253,21 @@ export function resolve(cfg0, changed = null) {
     if (changed === 'design') force('fluid', 'synthetic', 'Natural esters only in hermetic units', 17);
     else force('design', 'hermetic', 'Natural esters only in hermetic units', 17);
   }
-  // OLTC: 400…1000 kVA, hermetic, not with a switchable HV [18][19]
+  // OLTC: 400…1000 kVA, single HV (p.18–19); hermetic or free-breathing, hermetic and plug-in bushings standard (p.18–19)
   if (c.tapchanger === 'oltc') {
-    const bad = c.rating < ECOTAP.ratings[0] || c.rating > ECOTAP.ratings[1] || c.hv === '10/20' || c.design !== 'hermetic';
+    const bad = c.rating < ECOTAP.ratings[0] || c.rating > ECOTAP.ratings[1] || c.hv === '10/20';
     if (bad && changed && changed !== 'tapchanger') {
-      force('tapchanger', 'offload', 'ECOTAP only 400–1000 kVA, hermetic, single HV', 18);
+      force('tapchanger', 'offload', 'ECOTAP only 400–1000 kVA with a single HV', 18);
     } else {
       if (c.rating < ECOTAP.ratings[0]) force('rating', ECOTAP.ratings[0], 'ECOTAP units: 400–1000 kVA', 18);
       if (c.rating > ECOTAP.ratings[1]) force('rating', ECOTAP.ratings[1], 'ECOTAP units: 400–1000 kVA', 18);
       if (c.hv === '10/20') force('hv', '20', 'HV-switchable units cannot take an OLTC', 19);
-      force('design', 'hermetic', 'ECOTAP standard execution is hermetic', 19);
-      if (c.hvBushing !== 'plugin') force('hvBushing', 'plugin', 'ECOTAP standard: plug-in bushings EN 50180', 19);
+      if (changed === 'tapchanger') {
+        force('design', 'hermetic', 'ECOTAP standard execution: hermetic', 19);
+        force('hvBushing', 'plugin', 'ECOTAP standard: plug-in bushings EN 50180', 19);
+      }
+      if (c.design === 'breathing') notes.push({k: 'design', why: 'MR: air cushion only with a special ECOTAP variant, on request (MR 6107891 p.65)', p: 18});
+      if (c.fluid !== 'mineral') notes.push({k: 'fluid', why: 'MR: ECOTAP in ester fluids on request (MR 6107891 p.65)', p: 18});
     }
   }
   // the hermetic full protection needs a hermetic tank; the Buchholz needs a conservator [38][39]
@@ -555,5 +608,5 @@ export const EXTRA_PARTS = {
   conservator: {name: 'Conservator', sub: 'SILICA-GEL BREATHER', info: 'Takes the volume change of the fluid; the air passes a silica-gel breather. Light yellow gel: dry or replace. MIN on the level gauge: take out of service.'},
   buchholz: {name: 'Buchholz relay', sub: 'ALARM 3-4 · TRIP 1-2', info: 'Collects gas from an internal fault. Test: press halfway — alarm NO 3-4 closes; press fully — trip NO 1-2 closes as well.'},
   dgpt: {name: 'Full protection', sub: 'TEMP · LEVEL · PRESSURE · GAS', info: 'Hermetic units: one device for thermometer, level, pressure and gas detection, each with a potential-free contact.'},
-  ecotap: {name: 'ECOTAP VPD', sub: '9 POS · ≤ 825 V / STEP', info: 'Vacuum on-load tap changer on the HV side with motor drive and control unit: 500,000 maintenance-free operations, 30 A / 100 A switchable.'},
+  ecotap: {name: 'ECOTAP VPD', sub: '9 POS · 420 MS PER CHANGE', info: 'High-speed resistor-type on-load tap changer with vacuum cells (MR): per phase a selector assembly and a diverter switch assembly with transition resistor and vacuum interrupter; motor drive and control unit; 500,000 operations.'},
 };

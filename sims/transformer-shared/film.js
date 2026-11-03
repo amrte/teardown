@@ -360,6 +360,7 @@ export function makeConsoleFrame(ui, st) {
       notes: op.notes,
       flash: op.flash || evFlash || (op.energised === false ? 'DE-ENERGISED · HV BREAKER OPEN' : ''),
       prot: op.prot,
+      avr: op.avr,
       coord: coordination(sp),
       faults: op.faults,
       energised: op.energised !== false,
