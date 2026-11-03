@@ -15,6 +15,7 @@ node sims/build.mjs transformer-film     # the scripted tour as a pure function 
 | File | Job |
 |---|---|
 | `trafo.js` | The model: catalogue, options and their rules, the datasheet `spec(cfg)`, electrical state at angle θ, IEC 60076-7 thermal model, seismic check, parallel operation, the manual's parts. No three.js. |
+| `protect.js` | Monitoring and protection: the devices (thermometer and contacts, PT100, level indicator, full protection, relief valve, Buchholz, silica-gel breather, HV/LV fuses), their readings and contacts, the fault scenarios, the fuse coordination. No three.js. |
 | `trafo3d.js` | The geometry, built in mm from one `spec`: chassis and turnable rollers, corrugated tank, lid fittings, 3-limb stepped core, LV/HV windings, leads, fluid and convection, oil pans, seismic kit, section faces. |
 | `stage.js` | Studio, shadows, GTAO; rebuilds the model when the configuration changes. |
 | `console.js` | The 1600 × 900 overlay: load, core flux, vector-group clock, sliders; tabs OPERATE / CONFIGURE / DATASHEET / SERVICE; views, cutaway, subsystems, overlays; the tap changer; part numbers (manual Fig. 6). |
@@ -57,6 +58,29 @@ hermetic, single HV, plug-in bushings (p.18–19); full protection only hermetic
   (p.24–26), ventilation A = 0.188 P/√H (p.44), lashing forces (p.40), 1 µT distances (p.15), seismic slenderness,
   Se, roller forces FD/FA/FQ and the flowchart verdict (p.32–34), parallel load sharing (p.49).
 - **Service**: the 5 safety rules, commissioning, maintenance plan, Buchholz test contacts (p.43), transport.
+
+## Monitoring and protection (PROTECT tab)
+
+Every device shows its reading and contact states live; devices the configuration does not carry are listed as
+"not fitted". Six faults can be injected: overload, blocked cooling, oil leak, slow gassing, an arc between turns, a
+short at the LV terminals. Each device answers as its principle says: the thermometer contacts at 85 / 95 °C, the
+level indicator at MIN, the Buchholz gas alarm (NO 3–4) and surge trip (NO 1–2), the full protection's gas, level and
+pressure contacts, the relief valve, the HV fuse. A trip de-energises the unit until RESET (p.54: never re-energise
+before the cause is clarified). Where nothing can see a fault (slow gassing in a free-breathing unit, a low level
+without a level indicator) the log says so. In 3D: gas bubbles and an arc flash in the winding, gas collecting in the
+Buchholz and full-protection windows, the relief valve lifting, the silica gel turning light yellow, oil dripping from
+the drain valve into a puddle.
+
+The fuse chart plots the HV fuse and the LV fuse (referred to the HV side) against the transformer's rated current,
+the inrush band (6–20 In at 100 ms, p.49) and the LV short circuit, and checks that the inrush passes, the short is
+cleared and the LV fuse goes first.
+
+The SERVICE tab draws the Buchholz relay's terminal plate as the manual shows it (p.43): insulators 6 3 4 (alarm) and
+5 1 2 (trip), NC 3–6 / NO 3–4 and NC 1–5 / NO 1–2, with the contacts moving through the test sequence or a real fault.
+
+The manual names none of the device makers and gives no setpoints for gas volume, oil surge, pressure, relief valve or
+level MIN, no PT100 characteristic and no fuse curves. Those are typical values marked **est.** (PT100 to IEC 60751;
+fuse curves are a generic shape, to be replaced by the fuse maker's curves).
 
 ## Estimates (not in the manual)
 

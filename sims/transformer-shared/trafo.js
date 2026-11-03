@@ -376,10 +376,12 @@ export const efficiency = (sp, K, pf) => {
 export const THERMAL = {x: 0.8, y: 1.6, H: 1.1, tauO: 180, tauW: 4, dTo: LIMITS.riseTopOil, gr: LIMITS.riseWinding - 0.8 * LIMITS.riseTopOil, ref: 98};
 export const lossRatio = (sp) => sp.pk / sp.p0;
 /** Ultimate (steady) rises at load K: top oil over ambient, hot spot over top oil (K). */
-export const ultimate = (sp, K) => {
+/** cool: the factor on the oil rise when the cooling is impaired (1 normal); on: false when de-energised (no losses). */
+export const ultimate = (sp, K, cool = 1, on = true) => {
+  if (!on) return {oil: 0, hs: 0};
   const R = lossRatio(sp);
   return {
-    oil: THERMAL.dTo * Math.pow((1 + R * K * K) / (1 + R), THERMAL.x),
+    oil: cool * THERMAL.dTo * Math.pow((1 + R * K * K) / (1 + R), THERMAL.x),
     hs: THERMAL.H * THERMAL.gr * Math.pow(K, THERMAL.y),
   };
 };
@@ -390,8 +392,8 @@ export const steady = (sp, K, ta) => {
 /** Relative ageing rate (Montsinger: twice per 6 K over 98 °C) [52]. */
 export const ageing = (hot) => Math.pow(2, (hot - THERMAL.ref) / LIMITS.montsinger);
 /** One step of the thermal state {oil, hs, max} over dt minutes at load K and ambient ta. */
-export const thermalStep = (sp, st, K, ta, dtMin) => {
-  const u = ultimate(sp, K);
+export const thermalStep = (sp, st, K, ta, dtMin, cool = 1, on = true) => {
+  const u = ultimate(sp, K, cool, on);
   const ko = 1 - Math.exp(-dtMin / THERMAL.tauO);
   const kw = 1 - Math.exp(-dtMin / THERMAL.tauW);
   const oil = st.oil + (u.oil - st.oil) * ko;

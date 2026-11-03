@@ -4,6 +4,7 @@
 // cycle), DATASHEET (what follows from the configuration) and SERVICE (commissioning, maintenance, the Buchholz test);
 // view, cutaway, subsystem and overlay toggles bottom right; the tap changer strip bottom centre; the manual's part
 // numbers (Fig. 6) as callouts into the model. update(s) redraws every live part from the frame's state.
+import {coordination, FAULTS, fitted, FUSE_CURVE, fuseTime, pt100Err, pt100R, SET, statusOf} from './protect.js';
 import {BUCHHOLZ, ECOTAP, efficiency, FLUIDS, LIMITS, MAINT, OPTION_KEYS, OPTIONS, optText, PARTS, SAFETY_RULES, UT1_STANDARD} from './trafo.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', blue: '#3d8fe0', grey: '#5d6670', orange: '#f05a23', hot: '#ff7a2e', cool: '#5aa7e6', est: '#a3a7ad'};
@@ -12,7 +13,8 @@ export const CAMS = ['hero', 'front', 'side', 'top', 'lid', 'inside'];
 export const CUTS = ['solid', 'glass', 'section'];
 export const VIEWS = ['all', 'active', 'core', 'windings', 'oil', 'fittings'];
 export const OVERLAYS = ['parts', 'flux', 'current', 'flow', 'untank'];
-export const TABS = ['operate', 'configure', 'datasheet', 'service'];
+export const TABS = ['operate', 'configure', 'datasheet', 'protect', 'service'];
+const TAB_LABEL = {operate: 'OPERATE', configure: 'CONFIG', datasheet: 'DATA', protect: 'PROTECT', service: 'SERVICE'};
 export const LOAD_MAX = 1.5;
 export const TA_RANGE = [-25, 40];
 const CSS = `
@@ -125,9 +127,9 @@ export function createConsole(app) {
   const notesBox = add(`<div class="cp" style="position:absolute;left:0;right:0;top:56px;text-align:center;font-weight:600;font-size:9.2px;color:${C.red}"></div>`);
 
   // ------------------------------------------------------------ right column: tabs
-  const tabX = [1318, 1375, 1442, 1509];
-  const tabW = [54, 64, 64, 54];
-  TABS.forEach((k, i) => (btn[k] = add(`<div class="tb" style="left:${tabX[i]}px;top:36px;width:${tabW[i]}px;height:22px;padding:0;font-size:8.2px;letter-spacing:.6px">${k}</div>`)));
+  const tabX = [1318, 1366, 1418, 1460, 1514];
+  const tabW = [46, 50, 40, 52, 49];
+  TABS.forEach((k, i) => (btn[k] = add(`<div class="tb" style="left:${tabX[i]}px;top:36px;width:${tabW[i]}px;height:22px;padding:0;font-size:8px;letter-spacing:.5px">${TAB_LABEL[k]}</div>`)));
   add(`<div class="pn" style="left:1318px;top:62px;width:245px;height:640px"></div>`);
   const pane = {};
   for (const k of TABS) pane[k] = add(`<div style="position:absolute;inset:0"></div>`);
@@ -163,6 +165,21 @@ export function createConsole(app) {
     rows[k] = padd('configure', `<div class="row" style="top:${92 + i * 23}px"><span class="k">${OPTIONS[k].label}</span><span class="v"></span></div>`);
   });
   const cfgNotes = padd('configure', `<div class="sv" style="top:${92 + OPTION_KEYS.length * 23 + 8}px"></div>`);
+
+  // PROTECT
+  padd('protect', `<div class="cp" style="position:absolute;left:1329px;top:74px;font-weight:700">PROTECTION · p.38–50</div>`);
+  const prChip = padd('protect', `<div class="cp" style="position:absolute;right:${1600 - 1552}px;top:72px;font-weight:700;padding:2px 6px;color:#fff"></div>`);
+  const devBox = padd('protect', `<div style="position:absolute;left:1329px;top:90px;width:224px"></div>`);
+  padd('protect', `<div class="cp mu" style="position:absolute;left:1329px;top:347px;font-weight:500;font-size:8.6px">FAULTS · CLICK TO INJECT</div>`);
+  FAULTS.forEach((f, i) => {
+    btn['f_' + f.key] = padd('protect', `<div class="tb" style="left:${1329 + (i % 3) * 76}px;top:${361 + Math.floor(i / 3) * 22}px;width:72px;padding:0;font-size:7.8px;letter-spacing:.5px">${f.name}</div>`);
+  });
+  btn.f_reset = padd('protect', `<div class="tb" style="left:1329px;top:405px;width:224px;padding:0;font-size:7.8px">RESET · CAUSE CLEARED (p.54)</div>`);
+  padd('protect', `<div class="cp" style="position:absolute;left:1329px;top:434px;font-weight:700">FUSE COORDINATION</div>`);
+  const fuseLeg = padd('protect', `<div class="cp mu" style="position:absolute;left:1352px;top:452px;font-weight:500;font-size:7.4px;letter-spacing:.8px"></div>`);
+  const fuseSvg = padd('protect', `<svg style="position:absolute;left:1326px;top:448px" width="232" height="150"></svg>`);
+  const fuseChk = padd('protect', `<div class="ds" style="top:598px;line-height:13px;font-size:8.6px"></div>`);
+  const logBox = padd('protect', `<div class="sv" style="top:640px;font-size:8.4px;line-height:11.6px"></div>`);
 
   // DATASHEET and SERVICE
   const dsBox = padd('datasheet', `<div class="ds" style="top:68px"></div>`);
@@ -439,7 +456,9 @@ export function createConsole(app) {
         cfgNotes.innerHTML = (s.notes?.length ? s.notes.map((n) => `<p style="color:${C.red}">⚑ ${n.why} <span class="m">(p.${n.p})</span></p>`).join('') : '') + `<p class="m">Rules applied from the manual: natural ester only hermetic (p.17); ECOTAP 400–1000 kVA, hermetic, single HV (p.18–19); full protection hermetic, Buchholz with conservator (p.38–39); quake anchoring only with the integrated pan (p.35).</p>`;
       }
       if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = datasheetHTML(s)));
-      if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${s.buchholz ?? 0}`, () => (svBox.innerHTML = serviceHTML(s)));
+      if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
+      for (const f of FAULTS) setBtn('f_' + f.key, !!s.faults?.[f.key], true);
+      if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${s.prot?.contacts?.buchAlarm}|${s.prot?.contacts?.buchTrip}`, () => (svBox.innerHTML = serviceHTML(s)));
 
       // ---------------------------------------------------------------- toggles
       for (const k of CAMS) setBtn(k, s.cam === k);
@@ -578,8 +597,121 @@ function serviceHTML(s) {
     P('Same vector-group index, ratio within 0.5 %, uk within ±10 %, power ratio ≤ 3:1, same phase sequence.'),
     h('MAINTENANCE · p.57–58'),
     ...MAINT.map((m) => P(`<b>${m.every}</b> <span class="m">· ${m.who}</span> — ${m.what}`)),
-    cfg.monitor === 'buchholz'
-      ? h('BUCHHOLZ TEST · p.43') + P(`Test button ${Math.round(b * 100)} %: 3–6 <b>${k.c36 ? 'closed' : 'open'}</b> · 3–4 <b style="color:${k.c34 ? C.red : C.ink}">${k.c34 ? 'closed (alarm)' : 'open'}</b> · 1–5 <b>${k.c15 ? 'closed' : 'open'}</b> · 1–2 <b style="color:${k.c12 ? C.red : C.ink}">${k.c12 ? 'closed (trip)' : 'open'}</b>`)
-      : h('TRANSPORT · p.40') + P('Lift on the two lugs only, sling angle ≥ 60°; forklift only under the chassis; never by the waves. Storage ≥ −25 °C, dry, out of the sun.'),
+    h('BUCHHOLZ RELAY · TERMINALS · p.43'),
+    buchholzSVG(s),
+    P(cfg.monitor === 'buchholz'
+      ? `Test button ${Math.round(b * 100)} %: 3–6 <b>${k.c36 ? 'closed' : 'open'}</b> · 3–4 <b style="color:${k.c34 ? C.red : C.ink}">${k.c34 ? 'closed (alarm)' : 'open'}</b> · 1–5 <b>${k.c15 ? 'closed' : 'open'}</b> · 1–2 <b style="color:${k.c12 ? C.red : C.ink}">${k.c12 ? 'closed (trip)' : 'open'}</b>`
+      : `<span class="m">Fitted only with the conservator (MONITORING: BUCHHOLZ). Diagram as on the relay's plate in the manual.</span>`),
   ].join('');
 }
+
+// the Buchholz relay's wiring plate as the manual shows it (p.43): insulators 6 3 4 (ALARM) and 5 1 2 (TRIP); the
+// common 3 rests on 6 and moves to 4 on gas, the common 1 rests on 5 and moves to 2 on a surge or the full test press
+function buchholzSVG(s) {
+  const k = BUCHHOLZ.contacts(s.buchholz ?? 0);
+  const fitted = s.sp.cfg.monitor === 'buchholz';
+  const al = (fitted && k.c34) || !!s.prot?.contacts?.buchAlarm;
+  const tr = (fitted && k.c12) || !!s.prot?.contacts?.buchTrip;
+  const W = 224;
+  const cell = W / 6;
+  let h = `<svg width="${W}" height="112" style="display:block;margin:2px 0 4px">`;
+  h += `<rect x=".5" y=".5" width="${W - 1}" height="111" fill="#fff" stroke="${C.faint}"/>`;
+  h += `<line x1="${W / 2}" x2="${W / 2}" y1="0" y2="112" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="18" y2="18" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="94" y2="94" stroke="${C.faint}"/>`;
+  const nums = [6, 3, 4, 5, 1, 2];
+  nums.forEach((n, i) => {
+    const x = cell * i + cell / 2;
+    h += `<text x="${x}" y="13" font-size="9" font-weight="700" text-anchor="middle" fill="${C.ink}">${n}</text>`;
+    if (i) h += `<line x1="${cell * i}" x2="${cell * i}" y1="0" y2="18" stroke="${C.line}"/>`;
+  });
+  // each group: left NC terminal, the common in the middle with its blade, right NO terminal
+  const group = (i0, on, name) => {
+    const xL = cell * i0 + cell / 2;
+    const xC = xL + cell;
+    const xR = xC + cell;
+    const yT = 34;
+    const yC = 78;
+    let g = '';
+    for (const x of [xL, xR]) g += `<line x1="${x}" x2="${x}" y1="18" y2="${yT}" stroke="${C.ink}" stroke-width="1"/><circle cx="${x}" cy="${yT + 3}" r="2.6" fill="#fff" stroke="${C.ink}"/>`;
+    g += `<line x1="${xC}" x2="${xC}" y1="18" y2="24" stroke="${C.ink}"/><line x1="${xC}" x2="${xC}" y1="${yC}" y2="${yC + 6}" stroke="${C.ink}"/><circle cx="${xC}" cy="${yC}" r="2.6" fill="${C.ink}"/>`;
+    const tx = on ? xR : xL;
+    g += `<line x1="${xC}" y1="${yC}" x2="${tx}" y2="${yT + 6}" stroke="${on ? C.red : C.ink}" stroke-width="1.8"/>`;
+    g += `<text x="${xC}" y="105" font-size="7.4" letter-spacing="1.2" text-anchor="middle" fill="${on ? C.red : C.mute}" font-weight="600">${name}${on ? ' · ACTIVE' : ''}</text>`;
+    return g;
+  };
+  h += group(0, al, 'ALARM') + group(3, tr, 'TRIP');
+  h += `<text x="4" y="90" font-size="6.2" fill="${C.mute}">NC 3–6 · NO 3–4</text><text x="${W / 2 + 4}" y="90" font-size="6.2" fill="${C.mute}">NC 1–5 · NO 1–2</text>`;
+  return h + '</svg>';
+}
+
+const chip = (on, label, kind = 'alarm') => `<span style="display:inline-block;padding:0 4px;margin-left:3px;font-size:7.2px;font-weight:700;letter-spacing:.6px;border:1px solid ${on ? (kind === 'trip' ? C.red : C.orange) : C.line};background:${on ? (kind === 'trip' ? C.red : C.orange) : '#fff'};color:${on ? '#fff' : C.mute}">${label}</span>`;
+function renderProtect(s, el2) {
+  const sp = s.sp;
+  const pr = s.prot;
+  const f = fitted(sp.cfg);
+  const c = pr.contacts;
+  const st = statusOf(pr);
+  el2.prChip.textContent = st;
+  el2.prChip.style.background = st === 'TRIPPED' ? C.red : st === 'ALARM' ? C.orange : C.ink;
+  const top = s.thermal.top;
+  const e = pt100Err();
+  const est = (t) => `<span style="color:${C.est}">${t}</span>`;
+  const dev = (on, name, sub, val, chips = '') =>
+    `<div style="height:26px;border-bottom:1px solid ${C.line};display:flex;justify-content:space-between;align-items:center;opacity:${on ? 1 : 0.42}"><div style="min-width:0"><div style="font-size:9px;font-weight:700;white-space:nowrap">${name}</div><div style="font-size:7.4px;color:${C.mute};white-space:nowrap;overflow:hidden">${sub}</div></div><div style="text-align:right;white-space:nowrap;font-size:9px;font-weight:600">${on ? val : '<span style="color:#a3a7ad;font-weight:500">not fitted</span>'}<div>${on ? chips : ''}</div></div></div>`;
+  const lvl = sp.cfg.design === 'breathing' ? `${pr.levelCm >= 0 ? '+' : '−'}${Math.abs(pr.levelCm ?? 0).toFixed(1)} cm` : sp.cfg.design === 'conservator' ? `${Math.round((pr.consFrac ?? 0.5) * 100)} % cons.` : `${(pr.press ?? 0) >= 0 ? '+' : '−'}${Math.abs(pr.press ?? 0).toFixed(2)} bar`;
+  const rows = [
+    dev(true, 'Dial thermometer', f.contacts ? 'DRAG POINTER · CONTACTS 250 V · p.38, 41' : 'DRAG POINTER · NO CONTACTS · p.38', `${Math.round(top)} °C · max ${Math.round(s.thermal.max)}`, f.contacts ? chip(c.thAlarm, 'AL 85') + chip(c.thTrip, 'TR 95', 'trip') : ''),
+    dev(f.pt100, 'PT100 resistance thermometer', `IEC 60751 · 2-WIRE ${est('+' + e.w2.toFixed(1) + ' K')} · 3/4-WIRE ≈ 0 · p.38`, `${pt100R(top).toFixed(2)} Ω`),
+    dev(f.level || f.dipstick, f.level ? (f.reed ? 'Level indicator, float + reed' : 'Conservator level gauge') : 'Dipstick (manual check)', `MIN → OUT OF SERVICE · 1 cm ≈ 10 K · p.37–38 ${est('MIN est.')}`, lvl, f.reed || f.level ? chip(c.levelMin || c.consMin, 'MIN') : ''),
+    dev(f.dgpt, 'Full protection (hermetic)', `T · LEVEL · PRESSURE · GAS · p.38 ${est(`set est. ${SET.dgptPressTrip.v} bar / ${SET.dgptGasAlarm.v} ml`)}`, `${(pr.press ?? 0).toFixed(2)} bar · ${Math.round(pr.gasDgpt)} ml`, chip(c.dgptGas, 'GAS') + chip(c.dgptLevel, 'LVL') + chip(c.dgptPress, 'P', 'trip') + chip(c.thTrip, 'T', 'trip')),
+    dev(f.prv, 'Pressure relief valve', `HERMETIC OPTION · p.12 ${est(`opens ${SET.prvOpen.v} bar est.`)}`, pr.prvOpen > 0.05 ? '<span style="color:#d6182b">OPEN</span>' : 'closed'),
+    dev(f.buchholz, 'Buchholz relay', `GAS ${est(SET.buchholzGasAlarm.v + ' ml')} · SURGE ${est(SET.buchholzSurgeTrip.v + ' m/s')} · p.39, 43`, `${Math.round(pr.gasBuch)} ml · ${pr.surge.toFixed(1)} m/s`, chip(c.buchAlarm, '3–4') + chip(c.buchTrip, '1–2', 'trip')),
+    dev(f.breather, 'Silica-gel breather', `LIGHT YELLOW → DRY OR REPLACE · p.39`, `${Math.round(pr.sat * 100)} % ${est('est.')}`, chip(pr.sat > 0.85, 'YELLOW')),
+    dev(true, `HV HRC fuse ${s.coord.hvIn} A`, `IN THE STATION · ≈ 2 In · p.49–50`, pr.fuseBlown ? '<span style="color:#d6182b">BLOWN</span>' : 'intact'),
+    dev(true, `LV NH fuse ${s.coord.lvIn} A gTr / gG`, `OUTGOING SIDE · p.50`, 'intact'),
+  ];
+  el2.devBox.innerHTML = rows.join('');
+  // the fuse chart: time over current on the HV side, log-log
+  const co = s.coord;
+  const W = 232;
+  const H = 150;
+  const x0 = 22;
+  const x1 = W - 4;
+  const y0 = 16;
+  const y1 = H - 14;
+  const iMin = Math.max(0.5, sp.i1 / 3);
+  const iMax = Math.max(co.iScHV * 3, co.inrush[1] * 2);
+  const X = (i) => x0 + ((Math.log10(i) - Math.log10(iMin)) / (Math.log10(iMax) - Math.log10(iMin))) * (x1 - x0);
+  const Y = (t) => y0 + ((3 - Math.log10(Math.min(1000, Math.max(0.01, t)))) / 5) * (y1 - y0);
+  let h = '';
+  for (const t of [1000, 100, 10, 1, 0.1, 0.01]) h += `<line x1="${x0}" x2="${x1}" y1="${Y(t)}" y2="${Y(t)}" stroke="${C.line}" stroke-width=".6"/><text x="${x0 - 2}" y="${Y(t) + 2}" font-size="6" text-anchor="end" fill="${C.mute}">${t >= 1 ? t : t}</text>`;
+  for (let d = Math.ceil(Math.log10(iMin)); d <= Math.log10(iMax); d++) h += `<line x1="${X(10 ** d)}" x2="${X(10 ** d)}" y1="${y0}" y2="${y1}" stroke="${C.line}" stroke-width=".6"/><text x="${X(10 ** d)}" y="${y1 + 9}" font-size="6" text-anchor="middle" fill="${C.mute}">${10 ** d} A</text>`;
+  const curve = (kind, In, scale, col) => {
+    let d = '';
+    for (const [m, t] of FUSE_CURVE[kind]) {
+      const i = m * In * scale;
+      if (i < iMin || i > iMax) continue;
+      d += `${d ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(t).toFixed(1)}`;
+    }
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.4"/>`;
+  };
+  h += curve('lv', co.lvIn, co.ratio, C.blue) + curve('hv', co.hvIn, 1, C.ink);
+  // the transformer: rated current, 150 % overload, the inrush band at 0.1 s, the LV short circuit seen on the HV side
+  h += `<line x1="${X(sp.i1)}" x2="${X(sp.i1)}" y1="${y0}" y2="${y1}" stroke="${C.faint}" stroke-dasharray="2 2"/><text x="${X(sp.i1) + 2}" y="${y0 + 7}" font-size="6" fill="${C.mute}">In</text>`;
+  h += `<rect x="${X(co.inrush[0])}" y="${Y(0.1) - 2.5}" width="${X(co.inrush[1]) - X(co.inrush[0])}" height="5" fill="${co.inrushOk ? 'rgba(240,90,35,.45)' : C.red}"/><text x="${X(co.inrush[0]) - 3}" y="${Y(0.1) + 2}" font-size="6" text-anchor="end" fill="${C.orange}">INRUSH</text>`;
+  h += `<circle cx="${X(co.iScHV)}" cy="${Y(co.tSc)}" r="3" fill="${C.red}"/><text x="${X(co.iScHV) + 5}" y="${Y(co.tSc) - 5}" font-size="6" text-anchor="start" fill="${C.red}">LV SHORT</text>`;
+  const kNow = s.K * sp.i1;
+  if (kNow > iMin) h += `<line x1="${X(kNow)}" x2="${X(kNow)}" y1="${y0}" y2="${y1}" stroke="${C.red}" stroke-width=".8"/>`;
+  el2.fuseSvg.innerHTML = h;
+  el2.fuseLeg.innerHTML = `<span style="color:${C.ink}">—</span> HV ${co.hvIn} A &nbsp;<span style="color:${C.blue}">—</span> LV ${co.lvIn} A ON HV SIDE`;
+  const ok = (b) => (b ? '<b style="color:#2f8f5b">✓</b>' : '<b style="color:#d6182b">✗</b>');
+  el2.fuseChk.innerHTML = [
+    `<div><span>Inrush passes (fuse ${co.tInrush.toFixed(2)} s at 20 In &gt; 0.1 s)</span>${ok(co.inrushOk)}</div>`,
+    `<div><span>Clears LV short in ${co.tSc < 1 ? (co.tSc * 1000).toFixed(0) + ' ms' : co.tSc.toFixed(1) + ' s'} · LV fuse first</span>${ok(co.scOk && co.selective)}</div>`,
+    `<div><span style="color:${C.est}">Curve shapes generic (est.) — use the fuse maker's</span><b></b></div>`,
+  ].join('');
+  const col = {trip: C.red, alarm: C.orange, info: C.mute};
+  const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
+  el2.logBox.innerHTML = pr.events.slice(-5).reverse().map((e) => `<p style="color:${col[e.kind]};margin:0 0 1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${hm(e.min)} · ${e.text}</p>`).join('') || `<p class="m">No events. Inject a fault above; raise TIME-LAPSE for the slow ones.</p>`;
+}
+void fuseTime;
+void coordination;

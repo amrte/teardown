@@ -9,8 +9,9 @@ import {warmComposer} from '../kit/warm.js';
 import {CAMS, createConsole, CUTS, LOAD_MAX, OVERLAYS, TA_RANGE, TABS, VIEWS} from './console.js';
 import {
   camAt, camName, cfgAt, cutAt, DURATION, DEG_PER_S, explodeAt, flowRate, loadAt, makeConsoleFrame, makeCursor,
-  overlaysAt, poseOf, SCRIPT, sizeOf, ss, tabAt, thermalAt, THERMAL_MIN_PER_S, VIEW_FN, viewAt, withExplode,
+  overlaysAt, poseOf, protAt, energisedAt, SCRIPT, sizeOf, ss, tabAt, thermalAt, THERMAL_MIN_PER_S, VIEW_FN, viewAt, withExplode,
 } from './film.js';
+import {FAULTS, fitted, protInit, protReset, protStep, SET} from './protect.js';
 import {createTrafoStage} from './stage.js';
 import {defaultConfig, LIMITS, oltcPosition, OPTION_KEYS, OPTIONS, PARTS, resolve, spec, thermalStep, ultimate} from './trafo.js';
 
@@ -125,6 +126,11 @@ export function runLive() {
   let history = [];
   let lastHist = 0;
   let tapStepAt = 0;
+  let prot = protInit(sp);
+  const faults = {overload: 0, cooling: 0, leak: 0, gassing: 0};
+  let pendArc = false;
+  let pendSc = false;
+  let seenEv = 0;
   const ov = {parts: 0, flux: 1, current: 1, flow: 1, untank: 0};
   const off = {az: 0, el: 0, k: 1};
   const cam = {...VIEW_FN.open(0, sizeOf(st.tr))};
@@ -177,6 +183,8 @@ export function runLive() {
     partSel = 0;
     setConfig(defaultConfig(), null);
     notes = [];
+    prot = protInit(sp);
+    for (const k in faults) faults[k] = 0;
   };
   const takeOver = () => {
     lastInput = T;
@@ -195,6 +203,8 @@ export function runLive() {
     resetThermal(thermalAt(cyc));
     simMin = cyc * THERMAL_MIN_PER_S;
     partSel = 0;
+    prot = {...protAt(cyc), contacts: {...protAt(cyc).contacts}};
+    seenEv = prot.events.length;
   };
   tourChip.addEventListener('pointerdown', (e) => {
     e.stopPropagation();
@@ -230,6 +240,26 @@ export function runLive() {
         if (!ov.parts) partSel = 0;
       }
     });
+  for (const f of FAULTS)
+    on('f_' + f.key, () => {
+      if (f.key === 'arc') pendArc = true;
+      else if (f.key === 'lvshort') pendSc = true;
+      else {
+        faults[f.key] = faults[f.key] ? 0 : 1;
+        if (faults[f.key]) {
+          if (f.key === 'overload') Ktarget = 1.4;
+          playI = Math.max(playI, 4);
+          say(`${f.text} — time-lapse set to 1 h/s`);
+        } else if (f.key === 'overload') Ktarget = 0.5;
+      }
+    });
+  on('f_reset', () => {
+    for (const k in faults) faults[k] = 0;
+    if (Ktarget > 1.2) Ktarget = 0.5;
+    prot = protReset(sp, prot);
+    seenEv = prot.events.length;
+    say('Reset: cause cleared, gas vented, fuse replaced — never re-energise before the cause is clarified (p.54)');
+  });
   on('pause', () => (paused = !paused));
   on('back', () => {
     paused = true;
@@ -438,6 +468,8 @@ export function runLive() {
       cfgHi = cfgEv && cyc - cfgEv.t < 2 ? cfgEv.cfg[0] : null;
       if (!(cfgEv && cyc - cfgEv.t < 2.2)) notes = [];
       th = 30 + cyc * DEG_PER_S;
+      prot = protAt(cyc);
+      seenEv = prot.events.length;
       flowPhase += flowRate(sp, K) * dt;
       history = [];
       for (let ago = 360; ago >= 0; ago -= 6) {
@@ -455,20 +487,28 @@ export function runLive() {
       tgt = withExplode(tgt, explode, z);
       const rk = Math.max(0, 1 - (T - ring.t) / 0.55);
       cursor = {x: -99, y: -99, press: false, ring: rk, ringX: ring.x, ringY: ring.y};
-      // the operating point
+      // the operating point: a trip or a blown fuse takes the unit off the grid
       K += (Ktarget - K) * (1 - Math.exp(-dt / 0.25));
       const P = PLAYS[playI];
+      const dm = paused ? 0 : P.min * dt;
+      const on = prot.energised !== false;
       if (!paused) {
         th += P.deg * dt;
-        const dm = P.min * dt;
         simMin += dm;
-        thermal = thermalStep(sp, thermal, K, ta, dm);
-        flowPhase += flowRate(sp, K) * dt;
+        thermal = thermalStep(sp, thermal, on ? K : 0, ta, dm, faults.cooling ? SET.coolFactor.v : 1, on);
+        flowPhase += flowRate(sp, on ? K : 0) * dt * (on ? 1 : 0.3);
         if (simMin - lastHist >= 6 || simMin < lastHist) {
           lastHist = simMin;
           history = history.map((r) => ({...r, ago: r.ago + 6})).filter((r) => r.ago <= 360);
           history.push({ago: 0, top: thermal.top, hot: thermal.hot, ta});
         }
+      }
+      prot = protStep(sp, prot, {top: thermal.top, energised: true, faults, arc: pendArc, lvshort: pendSc, simMin}, dm, dt);
+      pendArc = pendSc = false;
+      if (prot.events.length !== seenEv) {
+        const e = prot.events.at(-1);
+        seenEv = prot.events.length;
+        say(`${e.kind === 'trip' ? '⚡ ' : e.kind === 'alarm' ? '⚑ ' : ''}${e.text}`);
       }
       // the ECOTAP steps one position at a time toward the band (p.18)
       if (sp.oltc && T - tapStepAt > 0.6) {
@@ -478,19 +518,23 @@ export function runLive() {
           tapStepAt = T;
         }
       }
-      // the thermometer contacts (p.41)
-      if (thermal.top >= LIMITS.thermoTrip && T - flashAt > 4) say(`Thermometer trip: top oil ${Math.round(thermal.top)} °C ≥ 95 °C — the protection would switch the unit off`);
-      else if (thermal.top >= LIMITS.thermoAlarm && T - flashAt > 4) say(`Thermometer alarm: top oil ${Math.round(thermal.top)} °C ≥ 85 °C`);
+      // without contacts only the dial shows the temperature (p.38)
+      if (!fitted(cfg).contacts && thermal.top >= LIMITS.thermoAlarm && T - flashAt > 6) say(`Top oil ${Math.round(thermal.top)} °C: no thermometer contacts fitted — only the dial and its drag pointer show it`);
     }
     // the camera eases toward its target
     const k = 1 - Math.exp(-dt / (AP.on ? 0.18 : 0.45));
     cam.az += wrap(tgt.az - cam.az) * k;
     for (const key of ['tx', 'ty', 'tz', 'el', 'd', 'sx', 'sy']) cam[key] += (tgt[key] - cam[key]) * k;
     st.setCut(cut);
+    const energised = prot.energised !== false && (!AP.on || energisedAt((T - AP.t0) % DURATION));
     op = {
       sp,
       th,
-      K,
+      K: energised ? K : 0,
+      prot,
+      energised,
+      faults: {...faults},
+      time: T,
       pf,
       ta,
       ug,
@@ -508,12 +552,12 @@ export function runLive() {
       tab,
       cfgHi: T - notesAt < 2.5 ? cfgHi : AP.on ? cfgHi : null,
       notes: T - notesAt < 6 || AP.on ? notes : [],
-      flash: T - flashAt < 5 ? flash : '',
+      flash: T - flashAt < 6 ? flash : '',
       cam: view,
       since,
       partsSince: T - partsAt,
       partSel,
-      buchholz: (T % 6) / 5,
+      buchholz: Math.min(1, (T % 6) / 5),
       dipstick: view === 'lid' && cfg.design === 'breathing' && cut !== 'section' ? 1 : 0,
       paused,
       live: true,

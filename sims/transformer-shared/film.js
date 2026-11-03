@@ -5,6 +5,7 @@
 // circulate, reads the lid with the manual's part numbers, reconfigures the unit to hermetic and low-radiation, and
 // lifts the active part out of the tank. A pure function of t.
 import {runSim} from '../kit/runtime.js';
+import {coordination, FAULTS, protInit, protReset, protStep} from './protect.js';
 import {createConsole, LOAD_MAX} from './console.js';
 import {createTrafoStage} from './stage.js';
 import {
@@ -12,7 +13,7 @@ import {
   OPTIONS, optText, parallel, PARTS, regulation, resolve, seismic, spec, steady, thermalStep, ultimate,
 } from './trafo.js';
 
-export const DURATION = 40;
+export const DURATION = 48;
 export const SCRIPT = [
   {t: 0, cam: 'open'},
   {t: 3.2, cut: 'glass'},
@@ -28,8 +29,12 @@ export const SCRIPT = [
   {t: 28.6, tab: 'configure'},
   {t: 30.2, cfg: ['design', 'hermetic']},
   {t: 32.2, cfg: ['core', 'lowrad']},
-  {t: 34.4, overlay: 'untank'},
-  {t: 37.0, cam: 'hero'},
+  {t: 34.2, cfg: ['monitor', 'full']},
+  {t: 36.0, tab: 'protect'},
+  {t: 37.6, fault: 'arc'},
+  {t: 40.6, fault: 'reset'},
+  {t: 42.4, overlay: 'untank'},
+  {t: 45.0, cam: 'hero'},
 ];
 export const DEFAULTS = {duration: DURATION, fps: 60, theme: 'light', hud: {enabled: false, title: 'transformer', subtitle: ''}, director: {enabled: false}, watermark: ''};
 export const DEG_PER_S = 120; // electrical degrees per film second: 50 Hz at 1/150
@@ -64,8 +69,9 @@ export const explodeAt = (t) => {
   return e ? ss(e.t + 0.2, e.t + 2.4, t) : 0;
 };
 
-// the thermal history, integrated once at load: steady at 50 % before the film, a minute per step
-const TH_TAB = (() => {
+// the thermal history, integrated once at load: steady at 50 % before the film, a minute per step; `onAt` says when
+// the unit is energised (a trip takes the load and the losses away)
+const buildThermal = (onAt) => {
   const sp = spec(defaultConfig());
   const ta = 20;
   const u = ultimate(sp, 0.5);
@@ -74,12 +80,37 @@ const TH_TAB = (() => {
   const pre = 360;
   for (let m = -pre; m <= DURATION * THERMAL_MIN_PER_S + 1; m++) {
     const t = m / THERMAL_MIN_PER_S;
-    const K = t < 0 ? 0.5 : loadAt(t);
-    st = thermalStep(sp, st, K, ta, 1);
+    const on = t < 0 || onAt(t);
+    const K = t < 0 ? 0.5 : on ? loadAt(t) : 0;
+    st = thermalStep(sp, st, K, ta, 1, 1, on);
     rows.push({m, oil: st.oil, hs: st.hs, top: st.top, hot: st.hot, max: st.max, ta});
   }
   return {rows, pre};
-})();
+};
+let TH_TAB = buildThermal(() => true);
+// the protection devices, stepped once at load on the film's thermal state and its faults (1/30 s steps)
+const PROT_DT = 1 / 30;
+const buildProt = () => {
+  const out = [];
+  let key = '';
+  let sp = null;
+  let st = null;
+  for (let i = 0; i * PROT_DT <= DURATION + 0.5; i++) {
+    const t = i * PROT_DT;
+    const cfg = cfgAt(t);
+    const k = JSON.stringify(cfg);
+    if (k !== key) {
+      key = k;
+      sp = spec(cfg);
+      st = st ? {...st} : protInit(sp);
+    }
+    const crossed = (name) => SCRIPT.some((e) => e.fault === name && e.t > t - PROT_DT && e.t <= t);
+    if (crossed('reset')) st = protReset(sp, st);
+    st = protStep(sp, st, {top: thermalAt(t).top, energised: true, faults: {}, arc: crossed('arc'), lvshort: crossed('lvshort'), simMin: t * THERMAL_MIN_PER_S}, PROT_DT * THERMAL_MIN_PER_S, PROT_DT);
+    out.push(st);
+  }
+  return out;
+};
 export const thermalAt = (t) => {
   const m = t * THERMAL_MIN_PER_S;
   const u = clamp(m + TH_TAB.pre, 0, TH_TAB.rows.length - 2);
@@ -91,6 +122,13 @@ export const thermalAt = (t) => {
   for (const key of ['oil', 'hs', 'top', 'hot', 'max']) o[key] = a[key] + (b[key] - a[key]) * k;
   return o;
 };
+let PROT = null;
+PROT = buildProt();
+export const protAt = (t) => PROT[clamp(Math.round(t / PROT_DT), 0, PROT.length - 1)];
+export const energisedAt = (t) => protAt(t).energised !== false;
+TH_TAB = buildThermal(energisedAt);
+PROT = buildProt();
+export const effLoadAt = (t) => (energisedAt(t) ? loadAt(t) : 0);
 const historyAt = (t) => {
   const m = t * THERMAL_MIN_PER_S;
   const out = [];
@@ -107,7 +145,7 @@ const FLOW_TAB = (() => {
   let ph = 0;
   const dt = 1 / 120;
   for (let t = 0; t <= DURATION + 1; t += dt) {
-    ph += flowRate(sp, loadAt(t)) * dt;
+    ph += (energisedAt(t) ? flowRate(sp, loadAt(t)) : flowRate(sp, 0) * 0.3) * dt;
     out.push(ph);
   }
   return out;
@@ -172,7 +210,7 @@ export function makeCursor(ui) {
   const EV = SCRIPT.filter((e) => e.t > 0).map((e) => {
     if (e.load) return {t: e.t, spot: ui.knob('load', e.load[0] / LOAD_MAX), to: ui.knob('load', e.load[1] / LOAD_MAX), drag: e.load[2]};
     if (e.cfg) return {t: e.t, spot: ui.rowSpot(e.cfg[0]), drag: 0};
-    const k = e.cam ?? e.cut ?? e.view ?? e.overlay ?? e.tab;
+    const k = e.fault ? 'f_' + e.fault : e.cam ?? e.cut ?? e.view ?? e.overlay ?? e.tab;
     return {t: e.t, spot: ui.spots[k], drag: 0};
   });
   const WP = [[0, 980, 640]];
@@ -220,10 +258,16 @@ export function poseOf(sp, op) {
   const T = op.thermal;
   const ex = expansion(sp, T.top);
   const Lt = losses(sp, op.K).tot;
+  const on = op.energised !== false;
+  const pr = op.prot;
   return {
-    flux: el.flux,
-    lv: el.lv,
-    hv: el.hv,
+    flux: on ? el.flux : [0, 0, 0],
+    lv: on ? el.lv : [0, 0, 0],
+    hv: on ? el.hv : [0, 0, 0],
+    prot: pr && {
+      leakL: pr.leakL, leaking: !!op.faults?.leak, bubbles: pr.bubbles, arcFlash: pr.arcFlash, time: op.time ?? 0, sat: pr.sat, prvOpen: pr.prvOpen,
+      dgptFrac: pr.gasDgpt / 400, buchFrac: pr.gasBuch / 300, levelCm: pr.levelCm ?? 0,
+    },
     K: op.K,
     heat: clamp(Lt / (sp.p0 + sp.pk), 0, 1.6) / 1.6,
     flowPhase: op.flowPhase,
@@ -281,6 +325,8 @@ export function makeConsoleFrame(ui, st) {
     } else if (op.cut === 'glass' && op.view === 'all') card = {title: `${EXTRA_PARTS.oil.name} · ${EXTRA_PARTS.oil.sub}`, text: EXTRA_PARTS.oil.info};
     if (op.explode > 0.3) card = {title: 'Untanking · the active part hangs from the lid', text: 'Lid, bushings, leads and the active part come out as one. Revisions only at the factory or an equipped workshop (p.58). Never lift by the waves; sling angle ≥ 60° on the two lugs (p.40).'};
     if (op.card) card = op.card;
+    const lastEv = op.prot?.events?.at(-1);
+    const evFlash = lastEv && op.simMin - lastEv.min < 18 && lastEv.kind !== 'info' ? `${lastEv.kind === 'trip' ? '⚡ ' : '⚑ '}${lastEv.text}` : '';
     const site = sp.cfg.zone ?? 'Z1';
     ui.update({
       sp,
@@ -291,7 +337,7 @@ export function makeConsoleFrame(ui, st) {
       ug: op.ug,
       tap: op.tap,
       phi: el.phi,
-      flux: el.flux,
+      flux: op.energised === false ? [0, 0, 0] : el.flux,
       limb: op.limb,
       thermal: {...T, V: ageing(T.hot), levelCm: ex.cm, dV: ex.litres},
       contK: continuousLoad(sp, op.ta),
@@ -312,7 +358,11 @@ export function makeConsoleFrame(ui, st) {
       tab: op.tab,
       cfgHi: op.cfgHi,
       notes: op.notes,
-      flash: op.flash,
+      flash: op.flash || evFlash || (op.energised === false ? 'DE-ENERGISED · HV BREAKER OPEN' : ''),
+      prot: op.prot,
+      coord: coordination(sp),
+      faults: op.faults,
+      energised: op.energised !== false,
       card,
       callouts,
       parts,
@@ -354,8 +404,10 @@ export function makeFilm() {
         const view = viewAt(t);
         const ov = overlaysAt(t);
         const explode = explodeAt(t);
-        const K = loadAt(t);
+        const K = effLoadAt(t);
         const thermal = thermalAt(t);
+        const prot = protAt(t);
+        const fEv = SCRIPT.filter((e) => e.fault && e.fault !== 'reset' && e.t <= t).pop();
         const cam = camName(t);
         const t0 = VIEWS.filter(([a]) => a <= t).pop()[0];
         const ev = SCRIPT.filter((e) => e.t <= t).pop();
@@ -390,6 +442,11 @@ export function makeFilm() {
           partSel,
           dipstick: cam === 'lid' && cfg.design === 'breathing' ? ss(23.6, 24.6, t) * (1 - ss(28.2, 28.8, t)) : 0,
           cursor: cursorAt(t),
+          prot,
+          energised: energisedAt(t),
+          faults: fEv && t - fEv.t < 1.2 ? {[fEv.fault]: 1} : {},
+          time: t,
+          card: fEv && t - fEv.t < 3 && t < 40.6 ? {title: `${FAULTS.find((f) => f.key === fEv.fault).name} · p.${FAULTS.find((f) => f.key === fEv.fault).p}`, text: FAULTS.find((f) => f.key === fEv.fault).text + '. The full protection reads the pressure and the gas; the relief valve vents; the trip contact opens the HV breaker.'} : null,
         };
         void ev;
         st.setCut(cut);

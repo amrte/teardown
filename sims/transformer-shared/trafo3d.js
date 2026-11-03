@@ -509,7 +509,9 @@ export function buildTrafo(sp) {
     G.lid.add(lv);
     add(lv, new THREE.CylinderGeometry(34, 34, 30, 6), M.brass).position.y = 15;
     add(lv, new THREE.CylinderGeometry(24, 24, 40, 16), M.dark).position.y = 50;
-    add(lv, new THREE.CylinderGeometry(18, 18, 6, 16), M.red).position.y = 72;
+    levelCap = add(lv, new THREE.BoxGeometry(30, 6, 8), M.red);
+    levelCap.position.y = 72;
+    anchors.level = [-li / 2 + 170, yTop + 80, -bi * 0.3];
   }
 
   // vents / filler / full protection / conservator [37][38][39]
@@ -518,6 +520,10 @@ export function buildTrafo(sp) {
   let conservatorLevel = null;
   let buchholz = null;
   let silica = null;
+  let dgptGas = null;
+  let buchGas = null;
+  let levelCap = null;
+  let prvCap = null;
   if (cfg.design === 'breathing') {
     for (const [x, z] of [[ventX, bi * 0.22], [ventX + 0, -bi * 0.05]]) {
       const v = at(new THREE.Group(), x, yTop, z);
@@ -551,7 +557,22 @@ export function buildTrafo(sp) {
       add(d, new THREE.CylinderGeometry(38, 38, 10, 32), M.white).position.set(10, 220, 46);
       d.children[d.children.length - 1].rotation.x = Math.PI / 2;
       add(d, new THREE.CylinderGeometry(20, 20, 80, 16), M.glass).position.set(-48, 160, 30);
+      // the gas collecting at the top of the window, filling it downward
+      dgptGas = new THREE.Group();
+      dgptGas.position.set(-48, 200, 30);
+      d.add(dgptGas);
+      add(dgptGas, new THREE.CylinderGeometry(17, 17, 1, 16), keep(new THREE.MeshBasicMaterial({color: '#ffffff', transparent: true, opacity: 0.85})), false).position.y = -0.5;
       anchors.dgpt = [ventX + 30, yTop + 260, -bi * 0.2];
+      // the pressure relief valve beside it (hermetic option, p.12)
+      const prv = at(new THREE.Group(), -li * 0.12, yTop, -bi * 0.36);
+      G.lid.add(prv);
+      add(prv, new THREE.CylinderGeometry(34, 38, 40, 20), M.steel).position.y = 20;
+      prvCap = new THREE.Group();
+      prvCap.position.y = 40;
+      prv.add(prvCap);
+      add(prvCap, new THREE.CylinderGeometry(44, 44, 18, 24), M.red).position.y = 9;
+      add(prvCap, new THREE.CylinderGeometry(8, 8, 30, 10), M.steel).position.y = 30;
+      anchors.prv = [-li * 0.12, yTop + 80, -bi * 0.36];
     }
   } else {
     // conservator: a drum across the lid on two brackets, a pipe with the Buchholz relay, a silica-gel breather
@@ -588,6 +609,8 @@ export function buildTrafo(sp) {
       add(buchholz, new THREE.BoxGeometry(110, 50, 100), M.green).position.y = 85;
       add(buchholz, new THREE.CylinderGeometry(18, 18, 6, 16), M.glass).position.set(0, 0, 62);
       buchholz.children[2].rotation.x = Math.PI / 2;
+      buchGas = add(buchholz, new THREE.CircleGeometry(16, 20), keep(new THREE.MeshBasicMaterial({color: '#ffffff', transparent: true, opacity: 0.9})), false);
+      buchGas.position.set(0, 0, 65.5);
       add(buchholz, new THREE.CylinderGeometry(9, 9, 46, 12), M.steel).position.set(30, 130, 0);
       anchors.buchholz = [pipeX - 110, cy - cr * 0.6 - 30, 60];
     }
@@ -904,6 +927,66 @@ export function buildTrafo(sp) {
     }
   }
 
+  // ---------------------------------------------------------------- fault visuals: leak, gas bubbles, arc flash
+  const FX = new THREE.Group();
+  root.add(FX);
+  const dripMat = keep(new THREE.MeshBasicMaterial({color: sp.fluid.colour, transparent: true, opacity: 0.9}));
+  const drops = [0, 1, 2].map(() => add(FX, new THREE.SphereGeometry(7, 8, 6), dripMat, false));
+  const puddle = add(FX, new THREE.CircleGeometry(1, 40), keep(new THREE.MeshBasicMaterial({color: sp.fluid.colour, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2})), false);
+  puddle.rotation.x = -Math.PI / 2;
+  const dripX = -li / 2 + 120;
+  const dripZ = bi / 2 + wall + 70;
+  const floorY = cfg.pan === 'standard' || cfg.pan === 'easy' ? 5 : cfg.pan === 'integrated' ? skidY - 116 : 1;
+  puddle.position.set(dripX, floorY, dripZ + 40);
+  const NB = 60;
+  const bubbleMesh = new THREE.InstancedMesh(keep(new THREE.SphereGeometry(9, 8, 6)), keep(new THREE.MeshBasicMaterial({color: '#ffffff', transparent: true, opacity: 0.8, depthWrite: false})), NB);
+  bubbleMesh.renderOrder = 6;
+  lift.add(bubbleMesh);
+  const arcGlow = add(lift, new THREE.SphereGeometry(1, 20, 14), keep(new THREE.MeshBasicMaterial({color: '#cfe6ff', transparent: true, opacity: 0.9, depthWrite: false})), false);
+  arcGlow.position.set(C.pitch + Wd.hvR[0], coilY + Wd.h * 0.6, Wd.hvR[0] * 0.4);
+  arcGlow.renderOrder = 7;
+  anchors.arc = [arcGlow.position.x, arcGlow.position.y, arcGlow.position.z];
+  const bm = new THREE.Matrix4();
+  const setFx = (pr) => {
+    const leak = pr?.leakL ?? 0;
+    const t = pr?.time ?? 0;
+    drops.forEach((d, i) => {
+      const u = (t * 1.6 + i / 3) % 1;
+      d.visible = leak > 0.01 && pr.leaking;
+      d.position.set(dripX, yT + 60 - u * (yT + 60 - floorY), dripZ);
+    });
+    puddle.visible = leak > 0.05;
+    puddle.scale.setScalar(Math.min(700, 60 + 90 * Math.sqrt(leak)));
+    const b = pr?.bubbles ?? 0;
+    bubbleMesh.visible = b > 0.02;
+    if (bubbleMesh.visible) {
+      for (let i = 0; i < NB; i++) {
+        const show = i / NB < b;
+        const u = (t * (0.25 + 0.5 * b) + rnd(i * 1.7)) % 1;
+        const x = arcGlow.position.x + (rnd(i * 3.3) - 0.5) * 90;
+        const z = arcGlow.position.z + (rnd(i * 5.1) - 0.5) * 90;
+        const y = arcGlow.position.y + u * (yLid - 20 - arcGlow.position.y);
+        bm.makeScale(show ? 1 : 0, show ? 1 : 0, show ? 1 : 0).setPosition(x, y, z);
+        bubbleMesh.setMatrixAt(i, bm);
+      }
+      bubbleMesh.instanceMatrix.needsUpdate = true;
+    }
+    const a = pr?.arcFlash ?? 0;
+    arcGlow.visible = a > 0.02;
+    arcGlow.scale.setScalar(20 + 140 * a);
+    arcGlow.material.opacity = Math.min(0.95, a * 1.2);
+    if (dgptGas) dgptGas.scale.y = 1 + 78 * Math.min(1, pr?.dgptFrac ?? 0);
+    if (dgptGas) dgptGas.visible = (pr?.dgptFrac ?? 0) > 0.005;
+    if (buchGas) {
+      buchGas.visible = (pr?.buchFrac ?? 0) > 0.01;
+      buchGas.scale.setScalar(Math.max(0.05, Math.min(1, pr?.buchFrac ?? 0)));
+    }
+    if (silica) silica.children[2].material.color.set('#f0a43a').lerp(new THREE.Color('#f4eeb0'), Math.min(1, pr?.sat ?? 0));
+    if (levelCap) levelCap.rotation.y = clamp((pr?.levelCm ?? 0) / 8, -1.3, 1.3);
+    if (prvCap) prvCap.position.y = 40 + 28 * (pr?.prvOpen ?? 0);
+  };
+  setFx(null);
+
   // ---------------------------------------------------------------- cutaway, ghosting, subsystems
   const CLIP = new THREE.Plane(new V3(0, 0, -1), 0);
   const clipMats = new Set();
@@ -992,6 +1075,7 @@ export function buildTrafo(sp) {
       setFins(bulge);
       lastFinBulge = bulge;
     }
+    setFx(s.prot);
     // the tap changer
     if (tapDial) tapDial.rotation.y = -(-60 + ((s.tap ?? 3) - 1) * 30) * D2R;
     // the rollers turned for transverse travel
