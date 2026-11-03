@@ -10,11 +10,11 @@ import {warmComposer} from '../kit/warm.js';
 import {CAMS, createConsole, CUTS, LOAD_MAX, OVERLAYS, TA_RANGE, TABS, VIEWS} from './console.js';
 import {
   camAt, camName, cfgAt, cutAt, DURATION, DEG_PER_S, explodeAt, flowRate, loadAt, makeConsoleFrame, makeCursor,
-  overlaysAt, poseOf, protAt, energisedAt, SCRIPT, sizeOf, ss, tabAt, thermalAt, THERMAL_MIN_PER_S, VIEW_FN, viewAt, withExplode,
+  overlaysAt, poseOf, protAt, energisedAt, SCRIPT, useTour, baseConfig, sizeOf, ss, tabAt, thermalAt, THERMAL_MIN_PER_S, VIEW_FN, viewAt, withExplode,
 } from './film.js';
 import {FAULTS, fitted, protInit, protReset, protStep, SET} from './protect.js';
 import {createTrafoStage} from './stage.js';
-import {defaultConfig, LIMITS, MR, lvVoltage, OPTION_KEYS, OPTIONS, PARTS, resolve, spec, thermalStep, ultimate} from './trafo.js';
+import {defaultConfig, LIMITS, MR, lvVoltage, ratedTap, OPTION_KEYS, OPTIONS, PARTS, resolve, spec, thermalStep, ultimate} from './trafo.js';
 
 const W = 1600;
 const H = 900;
@@ -47,7 +47,9 @@ html,body{background:#ecedef;overflow:hidden}
 @media (orientation:portrait) and (max-width:820px){.turn{display:block}}
 `;
 
-export function runLive() {
+export function runLive(opts = {}) {
+  // a page for one real unit: the tour and every reset start from its datasheet
+  if (opts.preset) useTour(resolve({...defaultConfig(), preset: opts.preset}, 'preset').cfg);
   const style = document.createElement('style');
   style.textContent = CSS;
   document.head.appendChild(style);
@@ -55,7 +57,7 @@ export function runLive() {
   const canvas = document.createElement('canvas');
   canvas.id = 'gl';
   app.appendChild(canvas);
-  let cfg = defaultConfig();
+  let cfg = baseConfig();
   let sp = spec(cfg);
   let cfgKey = JSON.stringify(cfg);
   const st = createTrafoStage({canvas, spec: sp});
@@ -163,7 +165,7 @@ export function runLive() {
     const old = sp;
     sp = spec(cfg);
     st.setSpec(sp);
-    if (sp.positions !== old.positions) tap = (sp.positions + 1) / 2;
+    if (sp.positions !== old.positions || sp.ratedPos !== old.ratedPos) tap = ratedTap(sp);
     tap = clamp(tap, 1, sp.positions);
     buildTapHits();
   };
@@ -181,9 +183,9 @@ export function runLive() {
     ta = 20;
     pf = 0.9;
     ug = 1;
-    tap = 3;
     partSel = 0;
-    setConfig(defaultConfig(), null);
+    setConfig(baseConfig(), null);
+    tap = ratedTap(sp);
     notes = [];
     prot = protInit(sp);
     for (const k in faults) faults[k] = 0;
@@ -435,7 +437,7 @@ export function runLive() {
       const cyc = c - loop * DURATION;
       if (loop > AP.loop) {
         AP.loop = loop;
-        setConfig(defaultConfig(), null);
+        setConfig(baseConfig(), null);
       }
       const want = cfgAt(cyc);
       if (JSON.stringify(want) !== cfgKey) {

@@ -48,9 +48,11 @@ export const FAULTS = [
 export function fitted(cfg) {
   const m = cfg.monitor;
   const d = cfg.design;
+  const has = (k) => !!cfg.devices?.includes(k);
   return {
     thermo: true,
-    contacts: m === 'contacts' || m === 'full',
+    contacts: m === 'contacts' || m === 'full' || has('contacts'),
+    terminalBox: has('terminalbox'),
     pt100: m === 'pt100',
     level: m === 'level' || m === 'full' || d === 'conservator',
     reed: m === 'level' || m === 'full',

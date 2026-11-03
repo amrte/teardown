@@ -9,12 +9,12 @@ import {coordination, FAULTS, protInit, protReset, protStep} from './protect.js'
 import {createConsole, LOAD_MAX} from './console.js';
 import {createTrafoStage} from './stage.js';
 import {
-  ageing, continuousLoad, defaultConfig, efficiency, electrical, EXTRA_PARTS, expansion, losses, lvVoltage, oltcPosition,
+  ageing, continuousLoad, defaultConfig, efficiency, electrical, EXTRA_PARTS, ratedTap, expansion, losses, lvVoltage, oltcPosition,
   OPTIONS, optText, parallel, PARTS, regulation, resolve, seismic, spec, steady, thermalStep, ultimate,
 } from './trafo.js';
 
 export const DURATION = 48;
-export const SCRIPT = [
+const SCRIPT_DEFAULT = [
   {t: 0, cam: 'open'},
   {t: 3.2, cut: 'glass'},
   {t: 6.0, cam: 'inside'},
@@ -36,6 +36,15 @@ export const SCRIPT = [
   {t: 42.4, overlay: 'untank'},
   {t: 45.0, cam: 'hero'},
 ];
+// the tour a real unit gets: the same beats, no reconfiguring; the datasheet and the wiring instead
+export const SCRIPT_PRESET = SCRIPT_DEFAULT.filter((e) => !e.cfg && !e.tab).concat([
+  {t: 28.6, tab: 'datasheet'},
+  {t: 32.2, tab: 'wiring'},
+  {t: 36.0, tab: 'protect'},
+]).sort((a, b) => a.t - b.t);
+export let SCRIPT = SCRIPT_DEFAULT;
+let BASE = defaultConfig();
+export const baseConfig = () => ({...BASE});
 export const DEFAULTS = {duration: DURATION, fps: 60, theme: 'light', hud: {enabled: false, title: 'transformer', subtitle: ''}, director: {enabled: false}, watermark: ''};
 export const DEG_PER_S = 120; // electrical degrees per film second: 50 Hz at 1/150
 export const THERMAL_MIN_PER_S = 6; // thermal minutes per film second
@@ -48,7 +57,7 @@ export const ss = (a, b, t) => smoother((t - a) / (b - a));
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
 // ------------------------------------------------------------------------------------------------ the film's state
-const LOAD_EV = SCRIPT.find((e) => e.load);
+let LOAD_EV = SCRIPT.find((e) => e.load);
 export const loadAt = (t) => LOAD_EV.load[0] + (LOAD_EV.load[1] - LOAD_EV.load[0]) * ss(LOAD_EV.t, LOAD_EV.t + LOAD_EV.load[2], t);
 const lastOf = (key, t, def) => SCRIPT.filter((e) => e[key] !== undefined && e.t <= t).pop()?.[key] ?? def;
 export const cutAt = (t) => lastOf('cut', t, 'solid');
@@ -60,7 +69,7 @@ export const overlaysAt = (t) => {
   return on;
 };
 export const cfgAt = (t) => {
-  let c = defaultConfig();
+  let c = {...BASE};
   for (const e of SCRIPT) if (e.cfg && e.t <= t) c = resolve({...c, [e.cfg[0]]: e.cfg[1]}, e.cfg[0]).cfg;
   return c;
 };
@@ -72,7 +81,7 @@ export const explodeAt = (t) => {
 // the thermal history, integrated once at load: steady at 50 % before the film, a minute per step; `onAt` says when
 // the unit is energised (a trip takes the load and the losses away)
 const buildThermal = (onAt) => {
-  const sp = spec(defaultConfig());
+  const sp = spec(BASE);
   const ta = 20;
   const u = ultimate(sp, 0.5);
   let st = {oil: u.oil, hs: u.hs, max: ta + u.oil};
@@ -139,8 +148,8 @@ const historyAt = (t) => {
   return out;
 };
 // the convection's phase: integrated once at load, its rate by the losses
-const FLOW_TAB = (() => {
-  const sp = spec(defaultConfig());
+const buildFlow = () => {
+  const sp = spec(BASE);
   const out = [0];
   let ph = 0;
   const dt = 1 / 120;
@@ -149,7 +158,20 @@ const FLOW_TAB = (() => {
     out.push(ph);
   }
   return out;
-})();
+};
+let FLOW_TAB = buildFlow();
+/** Point the tour at another unit and script (a datasheet preset): every table is rebuilt for it. */
+export function useTour(base, script = SCRIPT_PRESET) {
+  BASE = {...base};
+  SCRIPT = script;
+  LOAD_EV = SCRIPT.find((e) => e.load);
+  VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
+  TH_TAB = buildThermal(() => true);
+  PROT = buildProt();
+  TH_TAB = buildThermal(energisedAt);
+  PROT = buildProt();
+  FLOW_TAB = buildFlow();
+}
 export function flowRate(sp, K) {
   return 0.045 * Math.sqrt(losses(sp, K).tot / (sp.p0 + sp.pk));
 }
@@ -161,7 +183,7 @@ const flowAt = (t) => {
 
 // ------------------------------------------------------------------------------------------------ views
 // every view is a function of u (seconds since it came on) and the unit's size; H the overall height (m)
-const VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
+let VIEWS = SCRIPT.filter((e) => e.cam).map((e) => [e.t, e.cam]);
 // a slow sway with the given starting rate (°/s) that stays bounded on a page left open
 const sw = (u, rate) => rate * 5 * Math.sin(u / 5);
 export const VIEW_FN = {
@@ -380,8 +402,8 @@ export function makeConsoleFrame(ui, st) {
 
 export function makeFilm() {
   return async ({canvas, capture}) => {
-    let cfgKey = JSON.stringify(defaultConfig());
-    let sp = spec(defaultConfig());
+    let cfgKey = JSON.stringify(BASE);
+    let sp = spec(BASE);
     const st = createTrafoStage({canvas, spec: sp});
     const resize = () => st.resize(1600, 900, capture ? devicePixelRatio || 1 : Math.min(devicePixelRatio || 1, 2));
     resize();
@@ -424,7 +446,7 @@ export function makeFilm() {
           pf: 0.9,
           ta: 20,
           ug: 1,
-          tap: 3,
+          tap: ratedTap(sp),
           limb: 0,
           thermal,
           history: historyAt(t),

@@ -279,10 +279,12 @@ export function createConsole(app) {
       const sp = s.sp;
       const cfg = sp.cfg;
       // ---------------------------------------------------------------- title, load
-      once('title', `${sp.S}|${cfg.core}|${cfg.design}|${cfg.hv}|${cfg.vector}|${cfg.tapchanger}|${cfg.fluid}`, () => {
+      once('title', `${sp.S}|${cfg.core}|${cfg.design}|${cfg.hv}|${cfg.vector}|${cfg.tapchanger}|${cfg.fluid}|${cfg.preset}`, () => {
         title.innerHTML = `Oil Transformer <span style="color:${C.red}">·</span> ${sp.S} kVA`;
         const kind = cfg.tapchanger === 'oltc' ? 'REGULATED' : cfg.core === 'amorphous' ? 'AMORPHOUS' : cfg.core === 'lowrad' ? 'LOW-RADIATION' : 'DISTRIBUTION';
-        subtitle.innerHTML = `ONAN &nbsp;•&nbsp; ${cfg.hv} / 0.4 KV &nbsp;•&nbsp; ${cfg.vector.toUpperCase()} &nbsp;•&nbsp; ${optText('design', cfg.design)} &nbsp;•&nbsp; ${kind}`;
+        subtitle.innerHTML = sp.ds
+          ? `${sp.preset.code.split('-S-')[0]} &nbsp;•&nbsp; ${sp.ds.series} &nbsp;•&nbsp; ${(sp.un1).toFixed(3)} / 0.4 KV &nbsp;•&nbsp; ${cfg.vector.toUpperCase()} &nbsp;•&nbsp; CONSERVATOR &nbsp;•&nbsp; OUTDOOR`
+          : `ONAN &nbsp;•&nbsp; ${cfg.hv} / 0.4 KV &nbsp;•&nbsp; ${cfg.vector.toUpperCase()} &nbsp;•&nbsp; ${optText('design', cfg.design)} &nbsp;•&nbsp; ${kind}`;
         loadMax.textContent = `${fx(sp.S * 1.5)}`;
       });
       const kva = s.K * sp.S;
@@ -452,12 +454,12 @@ export function createConsole(app) {
         for (const k of OPTION_KEYS) {
           const on = s.cfgHi === k;
           rows[k].style.background = on ? 'rgba(214,24,43,.08)' : '';
-          rows[k].querySelector('.v').innerHTML = `${optText(k, cfg[k])}<i>p.${OPTIONS[k].p}</i>`;
+          rows[k].querySelector('.v').innerHTML = `${optText(k, cfg[k], cfg)}<i>${sp.ds && k !== 'preset' && k !== 'zone' ? 'DS' : 'p.' + OPTIONS[k].p}</i>`;
           rows[k].querySelector('.v').style.color = on ? C.red : C.ink;
         }
         cfgNotes.innerHTML = (s.notes?.length ? s.notes.map((n) => `<p style="color:${C.red}">⚑ ${n.why} <span class="m">(p.${n.p})</span></p>`).join('') : '') + `<p class="m">Rules applied from the manual: natural ester only hermetic (p.17); ECOTAP 400–1000 kVA, hermetic, single HV (p.18–19); full protection hermetic, Buchholz with conservator (p.38–39); quake anchoring only with the integrated pan (p.35).</p>`;
       }
-      if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = datasheetHTML(s)));
+      if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = sp.ds ? presetSheetHTML(s) : datasheetHTML(s)));
       if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
       for (const f of FAULTS) setBtn('f_' + f.key, !!s.faults?.[f.key], true);
       if (s.tab === 'wiring') once('wr', `${cfg.design}|${cfg.monitor}|${cfg.hv}|${cfg.rating}|${s.tap}|${s.avr?.state}|${(s.buchholz ?? 0).toFixed(2)}|${JSON.stringify(s.prot?.contacts ?? {})}|${Math.round(s.thermal.top)}`, () => (wrBox.innerHTML = wiringHTML(s)));
@@ -488,10 +490,12 @@ export function createConsole(app) {
           void pct;
         }
         tapSvg.innerHTML = h;
-        const pct = (((sp.positions + 1) / 2 - s.tap) * LIMITS.tapStep);
+        const pct = sp.taps ? (sp.taps[s.tap - 1] / sp.taps[sp.ratedPos - 1] - 1) * 100 : (((sp.positions + 1) / 2 - s.tap) * LIMITS.tapStep);
         const a = s.avr;
         tapFoot.innerHTML = a
           ? `<span style="color:${a.state === 'IN BAND' ? C.mute : C.red}">${a.state}${a.state === 'TAP CHANGE' ? ` ${s.tap} → ${a.to} · ${MR.tapChangeMs} MS` : a.state.endsWith('T1') ? ` ${Math.floor(a.t1)} / ${MR.avr.t1.def} S` : a.state.endsWith('T2') ? ` ${a.t2.toFixed(0)} / ${MR.avr.t2.def} S` : ''}</span> &nbsp;·&nbsp; U ${a.ua.toFixed(1)} V vs ${MR.avr.desired.def} V (${a.du >= 0 ? '+' : '−'}${Math.abs(a.du).toFixed(1)} %) &nbsp;·&nbsp; B1 ±${MR.avr.b1.def} % · B2 ±${MR.avr.b2.def} % &nbsp;·&nbsp; ${a.ops} OPS`
+          : sp.taps
+          ? `POSITION ${s.tap}: ${sp.taps[s.tap - 1]} V${s.tap === sp.ratedPos ? ' (RATED)' : ` (${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(2)} %)`} &nbsp;·&nbsp; GRID ${(s.ug * sp.un1).toFixed(2)} KV → LV <span style="color:${Math.abs(s.ulv - 400) > 20 ? C.red : C.ink}">${s.ulv.toFixed(0)} V</span>`
           : `POSITION ${s.tap}: HV TURNS ${pct >= 0 ? '+' : '−'}${Math.abs(pct).toFixed(1)} % &nbsp;·&nbsp; GRID ${(s.ug * sp.un1).toFixed(2)} KV → LV <span style="color:${Math.abs(s.ulv - 400) > 20 ? C.red : C.ink}">${s.ulv.toFixed(0)} V</span>`;
       });
 
@@ -555,7 +559,7 @@ function datasheetHTML(s) {
     row('Sustained short-circuit LV', B(`${(sp.isc2 / 1000).toFixed(1)} kA`)),
     row('P0 / Pk', sp.S === 630 && !sp.amorph ? B(`${sp.p0} (p.21) / ${fx(sp.pk)} W`) : sp.S === 630 ? B(`${sp.p0} (p.21) / ${fx(sp.pk)} W`) : E(`${sp.p0} / ${fx(sp.pk)} W`)),
     row('Rises copper / top oil', B('65 K / 60 K (p.12)')),
-    row('BIL HV', B(cfg.screen ? '125 kV · screened, +30 % layers' : '125 kV (170 kV option, p.54)')),
+    row('BIL HV', sp.cls.um === 24 ? B(cfg.screen ? '125 kV · screened, +30 % layers' : '125 kV (170 kV option, p.54)') : E(`${{7.2: 60, 12: 75, 17.5: 95, 24: 125, 36: 170}[sp.cls.um]} kV (IEC 60076-3 list)`)),
     h('BUILD'),
     row('Tank L × B × H', E(`${sp.tank.l} × ${sp.tank.b} × ${sp.tank.h} mm`)),
     row(sp.herm ? 'Waves (deeper, hermetic)' : 'Waves depth · pitch', E(`${sp.finDepth} · ${sp.tank.finPitch} mm`)),
@@ -841,4 +845,50 @@ function ecotapBlock(s) {
   out.push(P(`Control: desired ${A.desired.def} V (P1) · B1 ±${A.b1.def} % after T1 ${A.t1.def} s · B2 ±${A.b2.def} % after T2 ${A.t2.def} s · blocking < ${A.block.under} V / > ${A.block.over} V · one measured phase · ${MR.tapChangeMs} ms per change, ≈ ${MR.coolingS} s cooling, ≤ ${MR.perMinute}/min ${m('(MR 8209941 p.13–14, 127, 138; flyer p.3)')}`));
   out.push(P(`${a ? a.ops : 0} of ${MR.life.ops.toLocaleString('en-US')} operations, then replace the tap changer; control unit after ≤ ${MR.life.controlYears} years ${m('(MR 8209941 p.124)')}`));
   return out;
+}
+
+// the datasheet of a real unit, in the sheet's own order, then what the model derives from those values
+function presetSheetHTML(s) {
+  const sp = s.sp;
+  const d = sp.ds;
+  const B = (v) => `<b>${v}</b>`;
+  const E = (v) => `<b class="e">${v} <span style="font-size:7.5px">est.</span></b>`;
+  const row = (a, b) => `<div><span>${a}</span>${b}</div>`;
+  const h = (t) => `<h4>${t}</h4>`;
+  const q = s.seismic;
+  const kv = (v) => (v / 1000).toFixed(v % 1000 ? 3 : 1);
+  return [
+    h(`${sp.preset.code}`),
+    row('Product · series', B(`DVO · ${d.series}`)),
+    row('Norms', B(d.norms)),
+    row('Site · medium · tank', B(`outdoor · oil · ${d.tank}`)),
+    row('Cooling · load class', B(`${d.cooling} · ${d.loadClass}`)),
+    row('HV / LV terminals', B('porcelain EN 50180 / 50386')),
+    row('Cu/Cu · screen · reinf.', B('Cu/Cu · no · no / no')),
+    h('TECHNICAL DATA'),
+    row('Power · frequency', B(`${d.S} kVA · ${d.f} Hz`)),
+    `<div style="white-space:normal;display:block"><span>HV taps (kV): </span><b>${d.taps.map((v, i) => (i === d.ratedPos - 1 ? `<u>${kv(v)}</u>` : kv(v))).join(' · ')}</b></div>`,
+    row('Insulation HV LI / AC / Um', B(`${d.insHV.li} / ${d.insHV.ac} / ${d.insHV.um} kV`)),
+    row('LV · In', B(`${d.un2} V · ${d.i2} A`)),
+    row('Insulation LV AC / Um', B(`${d.insLV.ac} / ${d.insLV.um} kV`)),
+    row('No-load loss P0 (AA0)', B(`${d.p0} W`)),
+    row('Load loss Pk (Ak, 75 °C)', B(`${d.pk.toLocaleString('en-US')} W`)),
+    row('uk', B(`${d.uk.toFixed(1)} % ${d.ukTol}`)),
+    row('Vector group', B(d.vector)),
+    row(`Noise LpA / LwA (${d.noise.at})`, B(`${d.noise.lpa} / ${d.noise.lwa} dB(A)`)),
+    row('Rises · ambient · altitude', B(`${d.rises[0]}/${d.rises[1]} K · ${d.ambient} °C · ${d.altitude} m`)),
+    row('L × B × H · gauge', B(`${d.dims.l}×${d.dims.b}×${d.dims.h} · ${d.gauge} mm`)),
+    row('Slenderness · oil', B(`${d.slenderness} · ${d.oil.kg} kg / ${d.oil.l} l`)),
+    row('Cu · core · active · total', B(`${d.mass.cu} · ${d.mass.core} · ${d.mass.active} · ${d.mass.total} kg`)),
+    h('DERIVED BY THE MODEL'),
+    row('HV current · LV short-circuit', B(`${sp.i1.toFixed(1)} A · ${(sp.isc2 / 1000).toFixed(1)} kA`)),
+    row('ur / ux · η at 100 %, cos φ 1', B(`${sp.ur.toFixed(2)} / ${sp.ux.toFixed(2)} % · ${(efficiency(sp, 1, 1) * 100).toFixed(2)} %`)),
+    row('LV stud class · torque (p.47)', B(`${sp.lvBushA} A · ${sp.lvTorque.thread} ${sp.lvTorque.nm} Nm`)),
+    row('HV / LV fuse (≈ 2 In, p.49)', E(`${sp.fuseHV.a} A / ${sp.fuseLV.a} A`)),
+    row('Ventilation A (H 2 m, p.44)', B(`${sp.vent.area.toFixed(2)} m² · ${sp.vent.air.toFixed(0)} m³/min`)),
+    row(`Seismic ${s.seismicKey}: Se · FD / FA / FQ`, B(`${q.Se.toFixed(1)} · ${q.FD.toFixed(1)} / ${q.FA.toFixed(1)} / ${q.FQ.toFixed(1)} kN`)),
+    `<div style="white-space:normal;color:${q.lift || q.reinforced ? C.red : C.ink};font-weight:600;display:block">${q.verdict}</div>`,
+    h('ACCESSORIES'),
+    `<div style="white-space:normal;display:block;line-height:12px;font-size:8.4px"><b>Fitted:</b> ${d.fitted.join(' · ')}. <span style="color:${C.mute}">Standard: ${d.standard.join(', ')}.</span></div>`,
+  ].join('');
 }

@@ -297,6 +297,17 @@ export function buildTrafo(sp) {
   at(add(G.tank, new THREE.CylinderGeometry(19, 19, 12, 6), M.zinc), li / 2 - 130, yT + 40, bi / 2 + wall + 50).rotation.x = Math.PI / 2;
   anchors.earth = [li / 2 - 130, yT + 40, bi / 2 + wall + 56];
 
+  // the terminal box for the monitoring contacts (datasheet option "Anschlusskasten"; size and place est.)
+  if (cfg.devices?.includes('terminalbox')) {
+    const tb = at(new THREE.Group(), li / 2 + wall + T.fin + 70, yLid - 260, -bi * 0.15);
+    G.tank.add(tb);
+    add(tb, new THREE.BoxGeometry(140, 220, 160), M.paint);
+    add(tb, new THREE.BoxGeometry(6, 200, 140), M.zinc).position.x = 72;
+    add(tb, new THREE.BoxGeometry(140, 10, 20), M.paint).position.set(-70, 0, 0);
+    for (const z of [-40, 0, 40]) add(tb, new THREE.CylinderGeometry(10, 10, 30, 10), M.black).position.set(0, -125, z);
+    anchors.terminalbox = [li / 2 + wall + T.fin + 145, yLid - 260, -bi * 0.15];
+  }
+
   // ---------------------------------------------------------------- the lid and its fittings [36][37]
   const lidW = T.l - 30;
   const lidB = T.b - 30;
@@ -399,9 +410,9 @@ export function buildTrafo(sp) {
     knob.add(tapDial);
     add(tapDial, new THREE.CylinderGeometry(30, 34, 52, 10), M.red).position.y = 26;
     add(tapDial, new THREE.BoxGeometry(10, 20, 54), M.red).position.set(0, 50, 18);
-    // the five positions as studs round the base
-    for (let p = 0; p < 5; p++) {
-      const a = (-60 + p * 30) * D2R;
+    // one stud per position round the base (5 standard, the datasheet's count otherwise)
+    for (let p = 0; p < sp.positions; p++) {
+      const a = (-60 + (p * 120) / (sp.positions - 1)) * D2R;
       add(knob, new THREE.CylinderGeometry(5, 5, 6, 8), M.white).position.set(Math.sin(a) * 50, 37, Math.cos(a) * 50);
     }
     if (cfg.hv === '10/20') {
@@ -584,7 +595,8 @@ export function buildTrafo(sp) {
     // conservator: a drum across the lid on two brackets, a pipe with the Buchholz relay, a silica-gel breather
     const cr = Math.round(110 + sp.S / 40);
     const cl = Math.round(Math.min(bi + 2 * T.fin, 420 + sp.S / 4));
-    const cy = yTop + 380;
+    const cy = sp.consTop ? sp.consTop - cr : yTop + 380;
+    const rise = cy - yTop;
     const cx = ventX - 20;
     const c = at(new THREE.Group(), cx, cy, 0);
     G.lid.add(c);
@@ -595,7 +607,7 @@ export function buildTrafo(sp) {
     c.children[2].position.z = -cl / 2;
     c.children[1].scale.y = 0.18;
     c.children[2].scale.y = 0.18;
-    for (const s of [-1, 1]) add(c, new THREE.BoxGeometry(14, 380 - cr + 20, 90), M.paint).position.set(0, -(380) / 2 - cr / 2 + 10, s * cl * 0.32);
+    for (const s of [-1, 1]) add(c, new THREE.BoxGeometry(14, rise - cr + 20, 90), M.paint).position.set(0, -rise / 2 - cr / 2 + 10, s * cl * 0.32);
     // level gauge on the drum end
     add(c, new THREE.CylinderGeometry(40, 40, 16, 24), M.white).position.set(0, 0, cl / 2 + cr * 0.18 + 6);
     c.children[c.children.length - 1].rotation.x = Math.PI / 2;
@@ -604,12 +616,17 @@ export function buildTrafo(sp) {
     c.add(conservatorLevel);
     add(conservatorLevel, new THREE.BoxGeometry(4, 30, 2), M.black, false).position.y = 13;
     // the pipe down to the lid with the Buchholz relay in it [43]
-    const pipeX = cx + 260;
-    const pipe = add(G.lid, new THREE.CylinderGeometry(22, 22, 360, 16), M.paint);
-    pipe.position.set(cx + 130, cy - cr * 0.6, 0);
-    pipe.rotation.z = Math.atan2(cr * 0.6 + 200, 260) - Math.PI / 2;
+    // the pipe from the drum down to the lid, the Buchholz relay half way along it [43]
+    const pA = new V3(cx + cr * 0.55, cy - cr * 0.75, 0);
+    const pB = new V3(cx + 300, yTop, 0);
+    const pD = pB.clone().sub(pA);
+    const pipe = add(G.lid, new THREE.CylinderGeometry(22, 22, pD.length(), 16), M.paint);
+    pipe.position.copy(pA).add(pB).multiplyScalar(0.5);
+    pipe.quaternion.setFromUnitVectors(new V3(0, 1, 0), pD.clone().normalize());
     if (cfg.monitor === 'buchholz') {
-      buchholz = at(new THREE.Group(), pipeX - 110, cy - cr * 0.6 - 100, 0);
+      const bm = pA.clone().lerp(pB, 0.5);
+      buchholz = at(new THREE.Group(), bm.x, bm.y, 0);
+      buchholz.quaternion.setFromUnitVectors(new V3(1, 0, 0), pD.clone().normalize());
       G.lid.add(buchholz);
       add(buchholz, new THREE.BoxGeometry(150, 130, 120), M.green).position.y = 0;
       add(buchholz, new THREE.BoxGeometry(110, 50, 100), M.green).position.y = 85;
@@ -618,7 +635,7 @@ export function buildTrafo(sp) {
       buchGas = add(buchholz, new THREE.CircleGeometry(16, 20), keep(new THREE.MeshBasicMaterial({color: '#ffffff', transparent: true, opacity: 0.9})), false);
       buchGas.position.set(0, 0, 65.5);
       add(buchholz, new THREE.CylinderGeometry(9, 9, 46, 12), M.steel).position.set(30, 130, 0);
-      anchors.buchholz = [pipeX - 110, cy - cr * 0.6 - 30, 60];
+      anchors.buchholz = [bm.x, bm.y + 60, 60];
     }
     // the silica-gel breather hanging off the drum [39]
     silica = at(new THREE.Group(), cx - cr - 60, yTop + 120, cl * 0.2);
@@ -1097,7 +1114,7 @@ export function buildTrafo(sp) {
     }
     setFx(s.prot);
     // the tap changer
-    if (tapDial) tapDial.rotation.y = -(-60 + ((s.tap ?? 3) - 1) * 30) * D2R;
+    if (tapDial) tapDial.rotation.y = -(-60 + (((s.tap ?? 3) - 1) * 120) / (sp.positions - 1)) * D2R;
     // the rollers turned for transverse travel
     for (const w of wheels) w.fork.rotation.y = Math.PI / 2 - (s.wheelTurn ?? 0) * (Math.PI / 2);
     // the flow

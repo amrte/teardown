@@ -9,6 +9,8 @@
 // catalogue proportions; they are there so the model is complete, and the console shows them in grey with "est.".
 // No three.js in here. Lengths in mm, masses in kg, powers in W unless the name says otherwise.
 
+import {PRESETS, presetOf} from './presets.js';
+
 export const MANUAL = 'R&S Handbuch flüssigkeitsgefüllte Transformatoren ≤ 3150 kVA (KD_TR_MA_Handbuch_V2_DE)';
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const D2R = Math.PI / 180;
@@ -215,6 +217,7 @@ export const PT100_COLOURS = {w2: ['red', 'white'], w3: ['red', 'red', 'white'],
 // ------------------------------------------------------------------------------------------------ options
 // Each option: values, labels, the default, and where the manual describes it.
 export const OPTIONS = {
+  preset: {label: 'DATASHEET', values: ['none', 'dso1600'], fmt: (v) => (v === 'none' ? 'GENERIC (MODEL)' : PRESETS[v].code.split('-S-')[0]), def: 'none', p: 10},
   rating: {label: 'RATING', values: RATINGS, fmt: (v) => `${v} kVA`, def: 630, p: 12},
   hv: {label: 'HV', values: ['6', '10', '16', '20', '30', '10/20'], fmt: (v) => `${v} kV`, def: '20', p: 12},
   vector: {label: 'VECTOR GROUP', values: ['Dyn5', 'Dyn11', 'Yzn5', 'Yzn11'], def: 'Dyn5', p: 47},
@@ -233,7 +236,13 @@ export const OPTIONS = {
 };
 export const OPTION_KEYS = Object.keys(OPTIONS);
 export const defaultConfig = () => Object.fromEntries(OPTION_KEYS.map((k) => [k, OPTIONS[k].def]));
-export const optText = (k, v) => (OPTIONS[k].fmt ? OPTIONS[k].fmt(v) : String(v).toUpperCase());
+export const optText = (k, v, cfg) => {
+  const P = presetOf(cfg);
+  if (P && k === 'hv') return `${(P.data.taps[P.data.ratedPos - 1] / 1000).toFixed(3)} KV · UM ${P.data.insHV.um}`;
+  if (P && k === 'tapchanger') return `OFF-LOAD · ${P.data.taps.length} TAPS`;
+  if (P && k === 'monitor') return 'BUCHHOLZ + T2 + NIVEAU';
+  return OPTIONS[k].fmt ? OPTIONS[k].fmt(v) : String(v).toUpperCase();
+};
 
 /**
  * The rules the manual sets between options. Returns the fixed configuration and the notes about what changed and why;
@@ -248,6 +257,14 @@ export function resolve(cfg0, changed = null) {
       notes.push({k, why, p});
     }
   };
+  // a datasheet preset: choosing it sets every option; changing one of them leaves the datasheet for a generic model
+  if (changed === 'preset' && c.preset !== 'none') Object.assign(c, PRESETS[c.preset].cfg);
+  else if (c.preset && c.preset !== 'none' && changed && changed !== 'preset' && c[changed] !== PRESETS[c.preset].cfg[changed]) {
+    notes.push({k: 'preset', why: `Changed from the ${PRESETS[c.preset].code.split('-S-')[0]} datasheet: generic model from here`, p: 10});
+    c.preset = 'none';
+    delete c.devices;
+  }
+  if (c.preset === 'none') delete c.devices;
   // natural esters only in hermetically sealed units [17]
   if (c.fluid === 'natural' && c.design !== 'hermetic') {
     if (changed === 'design') force('fluid', 'synthetic', 'Natural esters only in hermetic units', 17);
@@ -294,7 +311,7 @@ const nextUp = (list, x) => list.find((v) => v >= x - 1e-9) ?? list[list.length 
 export const vectorShift = (vg) => (vg.endsWith('11') ? 330 : 150); // degrees the LV lags the HV
 /** The single-voltage HV (kV) the unit runs on now: for a 10/20 kV switchable unit, `level` 'I' is 10 kV, 'II' 20 kV. */
 export const hvNow = (cfg, level = 'II') => (cfg.hv === '10/20' ? (level === 'I' ? 10 : 20) : Number(cfg.hv));
-const hvClass = (un) => HV_CLASSES.find((c) => c.un === un) ?? HV_CLASSES[3];
+const hvClass = (un) => HV_CLASSES.find((c) => c.un >= un - 0.5) ?? HV_CLASSES[HV_CLASSES.length - 1];
 
 /** Everything that follows from one configuration: ratings, losses, geometry, masses, protection, installation. */
 export function spec(cfgIn) {
@@ -389,7 +406,7 @@ export function spec(cfgIn) {
   const ventH = 2.0;
   const vent = {air: LIMITS.airPerKw * (Ptot / 1000), area: (0.188 * (Ptot / 1000)) / Math.sqrt(ventH), h: ventH};
   const ut1 = UT1[S] ?? null;
-  return {
+  const out = {
     cfg, S, un1, un2, cls, uk, ukP, ur, ux, p0, pk, p0Std, ptot: Ptot, i1, i2, isc1, isc2, lowrad, amorph, herm, fluid,
     core, coil, active, tank, chassis, yTank, finDepth,
     oilL: oilTotalL, oilKg, consL, mass, activeKg, hc, ac, s,
@@ -400,11 +417,74 @@ export function spec(cfgIn) {
     positions: cfg.tapchanger === 'oltc' ? ECOTAP.positions : 5,
     overall: {l: tank.l + 2 * tank.lidOver * 0, b: tank.b, h: yTank + tank.h + (cfg.hvBushing === 'porcelain' ? 330 : 200) * (0.8 + 0.2 * un1 / 20)},
   };
+  const P = presetOf(cfg);
+  return P ? applyPreset(out, P) : out;
+}
+
+/** A real unit: the datasheet's values replace the estimates, the geometry is fitted to its dimensions. */
+function applyPreset(sp, P) {
+  const d = P.data;
+  const o = {...sp, preset: P, ds: d};
+  o.un1 = d.taps[d.ratedPos - 1] / 1000;
+  o.un2 = d.un2;
+  o.taps = d.taps;
+  o.ratedPos = d.ratedPos;
+  o.positions = d.taps.length;
+  o.cls = HV_CLASSES.find((c) => c.um === d.insHV.um) ?? hvClass(o.un1);
+  o.uk = d.uk;
+  o.ukP = 'ds';
+  o.p0 = d.p0;
+  o.pk = d.pk;
+  o.ptot = d.p0 + d.pk;
+  o.ur = (d.pk / (d.S * 1000)) * 100;
+  o.ux = Math.sqrt(o.uk * o.uk - o.ur * o.ur);
+  o.i1 = (d.S * 1000) / (Math.sqrt(3) * o.un1 * 1000);
+  o.i2 = d.i2;
+  o.isc1 = o.i1 / (o.uk / 100);
+  o.isc2 = o.i2 / (o.uk / 100);
+  // the tank over its waves to the datasheet's L × B; the active part shrinks if it would not fit (est. inside)
+  const tank = {...sp.tank, l: d.dims.l, b: d.dims.b};
+  tank.li = tank.l - 2 * tank.fin;
+  tank.bi = tank.b - 2 * tank.fin;
+  const fit = Math.min(1, (tank.li - 170) / sp.active.len, (tank.bi - 190) / sp.active.w);
+  if (fit < 1) {
+    const sc = (x) => Math.round(x * fit);
+    o.core = {...sp.core, d: sc(sp.core.d), pitch: sc(sp.core.pitch)};
+    o.coil = {...sp.coil, lvR: sp.coil.lvR.map(sc), hvR: sp.coil.hvR.map(sc), screen: sc(sp.coil.screen)};
+    o.active = {...sp.active, len: sc(sp.active.len), w: sc(sp.active.w), h: Math.round(sp.core.window + 2 * Math.round(o.core.d * 0.92))};
+  }
+  // the height: the expansion tank's top is the datasheet's H; with the drum about 380 mm over the lid (as the model
+  // builds it) the tank takes the rest, never less than the active part needs (est.)
+  const cr = Math.round(110 + d.S / 40);
+  tank.h = Math.max(sp.tank.h, d.dims.h - 2 * cr - 380 - sp.yTank - 10);
+  o.tank = tank;
+  o.chassis = {...sp.chassis, gauge: d.gauge, len: tank.bi + 140};
+  o.consTop = d.dims.h; // the expansion tank's top sets the overall height
+  o.overall = {...d.dims};
+  o.oilL = d.oil.l;
+  o.oilKg = d.oil.kg;
+  o.consL = Math.round(d.oil.l * 0.1); // est.
+  o.mass = d.mass.total;
+  o.activeKg = d.mass.active;
+  o.ac = Math.min(d.gauge / 2, o.chassis.len / 2 - 70);
+  o.s = d.slenderness;
+  o.hc = o.s * o.ac;
+  o.lvBushA = nextUp(TORQUES.map((t) => t.a), o.i2);
+  o.lvTorque = TORQUES.find((t) => t.a === o.lvBushA);
+  o.fuseHV = {a: String(nextUp(HH_SIZES, 2 * o.i1)), p: 49, rule: true};
+  o.fuseLV = {a: String(nextUp(NH_SIZES, o.i2 * 1.05)), p: 50, rule: true};
+  o.vent = {air: LIMITS.airPerKw * (o.ptot / 1000), area: (0.188 * (o.ptot / 1000)) / Math.sqrt(sp.vent.h), h: sp.vent.h};
+  o.panFit = PANS.find((p) => p.li >= tank.l + PAN_MARGIN && p.bi >= tank.b + PAN_MARGIN && p.l >= o.oilL) ?? null;
+  o.chassis.wheel = {...sp.chassis.wheel, mat: 'cast iron'};
+  return o;
 }
 
 // ------------------------------------------------------------------------------------------------ operating point
 /** The tap position's HV turns factor: position 1 is +5 % turns (for a high grid), the middle is nominal. */
+/** The rated tap: the datasheet's, else the middle position. */
+export const ratedTap = (sp) => sp.ratedPos ?? Math.round((sp.positions + 1) / 2);
 export const tapFactor = (sp, pos) => {
+  if (sp.taps) return sp.taps[pos - 1] / sp.taps[sp.ratedPos - 1];
   const mid = (sp.positions + 1) / 2;
   return 1 + ((mid - pos) * LIMITS.tapStep) / 100;
 };

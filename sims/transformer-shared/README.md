@@ -10,6 +10,28 @@ node sims/build.mjs transformer-live     # teardown-out/dist/transformer-live.ht
 node sims/build.mjs transformer-film     # the scripted tour as a pure function of t
 ```
 
+## Real units (datasheet presets)
+
+`presets.js` holds units from their R&S datasheets. Choosing one (CONFIG → DATASHEET, or its own page) sets every
+option and replaces the model's estimates with the sheet's values; changing any option afterwards leaves the
+datasheet for the generic model, with a note.
+
+```
+node sims/build.mjs transformer-dso1600-live   # opens on DSO-1600/10.0/0.40-S-NS-NU-CU-CU
+```
+
+**DSO-1600/10.0/0.40-S-NS-NU-CU-CU** (ECO++ NU, outdoor): 1600 kVA, 50 Hz; HV 1 with 9 taps 11000 … 8240 V in 345 V
+steps, rated 9965 V at position 4 (shown as an off-circuit tap changer with 9 positions); insulation HV LI 75 / AC 28
+/ Um 12 kV, LV AC 3 / Um 1.1 kV; 400 V, 2309 A; P0 1080 W (AA0), Pk 11700 W at 75 °C (Ak); uk 6.0 % ±10 %; Dyn5,
+neutral 100 % loadable; LpA 38 / LwA 50 dB(A); 65 / 60 K, 40 °C, 1000 m; L × B × H 1700 × 1100 × 2400 mm, gauge 820 mm,
+slenderness 2; oil 850 kg / 1050 l; Cu 1080, core 1490, active 2880, total 4400 kg; porcelain bushings HV and LV,
+Cu/Cu, no screen, RAL 7033. Fitted: thermometer with 2 contacts, cast rollers, Niveaumeter, terminal box, expansion
+tank left seen on HV, Buchholz, dehydrating breather. All of it drives the model: losses, regulation and the LV
+voltage on each tap, the thermal model, the seismic check with s = 2 and 4400 kg, the oil expansion on 1050 l.
+
+Fitted to the sheet but not on it (est.): the tank height (the expansion tank's top is put at H = 2400 mm), the inner
+build (core and windings scaled to fit 1700 × 1100), the Buchholz settings, the terminal box's size and place.
+
 ## Files
 
 | File | Job |
