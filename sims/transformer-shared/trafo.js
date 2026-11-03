@@ -143,6 +143,26 @@ export const MAINT = [
 ];
 export const SAFETY_RULES = ['Disconnect on all sides', 'Secure against reconnection', 'Verify absence of voltage', 'Earth and short-circuit', 'Cover adjacent live parts']; // p.8
 
+// ------------------------------------------------------------------------------------------------ R&S documents
+// Beyond the manual: the accessory sheet KD-00215 (Ausgabe 1/2018) and the order code KD-00053 (v1.0.1, 23.03.2017),
+// both published by Rauscher & Stoecklin. Only what those sheets print.
+export const RS_DOCS = {
+  kd215: 'R&S KD-00215 Zubehör für Verteiltransformatoren, Ausgabe 1/2018',
+  kd53: 'R&S KD-00053 Transformatoren Ordercode, v1.0.1, 23.03.2017',
+};
+export const THERMOMETER_RS = {range: [0, 100], ip: 'IP 54', cls: 1.5, thread: 'G1', body: 'stainless steel', art: {drag: 17073, contacts: 17074}, contacts: '2 microswitches', dragStandardFrom: 400};
+// section "30 – Zubehör" of the order code
+export const ORDER_CODES = {
+  T1: 'Drag-pointer thermometer', T2: 'Drag-pointer thermometer with 2 contacts', T3: 'PT100 sensor (2-wire)', T4: 'PT100 sensor (3-wire)', T5: 'PT100 sensor (4-wire)', T6: 'AKM thermometer',
+  A1: 'Level: dipstick', A2: 'Level: Niveaumeter', A3: 'Level: Niveaumeter with 2 contacts', A5: 'Level switch, reed', F: 'Magnetic level indicator G 1.5"',
+  X: 'Expansion tank (conservator)', B: 'Buchholz protection', L: 'Dehydrating breather', V: 'Transformer monitoring device R.I.S', P: 'Transformer monitoring device DGPT',
+  D1: 'Pressure relief valve G 1"', D2: 'Pressure relief valve G 1.5"', O: 'Wheel lock', R1: 'Nylon rollers (turn 90°)', R2: 'Cast rollers (turn 90°)',
+};
+// connection flags to DIN 42530 (KD-00215)
+export const FLAGS = [{type: 'DT630', holes: '1 × Ø14', art: 15034, a: 630}, {type: 'DT1000', holes: '2 × Ø14', art: 15036, a: 1000}, {type: 'DT2000', holes: '4 × Ø14', art: 15040, a: 2000}, {type: 'DT3150', holes: '4 × Ø14', art: 15044, a: 3150}];
+// PT100 lead colours per EN/IEC 60751, single element (as printed in WIKA data sheet TE 60.13, 03/2021, p.4)
+export const PT100_COLOURS = {w2: ['red', 'white'], w3: ['red', 'red', 'white'], w4: ['red', 'red', 'white', 'white'], src: 'EN/IEC 60751 colour code, per WIKA TE 60.13 (03/2021) p.4'};
+
 // ------------------------------------------------------------------------------------------------ options
 // Each option: values, labels, the default, and where the manual describes it.
 export const OPTIONS = {
@@ -278,7 +298,8 @@ export function spec(cfgIn) {
     lidOver: 40,
   };
   const gauge = S <= 250 ? 520 : S <= 1000 ? 670 : 820; // track gauges of the EASY pans [25]
-  const wheel = S <= 1000 ? {d: 125, w: 40} : {d: 160, w: 50}; // Ø125×40 [27]; larger est.
+  // rollers EN 50216-4, Ø125×40 on every size: nylon to 400 kVA, cast iron above, M24 bracket from 1600 kVA (KD-00215)
+  const wheel = {d: 125, w: 40, mat: S <= 400 ? 'nylon' : 'cast iron', bolt: S >= 1600 ? 'M24' : 'M16'};
   const chassis = {h: 90, gauge, wheel, len: tank.bi + 140};
   const yTank = wheel.d + chassis.h; // tank floor above the ground (rollers mounted)
   // volumes and masses (est.): the oil fills the tank and the waves less the active part

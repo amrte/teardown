@@ -464,9 +464,9 @@ export function buildTrafo(sp) {
     g.fillStyle = '#fbfaf6';
     g.fillRect(0, 0, w, w);
     g.translate(w / 2, w / 2);
-    // −20…+120 °C over 270°
-    for (let v = -20; v <= 120; v += 5) {
-      const a = (-135 + ((v + 20) / 140) * 270) * D2R;
+    // 0…100 °C over 270° (the R&S thermometer's range, KD-00215)
+    for (let v = 0; v <= 100; v += 5) {
+      const a = (-135 + (v / 100) * 270) * D2R;
       const big = v % 20 === 0;
       g.strokeStyle = v >= 85 ? '#d6182b' : '#222';
       g.lineWidth = big ? 3 : 1.4;
@@ -1055,8 +1055,8 @@ export function buildTrafo(sp) {
       c.hv.material.emissiveIntensity = showCurrent ? 0.35 * Math.abs(s.hv[i]) : 0;
     });
     M.capCu.emissiveIntensity = showCurrent ? 0.18 * s.K : 0;
-    // the thermometer: −20…120 °C over 270°, the drag pointer at the maximum reached
-    const ang = (v) => -(-135 + ((clamp(v, -20, 120) + 20) / 140) * 270) * D2R;
+    // the thermometer: 0…100 °C over 270°, the drag pointer at the maximum reached
+    const ang = (v) => -(-135 + (clamp(v, 0, 100) / 100) * 270) * D2R;
     needle.rotation.z = ang(s.topOil);
     drag.rotation.z = ang(s.maxOil ?? s.topOil);
     // the fluid: the level over the tank (free-breathing), full to the lid otherwise

@@ -5,6 +5,7 @@
 // view, cutaway, subsystem and overlay toggles bottom right; the tap changer strip bottom centre; the manual's part
 // numbers (Fig. 6) as callouts into the model. update(s) redraws every live part from the frame's state.
 import {coordination, FAULTS, fitted, FUSE_CURVE, fuseTime, pt100Err, pt100R, SET, statusOf} from './protect.js';
+import {FLAGS, ORDER_CODES, PT100_COLOURS, RS_DOCS, THERMOMETER_RS} from './trafo.js';
 import {BUCHHOLZ, ECOTAP, efficiency, FLUIDS, LIMITS, MAINT, OPTION_KEYS, OPTIONS, optText, PARTS, SAFETY_RULES, UT1_STANDARD} from './trafo.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', blue: '#3d8fe0', grey: '#5d6670', orange: '#f05a23', hot: '#ff7a2e', cool: '#5aa7e6', est: '#a3a7ad'};
@@ -13,8 +14,8 @@ export const CAMS = ['hero', 'front', 'side', 'top', 'lid', 'inside'];
 export const CUTS = ['solid', 'glass', 'section'];
 export const VIEWS = ['all', 'active', 'core', 'windings', 'oil', 'fittings'];
 export const OVERLAYS = ['parts', 'flux', 'current', 'flow', 'untank'];
-export const TABS = ['operate', 'configure', 'datasheet', 'protect', 'service'];
-const TAB_LABEL = {operate: 'OPERATE', configure: 'CONFIG', datasheet: 'DATA', protect: 'PROTECT', service: 'SERVICE'};
+export const TABS = ['operate', 'configure', 'datasheet', 'protect', 'wiring', 'service'];
+const TAB_LABEL = {operate: 'OPERATE', configure: 'CONFIG', datasheet: 'DATA', protect: 'PROTECT', wiring: 'WIRING', service: 'SERVICE'};
 export const LOAD_MAX = 1.5;
 export const TA_RANGE = [-25, 40];
 const CSS = `
@@ -127,9 +128,9 @@ export function createConsole(app) {
   const notesBox = add(`<div class="cp" style="position:absolute;left:0;right:0;top:56px;text-align:center;font-weight:600;font-size:9.2px;color:${C.red}"></div>`);
 
   // ------------------------------------------------------------ right column: tabs
-  const tabX = [1318, 1366, 1418, 1460, 1514];
-  const tabW = [46, 50, 40, 52, 49];
-  TABS.forEach((k, i) => (btn[k] = add(`<div class="tb" style="left:${tabX[i]}px;top:36px;width:${tabW[i]}px;height:22px;padding:0;font-size:8px;letter-spacing:.5px">${TAB_LABEL[k]}</div>`)));
+  const tabW = [42, 38, 31, 44, 40, 43];
+  const tabX = tabW.map((w, i) => 1318 + tabW.slice(0, i).reduce((a, b) => a + b + 1.4, 0));
+  TABS.forEach((k, i) => (btn[k] = add(`<div class="tb" style="left:${tabX[i]}px;top:36px;width:${tabW[i]}px;height:22px;padding:0;font-size:7.4px;letter-spacing:.3px">${TAB_LABEL[k]}</div>`)));
   add(`<div class="pn" style="left:1318px;top:62px;width:245px;height:640px"></div>`);
   const pane = {};
   for (const k of TABS) pane[k] = add(`<div style="position:absolute;inset:0"></div>`);
@@ -184,6 +185,7 @@ export function createConsole(app) {
   // DATASHEET and SERVICE
   const dsBox = padd('datasheet', `<div class="ds" style="top:68px"></div>`);
   const svBox = padd('service', `<div class="sv" style="top:68px"></div>`);
+  const wrBox = padd('wiring', `<div class="sv" style="top:68px"></div>`);
 
   // ------------------------------------------------------------ camera, cutaway, subsystems, overlays
   add(`<div class="pn" style="left:1296px;top:710px;width:268px;height:175px"></div>`);
@@ -458,6 +460,7 @@ export function createConsole(app) {
       if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = datasheetHTML(s)));
       if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
       for (const f of FAULTS) setBtn('f_' + f.key, !!s.faults?.[f.key], true);
+      if (s.tab === 'wiring') once('wr', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${JSON.stringify(s.prot?.contacts ?? {})}|${Math.round(s.thermal.top)}`, () => (wrBox.innerHTML = wiringHTML(s)));
       if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${s.prot?.contacts?.buchAlarm}|${s.prot?.contacts?.buchTrip}`, () => (svBox.innerHTML = serviceHTML(s)));
 
       // ---------------------------------------------------------------- toggles
@@ -557,7 +560,7 @@ function datasheetHTML(s) {
     row('Fluid volume / mass', E(`${sp.oilL} l / ${sp.oilKg} kg`)),
     row('Total mass', E(`${fx(sp.mass)} kg`)),
     row('LV bushings · stud torque', B(`${sp.lvCount} × ${sp.lvBushA} A · ${sp.lvTorque.thread} ${sp.lvTorque.nm} Nm`)),
-    row('Track gauge · rollers', B(`${sp.chassis.gauge} mm · Ø${sp.chassis.wheel.d} × ${sp.chassis.wheel.w}`)),
+    row('Gauge · rollers EN 50216-4', B(`${sp.chassis.gauge} mm · Ø${sp.chassis.wheel.d}×${sp.chassis.wheel.w} ${sp.chassis.wheel.mat}, ${sp.chassis.wheel.bolt}`)),
     h('PROTECTION · p.49–50'),
     row('HV HRC fuse', sp.fuseHV.rule ? E(`${sp.fuseHV.a} A (≈ 2 In rule)`) : B(`${sp.fuseHV.a} A`)),
     row('LV NH fuse gTr / gG', sp.fuseLV.rule ? E(`${sp.fuseLV.a} A`) : B(`${sp.fuseLV.a} A`)),
@@ -597,11 +600,6 @@ function serviceHTML(s) {
     P('Same vector-group index, ratio within 0.5 %, uk within ±10 %, power ratio ≤ 3:1, same phase sequence.'),
     h('MAINTENANCE · p.57–58'),
     ...MAINT.map((m) => P(`<b>${m.every}</b> <span class="m">· ${m.who}</span> — ${m.what}`)),
-    h('BUCHHOLZ RELAY · TERMINALS · p.43'),
-    buchholzSVG(s),
-    P(cfg.monitor === 'buchholz'
-      ? `Test button ${Math.round(b * 100)} %: 3–6 <b>${k.c36 ? 'closed' : 'open'}</b> · 3–4 <b style="color:${k.c34 ? C.red : C.ink}">${k.c34 ? 'closed (alarm)' : 'open'}</b> · 1–5 <b>${k.c15 ? 'closed' : 'open'}</b> · 1–2 <b style="color:${k.c12 ? C.red : C.ink}">${k.c12 ? 'closed (trip)' : 'open'}</b>`
-      : `<span class="m">Fitted only with the conservator (MONITORING: BUCHHOLZ). Diagram as on the relay's plate in the manual.</span>`),
   ].join('');
 }
 
@@ -614,9 +612,9 @@ function buchholzSVG(s) {
   const tr = (fitted && k.c12) || !!s.prot?.contacts?.buchTrip;
   const W = 224;
   const cell = W / 6;
-  let h = `<svg width="${W}" height="112" style="display:block;margin:2px 0 4px">`;
-  h += `<rect x=".5" y=".5" width="${W - 1}" height="111" fill="#fff" stroke="${C.faint}"/>`;
-  h += `<line x1="${W / 2}" x2="${W / 2}" y1="0" y2="112" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="18" y2="18" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="94" y2="94" stroke="${C.faint}"/>`;
+  let h = `<svg width="${W}" height="84" style="display:block;margin:2px 0 3px">`;
+  h += `<rect x=".5" y=".5" width="${W - 1}" height="83" fill="#fff" stroke="${C.faint}"/>`;
+  h += `<line x1="${W / 2}" x2="${W / 2}" y1="0" y2="84" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="18" y2="18" stroke="${C.faint}"/><line x1="0" x2="${W}" y1="70" y2="70" stroke="${C.faint}"/>`;
   const nums = [6, 3, 4, 5, 1, 2];
   nums.forEach((n, i) => {
     const x = cell * i + cell / 2;
@@ -628,18 +626,18 @@ function buchholzSVG(s) {
     const xL = cell * i0 + cell / 2;
     const xC = xL + cell;
     const xR = xC + cell;
-    const yT = 34;
-    const yC = 78;
+    const yT = 28;
+    const yC = 58;
     let g = '';
     for (const x of [xL, xR]) g += `<line x1="${x}" x2="${x}" y1="18" y2="${yT}" stroke="${C.ink}" stroke-width="1"/><circle cx="${x}" cy="${yT + 3}" r="2.6" fill="#fff" stroke="${C.ink}"/>`;
     g += `<line x1="${xC}" x2="${xC}" y1="18" y2="24" stroke="${C.ink}"/><line x1="${xC}" x2="${xC}" y1="${yC}" y2="${yC + 6}" stroke="${C.ink}"/><circle cx="${xC}" cy="${yC}" r="2.6" fill="${C.ink}"/>`;
     const tx = on ? xR : xL;
     g += `<line x1="${xC}" y1="${yC}" x2="${tx}" y2="${yT + 6}" stroke="${on ? C.red : C.ink}" stroke-width="1.8"/>`;
-    g += `<text x="${xC}" y="105" font-size="7.4" letter-spacing="1.2" text-anchor="middle" fill="${on ? C.red : C.mute}" font-weight="600">${name}${on ? ' · ACTIVE' : ''}</text>`;
+    g += `<text x="${xC}" y="80" font-size="7" letter-spacing="1.2" text-anchor="middle" fill="${on ? C.red : C.mute}" font-weight="600">${name}${on ? ' · ACTIVE' : ''}</text>`;
     return g;
   };
   h += group(0, al, 'ALARM') + group(3, tr, 'TRIP');
-  h += `<text x="4" y="90" font-size="6.2" fill="${C.mute}">NC 3–6 · NO 3–4</text><text x="${W / 2 + 4}" y="90" font-size="6.2" fill="${C.mute}">NC 1–5 · NO 1–2</text>`;
+  h += `<text x="4" y="67" font-size="6" fill="${C.mute}">NC 3–6 · NO 3–4</text><text x="${W / 2 + 4}" y="67" font-size="6" fill="${C.mute}">NC 1–5 · NO 1–2</text>`;
   return h + '</svg>';
 }
 
@@ -715,3 +713,71 @@ function renderProtect(s, el2) {
 }
 void fuseTime;
 void coordination;
+
+// ------------------------------------------------------------------------------------------------ the WIRING tab
+// Only what a source prints: the Buchholz plate (manual p.43), the thermometer's two microswitches (KD-00215, p.41),
+// the PT100 lead colours (EN/IEC 60751 as printed by WIKA TE 60.13), the order codes (KD-00053).
+function wiringHTML(s) {
+  const sp = s.sp;
+  const cfg = sp.cfg;
+  const f = fitted(cfg);
+  const c = s.prot?.contacts ?? {};
+  const h = (t) => `<h4>${t}</h4>`;
+  const P = (t) => `<p>${t}</p>`;
+  const m = (t) => `<span class="m">${t}</span>`;
+  const code = (k) => `<b>${k}</b> ${ORDER_CODES[k]}`;
+  const out = [];
+  out.push(h(`BUCHHOLZ · CODE B · p.43${f.buchholz ? '' : ' · NOT FITTED'}`));
+  out.push(buchholzSVG(s));
+  if (f.buchholz) out.push(P(`Live: alarm 3–4 <b style="color:${c.buchAlarm ? C.red : C.ink}">${c.buchAlarm ? 'closed' : 'open'}</b> · trip 1–2 <b style="color:${c.buchTrip ? C.red : C.ink}">${c.buchTrip ? 'closed' : 'open'}</b> · plate runs the test`));
+  out.push(h(`THERMOMETER · ${f.contacts ? 'T2 · ART. 17074' : 'T1 · ART. 17073'}`));
+  out.push(thermoSVG(s, f, c));
+  out.push(P(`${THERMOMETER_RS.ip}, ${THERMOMETER_RS.range[0]}–${THERMOMETER_RS.range[1]} °C, cl. ${THERMOMETER_RS.cls}, ${THERMOMETER_RS.thread}, std. from ${THERMOMETER_RS.dragStandardFrom} kVA · ${THERMOMETER_RS.contacts} ≤ 250 V (p.41) · ${m('no terminal numbers published')}`));
+  out.push(h(`PT100 · T3 / T4 / T5${f.pt100 ? ` · ${pt100R(s.thermal.top).toFixed(2)} Ω` : ' · NOT FITTED'}`));
+  out.push(pt100SVG(s));
+  out.push(P(`3/4-wire cancel the lead resistance (p.38) · ${m('colours EN/IEC 60751 (WIKA TE 60.13 p.4)')}`));
+  out.push(h('LEVEL · MONITORING DEVICE · RELIEF'));
+  out.push(P(`<b>A1</b> dipstick · <b>A2</b> Niveaumeter · <b>A3</b> with 2 contacts · <b>A5</b> reed switch · <b>F</b> magnetic G 1.5" · <b>V</b> R.I.S · <b>P</b> DGPT (T, level, pressure, gas; potential-free, p.38) · <b>D1</b>/<b>D2</b> relief valve G 1" / G 1.5"`));
+  out.push(P(m('No maker or terminal plan published by R&S for these: wire to the device plate.')));
+  out.push(P(m(`Sources: manual p.38–43 · KD-00215 (1/2018) · KD-00053 (v1.0.1)`)));
+  return out.join('');
+}
+// the two microswitches of art. 17074 as switch symbols, open or operated; no terminal numbers (none published)
+function thermoSVG(s, f, c) {
+  const W = 224;
+  let h = `<svg width="${W}" height="46" style="display:block;margin:2px 0 3px"><rect x=".5" y=".5" width="${W - 1}" height="45" fill="#fff" stroke="${C.faint}"/>`;
+  const sw = (x, on, name, set) => {
+    let g = `<line x1="${x}" x2="${x + 18}" y1="26" y2="26" stroke="${C.ink}"/><circle cx="${x + 18}" cy="26" r="2.2" fill="#fff" stroke="${C.ink}"/><circle cx="${x + 46}" cy="26" r="2.2" fill="#fff" stroke="${C.ink}"/><line x1="${x + 46}" x2="${x + 64}" y1="26" y2="26" stroke="${C.ink}"/>`;
+    g += on ? `<line x1="${x + 18}" y1="26" x2="${x + 46}" y2="25" stroke="${C.red}" stroke-width="1.8"/>` : `<line x1="${x + 18}" y1="26" x2="${x + 42}" y2="14" stroke="${C.ink}" stroke-width="1.6"/>`;
+    g += `<text x="${x + 32}" y="40" font-size="6.6" text-anchor="middle" letter-spacing="1" fill="${on ? C.red : C.mute}" font-weight="600">${name} ${set} °C${on ? ' · OPERATED' : ''}</text>`;
+    return g;
+  };
+  if (f.contacts) h += sw(14, !!c.thAlarm, 'ALARM', LIMITS.thermoAlarm) + sw(124, !!c.thTrip, 'TRIP', LIMITS.thermoTrip);
+  else h += `<text x="${W / 2}" y="26" font-size="7.4" text-anchor="middle" fill="${C.mute}">No contacts on T1 · art. 17073 (dial and drag pointer only)</text>`;
+  h += `<text x="6" y="10" font-size="6" fill="${C.mute}" letter-spacing=".8">MICROSWITCH 1 · MICROSWITCH 2 · SETTING p.41</text>`;
+  return h + '</svg>';
+}
+// the sensor and its leads to the evaluating unit, 2-, 3- and 4-wire, coloured to EN/IEC 60751
+function pt100SVG(s) {
+  const W = 224;
+  const COL = {red: '#c8352b', white: '#b7babf'};
+  const col = W / 3;
+  let h = `<svg width="${W}" height="78" style="display:block;margin:2px 0 3px"><rect x=".5" y=".5" width="${W - 1}" height="77" fill="#fff" stroke="${C.faint}"/>`;
+  [['w2', '2-WIRE · T3'], ['w3', '3-WIRE · T4'], ['w4', '4-WIRE · T5']].forEach(([k, name], i) => {
+    const x0 = i * col + 8;
+    const wires = PT100_COLOURS[k];
+    // the sensor: a resistor box with the arrow of a temperature-dependent element
+    h += `<rect x="${x0}" y="24" width="10" height="28" fill="#fff" stroke="${C.ink}"/><line x1="${x0 - 3}" y1="50" x2="${x0 + 13}" y2="27" stroke="${C.ink}" stroke-width=".8"/><text x="${x0 + 5}" y="62" font-size="6" text-anchor="middle" fill="${C.mute}">ϑ</text>`;
+    const n = wires.length;
+    wires.forEach((w, j) => {
+      const top = j < Math.ceil(n / 2) || n === 2 ? j === 0 || (n === 4 && j === 1) : false;
+      const yEnd = 18 + j * (40 / Math.max(1, n - 1));
+      const ySens = (n === 2 ? j === 0 : w === 'red') ? 24 : 52;
+      h += `<polyline points="${x0 + 5},${ySens} ${x0 + 5 + (ySens === 24 ? 0 : 0)},${ySens === 24 ? 16 : 60} ${x0 + 22 + j * 3},${ySens === 24 ? 16 : 60} ${x0 + 22 + j * 3},${yEnd} ${x0 + 52},${yEnd}" fill="none" stroke="${COL[w]}" stroke-width="1.4"/>`;
+      h += `<circle cx="${x0 + 54}" cy="${yEnd}" r="2" fill="#fff" stroke="${C.ink}"/><text x="${x0 + 50}" y="${yEnd - 2}" font-size="5.6" text-anchor="end" fill="${C.mute}">${w}</text>`;
+      void top;
+    });
+    h += `<text x="${x0 + 28}" y="73" font-size="6.4" text-anchor="middle" letter-spacing=".8" font-weight="600" fill="${C.ink}">${name}</text>`;
+  });
+  return h + '</svg>';
+}

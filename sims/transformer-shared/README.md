@@ -18,7 +18,7 @@ node sims/build.mjs transformer-film     # the scripted tour as a pure function 
 | `protect.js` | Monitoring and protection: the devices (thermometer and contacts, PT100, level indicator, full protection, relief valve, Buchholz, silica-gel breather, HV/LV fuses), their readings and contacts, the fault scenarios, the fuse coordination. No three.js. |
 | `trafo3d.js` | The geometry, built in mm from one `spec`: chassis and turnable rollers, corrugated tank, lid fittings, 3-limb stepped core, LV/HV windings, leads, fluid and convection, oil pans, seismic kit, section faces. |
 | `stage.js` | Studio, shadows, GTAO; rebuilds the model when the configuration changes. |
-| `console.js` | The 1600 × 900 overlay: load, core flux, vector-group clock, sliders; tabs OPERATE / CONFIGURE / DATASHEET / SERVICE; views, cutaway, subsystems, overlays; the tap changer; part numbers (manual Fig. 6). |
+| `console.js` | The 1600 × 900 overlay: load, core flux, vector-group clock, sliders; tabs OPERATE / CONFIG / DATA / PROTECT / WIRING / SERVICE; views, cutaway, subsystems, overlays; the tap changer; part numbers (manual Fig. 6). |
 | `film.js` | The 40 s tour script, cameras, the operator's cursor, the per-frame glue shared with the live page. |
 | `live.js` | Real-time page: everything clickable, thermal state integrated live, auto tour when idle. |
 
@@ -75,8 +75,24 @@ The fuse chart plots the HV fuse and the LV fuse (referred to the HV side) again
 the inrush band (6–20 In at 100 ms, p.49) and the LV short circuit, and checks that the inrush passes, the short is
 cleared and the LV fuse goes first.
 
-The SERVICE tab draws the Buchholz relay's terminal plate as the manual shows it (p.43): insulators 6 3 4 (alarm) and
-5 1 2 (trip), NC 3–6 / NO 3–4 and NC 1–5 / NO 1–2, with the contacts moving through the test sequence or a real fault.
+The WIRING tab draws only what a published source prints:
+
+- the Buchholz relay's terminal plate as photographed in the manual (p.43): insulators 6 3 4 (alarm) and 5 1 2 (trip),
+  NC 3–6 / NO 3–4 and NC 1–5 / NO 1–2, the contacts moving through the test sequence or a real fault;
+- the dial thermometer as R&S lists it in KD-00215: stainless steel, IP 54, 0–100 °C, class 1.5, G1, art. 17073 (drag
+  pointer, standard from 400 kVA) and 17074 (with 2 microswitches), contacts ≤ 250 V AC/DC (manual p.41), their live
+  state; R&S publishes no terminal numbers, so none are drawn;
+- the PT100 in 2-, 3- and 4-wire connection with the EN/IEC 60751 lead colours (red / white; red-red-white;
+  red-red-white-white) as printed in WIKA data sheet TE 60.13 (03/2021) p.4; R&S does not name its PT100 maker;
+- the order codes of every monitoring device from KD-00053 (T1–T6, A1–A5, F, X, B, L, V "R.I.S", P "DGPT", D1/D2).
+
+R&S names no maker and publishes no terminal plan for the level indicator, the monitoring devices R.I.S / DGPT or the
+relief valve, so the tab says so instead of drawing one. Sources:
+
+- Manual: https://the-rsgroup.com/wp-content/uploads/2023/09/rauscher-stoecklin-handbuch-oel-transformatoren-de.pdf
+- KD-00215 Zubehör (1/2018): https://the-rsgroup.com/wp-content/uploads/2020/02/Distribution-transformers_Technical-data_Accessories_DE.pdf
+- KD-00053 Ordercode (v1.0.1): https://the-rsgroup.com/wp-content/uploads/2020/04/KD-00053_Trafo-Ordercode_de.pdf
+- WIKA TE 60.13: https://www.wika.com/media/Data-sheets/Temperature/Resistance-thermometers/ds_te6013_en_co.pdf
 
 The manual names none of the device makers and gives no setpoints for gas volume, oil surge, pressure, relief valve or
 level MIN, no PT100 characteristic and no fuse curves. Those are typical values marked **est.** (PT100 to IEC 60751;
@@ -84,6 +100,6 @@ fuse curves are a generic shape, to be replaced by the fuse maker's curves).
 
 ## Estimates (not in the manual)
 
-Tank and core dimensions, masses, fluid volume, wave depth, roller size above 1000 kVA, uk for 315/500/800/≥1250 kVA,
+Tank and core dimensions, masses, fluid volume, wave depth, uk for 315/500/800/≥1250 kVA,
 losses other than the 630 kVA example, SIA 261 coefficients, the ECOTAP step of 2.5 %. They scale from typical
 catalogue proportions so the model is complete; confirm against the datasheet of a real unit.
