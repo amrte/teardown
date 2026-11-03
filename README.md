@@ -34,13 +34,28 @@ Ask Claude Code in plain words:
 
 > Make a teardown of a hydraulic excavator arm and record a 20-second video of it.
 
-Or open one of the 3 examples first:
+Or open one of the 4 examples first:
 
 ```
 node sims/build.mjs v8-live          # teardown-out/dist/v8-live.html
 node sims/build.mjs cessna-live
 node sims/build.mjs strandbeest-live
+node sims/build.mjs 8bd-live
 ```
+
+### 8BD1 switchgear teardown
+
+![8BD1 feeder panel teardown, truck drawn toward Test position in section](docs/8bd.png)
+
+`8bd-live` takes apart one old-generation Siemens 8BD1 metal-enclosed truck-type feeder panel (12 kV, V breaker 3AF on a
+withdrawable truck). It follows the manufacturer's operating instructions SWF 5.2845.2/2005 (issue 8.78) step by step,
+in 23 steps: trip, rack to Test, unplug, discharge the springs, withdraw, verify dead, earth the feeder, then take
+apart the truck (front plate, mechanism, contact arms, poles) and the cubicle (partitions, relief flaps, busbars,
+CT unit, LV compartment). Every step cites its manual page. The interlock panel works out the manual's
+interlock conditions (section 111) from the current pose, so it always shows what the operator may do now and which
+condition blocks the rest. Measured values (panel 750 × 1259 mm, wheel track 581 mm, contact-arm heights
+1246 / 1046 / 906 / 665 mm, M12 at 70 Nm) come from the manual. Values the manual leaves to other documents (body height,
+test travel) are marked `EST` in `sims/8bd-shared/kin.js`.
 
 ## What is inside
 
@@ -49,6 +64,7 @@ node sims/build.mjs strandbeest-live
 | `SKILL.md` | What Claude reads: how a machine is built, the rules that make it look right, the review loop. |
 | `sims/kit/` | Runtime, stage, shader warm-up. |
 | `sims/v8-*`, `sims/cessna-*`, `sims/strandbeest-*` | 3 complete machines. `-shared` is the machine, `-live` the page you drive, `-film` the recorded tour. |
+| `sims/8bd-*` | The 8BD1 switchgear teardown: a live page only (no film, tour or sound). `kin.js` holds the manual's numbers, steps and interlocks. |
 | `sims/build.mjs` | Bundles a machine into one HTML file, three.js and fonts inlined. |
 | `sims/capture.mjs` | Renders the film frame by frame to a 60 fps mp4, or to review sheets of stills. |
 | `sfx/`, `run_sfx.py` | Procedural sound on the film's timeline, mastered to −14 LUFS. |
