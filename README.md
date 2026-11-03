@@ -40,6 +40,7 @@ Or open one of the 3 examples first:
 node sims/build.mjs v8-live          # teardown-out/dist/v8-live.html
 node sims/build.mjs cessna-live
 node sims/build.mjs strandbeest-live
+node sims/build.mjs transformer-live   # oil distribution transformer ≤ 3150 kVA, configurable
 ```
 
 ## What is inside
@@ -49,6 +50,7 @@ node sims/build.mjs strandbeest-live
 | `SKILL.md` | What Claude reads: how a machine is built, the rules that make it look right, the review loop. |
 | `sims/kit/` | Runtime, stage, shader warm-up. |
 | `sims/v8-*`, `sims/cessna-*`, `sims/strandbeest-*` | 3 complete machines. `-shared` is the machine, `-live` the page you drive, `-film` the recorded tour. |
+| `sims/transformer-*` | An oil distribution transformer built from a manufacturer's manual, with a configurator and datasheet; see `sims/transformer-shared/README.md`. |
 | `sims/build.mjs` | Bundles a machine into one HTML file, three.js and fonts inlined. |
 | `sims/capture.mjs` | Renders the film frame by frame to a 60 fps mp4, or to review sheets of stills. |
 | `sfx/`, `run_sfx.py` | Procedural sound on the film's timeline, mastered to −14 LUFS. |
