@@ -14,39 +14,73 @@ Generated from `kin.js`: the same data drives the page. Source: Siemens operatin
 | Rated current | 1250 A, in the 630-1600 A class of 12 kV 3AF trucks (203/3) |
 | Breaking current | 12.5 / 20 / 25 kA class (203/3) |
 | Finish | RAL 7032 pebble grey (101/3) |
-| Width × depth | 750 × 1259 mm (200/3) |
+| Phase pitch | 220 mm, measured (102/4) |
+| Width × depth × height | 750 × 1259 mm (200/3) × about 2105 mm (measured, HV body 1470 mm) |
 | Truck wheel track | 581 mm (200/1) |
 | Upper contact arms | 1246 / 1046 / 906 mm, L1 / L2 / L3 (203/2) |
 | Lower contact arms | 665 mm (203/3) |
-| Service to Test travel | 240 mm, estimated (the manual gives no figure) |
+| Partitions 374 / 150 | 660 mm behind the front, joint at 795 mm (measured) |
+| Horizontal partition 340 | 722 mm (measured) |
+| Busbars | about 1030 mm behind the front (measured) |
+| CTs | 136 × 265 mm, cable lug point at 415 mm (202/4) |
+| Service to Test travel | about 135 mm (measured from the photos, ±30 mm) |
+
+Measured values come from the manual's side sections and photos, scaled by printed dimensions (depth 1259 mm, contact heights); they hold to about ±20 mm on the cubicle. Values marked EST in `kin.js` are not in the manual.
 
 ## Procedure
 
-| # | Step | Manual | What is done |
-|---|---|---|---|
-| 1 | In service | 101/3 | Truck in Service position, V breaker 3AF ON, feeder energised. The truck front plate 613 closes the panel; the run-in contacts sit on the fixed contacts behind the barrier boxes. |
-| 2 | Trip the breaker | 300/6 | Press the OFF push button 673 strongly until the ON/OFF indicator shows "O". Tripping is mechanical and always possible. The tripping spring and the 3 contact pressure springs open the vacuum interrupters. |
-| 3 | Lever to Moving inside | 300/11 | Insert locating lever 47 into locking shaft 51 and move it from "Breaker truck interlocked" to "Moving inside". The front plate lifts out of the eye hooks. With the breaker ON the lever would not move (condition 2). |
-| 4 | Pull to Test position | 300/12 | Pull the lever out, grip the truck by both handles and draw it out to the stop. The contact arms 423 / 295 leave the barrier boxes 360 / 316 and their shutters drop shut and lock. |
-| 5 | Lock in Test position | 300/12 | Re-insert the lever, move it to "Breaker truck interlocked" and pull it out. The truck is locked in Test position; with the LV plug in, the breaker can be test-switched. |
-| 6 | Unplug the LV plug | 300/13 | Press bracket 592.6 of socket 592 down, pull the LV plug 593 and lay it on top of the truck. The truck has not moved: this is the Isolated position. |
-| 7 | Discharge the springs | 400/5 | Before any work on the truck: close the breaker (the closing spring discharges, the tripping spring charges), then trip it. All drive springs are now discharged. Closing is allowed: the truck is interlocked. |
-| 8 | Withdraw the truck | 300/14 | Lever to "Moving outside", hold both handles and roll the truck completely out of the panel on its own rollers. Never steer it by the contact arms (201/3). |
-| 9 | Verify feeder is dead | 300/18 | Push the release device 361 into a lower barrier box 316 to the stop, insert the voltage detector 365 through it: it opens the shutter and meets the fixed contact. No glow on all 3 phases: dead. Do not leave 361 in the box. |
-| 10 | Push in to Isolated | 300/17 | With the breaker OFF and shaft 51 at "Moving outside", push the truck in to the stop and move the lever to "Breaker truck interlocked": Isolated position. |
-| 11 | Close earthing switch | 300/19 | Plug handle 75 onto the earthing switch drive shaft 248 at the lower right of the truck front and swing it about 90 deg to the right. The feeder cable is earthed; stop 130 turns horizontal and bars the Service position (condition 11). |
-| 12 | Withdraw truck again | 300/14 | With the earthing switch closed the truck can still be withdrawn (only Service is barred). Lever to "Moving outside", roll it out. |
-| 13 | Fit wheeling device | 300/15 | Push support plate 41.27 of wheeling device 41 under the front plate and screw spindle 41.5 in: the truck now runs on its two rear rollers and swivel roller 41.23 and turns without effort to the workplace. |
-| 14 | Take off front plate | 300/22 | Undo the slotted screw next to the shaft label, grip both handles, lift the front plate 613 about 4 cm and pull it forward. Not possible in Service position: an angle 399 locks it. |
-| 15 | Open mechanism housing | 400/5 | The 3AF mechanism housing is now exposed. Take off cover plate 339.60.1: closing spring, tripping spring 339.64, breaker shaft 339.63, dashpot 339.61.8. Work here only by trained fitters, springs discharged. |
-| 16 | Remove contact arms | 301/2 | Undo the hex screws of the 3 upper arms 423 (run-in contacts 429) and the 3 lower arms 295 (301). Each arm floats on spiral springs 423.13 / 295.13 on its bracket. |
-| 17 | Take out breaker poles | 106/3 | Each pole: vacuum interrupter 339.30 between upper and lower pole supports .20 / .40, on post insulators .16.1 / .16.2, braced by strut .28, driven by insulated coupler .48. Pole service per the 3AF instructions. |
-| 18 | Remove lower partition | 400/3 | Mark the lower partition 150 with the panel no., pull off the insulation caps, undo the nuts and pull it forward off its bolts (201/5). The cable compartment opens: CTs 290, fixed contacts 300, earthing switch 256. |
-| 19 | Remove upper partition | 400/3 | Only with the busbars switched off, verified dead, earthed and short-circuited (VDE 0105, 400/1): take off partition 374 with the top barrier boxes 360. The busbar compartment opens. |
-| 20 | Lift off relief flaps | 400/9 | Take off the pressure-relief flaps 538 (truck), 486 (busbar) and 480 (cable compartment). The screws of the ribbed insulators 418 are reachable only from above. |
-| 21 | Take out the busbars | 201/8 | Undo the M12 joint bolts of the busbar straps (tightened to 70 Nm at erection) and lift out busbars 450 with fixed contacts 430; the ribbed insulators 418 come off with the long-handled wrench and a belt wrench (400/9). |
-| 22 | Draw out the CT unit | 400/10 | Push the two mounting rods (26 mm x 2500 mm) through support plate 220, turn them 90 deg behind the traverse, undo the 4 nuts and draw the CT unit out: CTs 290, lower fixed contacts 300, earthing switch 256. |
-| 23 | Open LV compartment | 300/20 | Open the LV compartment 530 with the standard key: instruments, relays and terminal blocks of the panel; the rating plate is inside the door at the bottom (100/1). Teardown complete. |
+| # | Step | Manual | What is done | Fasteners |
+|---|---|---|---|---|
+| 1 | In service | 101/3 | Truck in Service position, V breaker 3AF ON, feeder energised. The truck front plate 613 closes the panel; the run-in contacts sit on the fixed contacts behind the barrier boxes. |  |
+| 2 | Trip the breaker | 300/6 | Press the OFF push button 673 strongly until the ON/OFF indicator shows "O". Tripping is mechanical and always possible. The tripping spring and the 3 contact pressure springs open the vacuum interrupters. |  |
+| 3 | Lever to Moving inside | 300/11 | Insert locating lever 47 into locking shaft 51 and move it from "Breaker truck interlocked" to "Moving inside". The front plate lifts out of the eye hooks. With the breaker ON the lever would not move (condition 2). |  |
+| 4 | Pull to Test position | 300/12 | Pull the lever out, grip the truck by both handles and draw it out to the stop. The contact arms 423 / 295 leave the barrier boxes 360 / 316 and their shutters drop shut and lock. |  |
+| 5 | Lock in Test position | 300/12 | Re-insert the lever, move it to "Breaker truck interlocked" and pull it out. The truck is locked in Test position; with the LV plug in, the breaker can be test-switched. |  |
+| 6 | Unplug the LV plug | 300/13 | Press bracket 592.6 of socket 592 down, pull the LV plug 593 and lay it on top of the truck. The truck has not moved: this is the Isolated position. |  |
+| 7 | Discharge the springs | 400/5 | Before any work on the truck: close the breaker (the closing spring discharges, the tripping spring charges), then trip it. All drive springs are now discharged. Closing is allowed: the truck is interlocked. |  |
+| 8 | Withdraw the truck | 300/14 | Lever to "Moving outside", hold both handles and roll the truck completely out of the panel on its own rollers. Never steer it by the contact arms (201/3). |  |
+| 9 | Verify feeder is dead | 300/18 | Push the release device 361 into a lower barrier box 316 to the stop, insert the voltage detector 365 through it: it opens the shutter and meets the fixed contact. No glow on all 3 phases: dead. Do not leave 361 in the box. |  |
+| 10 | Push in to Isolated | 300/17 | With the breaker OFF and shaft 51 at "Moving outside", push the truck in to the stop and move the lever to "Breaker truck interlocked": Isolated position. |  |
+| 11 | Close earthing switch | 300/19 | Plug handle 75 onto the earthing switch drive shaft 248 at the lower right of the truck front and swing it about 90 deg to the right. The feeder cable is earthed; stop 130 turns horizontal and bars the Service position (condition 11). |  |
+| 12 | Withdraw truck again | 300/14 | With the earthing switch closed the truck can still be withdrawn (only Service is barred). Lever to "Moving outside", roll it out. |  |
+| 13 | Fit wheeling device | 300/15 | Push support plate 41.27 of wheeling device 41 under the front plate and screw spindle 41.5 in: the truck now runs on its two rear rollers and swivel roller 41.23 and turns without effort to the workplace. |  |
+| 14 | Take off front plate | 300/22 | Undo the slotted screw next to the shaft label, grip both handles, lift the front plate 613 about 4 cm and pull it forward. Not possible in Service position: an angle 399 locks it. | T01 |
+| 15 | Open mechanism housing | 400/5 | The 3AF mechanism housing is now exposed. Take off cover plate 339.60.1: closing spring, tripping spring 339.64, breaker shaft 339.63, dashpot 339.61.8. Work here only by trained fitters, springs discharged. | T08 |
+| 16 | Remove contact arms | 301/2 | Undo the hex screws of the 3 upper arms 423 (run-in contacts 429) and the 3 lower arms 295 (301). Each arm floats on spiral springs 423.13 / 295.13 on its bracket. | T03 |
+| 17 | Take out breaker poles | 106/3 | Each pole: vacuum interrupter 339.30 between upper and lower pole supports .20 / .40, on post insulators .16.1 / .16.2, braced by strut .28, driven by insulated coupler .48. Pole service per the 3AF instructions. |  |
+| 18 | Remove lower partition | 400/3 | Mark the lower partition 150 with the panel no., pull off the insulation caps, undo the nuts and pull it forward off its bolts (201/5). The cable compartment opens: CTs 290, fixed contacts 300, earthing switch 256. | C02, B316 |
+| 19 | Remove upper partition | 400/3 | Only with the busbars switched off, verified dead, earthed and short-circuited (VDE 0105, 400/1): take off partition 374 with the top barrier boxes 360. The busbar compartment opens. | C01, B360 |
+| 20 | Lift off relief flaps | 400/9 | Take off the pressure-relief flaps 538 (truck), 486 (busbar) and 480 (cable compartment). The screws of the ribbed insulators 418 are reachable only from above. |  |
+| 21 | Take out the busbars | 201/8 | Undo the M12 joint bolts of the busbar straps (tightened to 70 Nm at erection) and lift out busbars 450 with fixed contacts 430; the ribbed insulators 418 come off with the long-handled wrench and a belt wrench (400/9). | C07, C16 |
+| 22 | Draw out the CT unit | 400/10 | Push the two mounting rods (26 mm x 2500 mm) through support plate 220, turn them 90 deg behind the traverse, undo the 4 nuts and draw the CT unit out: CTs 290, lower fixed contacts 300, earthing switch 256. | C17, C13, C14 |
+| 23 | Open LV compartment | 300/20 | Open the LV compartment 530 with the standard key: instruments, relays and terminal blocks of the panel; the rating plate is inside the door at the bottom (100/1). |  |
+| 24 | Unbolt from the board | 201/6 | Erection in reverse (201/6-201/12): undo the 6 M8 x 20 screws between the LV compartments, the M12 earth-bar strap (70 Nm at erection), the panel earthing bolt M12 and the bolts in the side drillings S / K / D; then cut the foundation welds. Teardown complete. | C10, C06, C12, C04 |
+
+## Fasteners
+
+The manual gives one tightening torque: **70 Nm for the M12 bolts of the busbar and earth-bar joints** (201/11). Busbar joints need no retightening at commissioning (203/1). Everything else is listed with what the manual does say; no value has been filled in from elsewhere.
+
+| id | Fastener | Size / class | Count | Head and washers | Torque | Removed in | Manual |
+|---|---|---|---|---|---|---|---|
+| C07 | Busbar joint bolts | M12 | 4 per phase at 450.6 (2 x 2 drillings, fig 15) | hex, heads to the front; washers, spring or clamping washers as supplied | **70 Nm** (201/11) | 21. Take out the busbars | 201/8-201/11 |
+| C16 | Ribbed insulator screws | not given | 1 per insulator 418 | hex, behind support plate 396 | not given | 21. Take out the busbars | 400/9; long-handled wrench 845-4138.3; reach from above after flap 480 |
+| C17 | CT unit studs and nuts | not given | 4 | stud + hex nut | not given | 22. Draw out the CT unit | 400/10; unit hung on 2 mounting rods 26 x 2500 mm |
+| C13 | Cable lug bolts | M12 8.8 | per cable lug | hex; washer, spring washer, hex nut | not given | 22. Draw out the CT unit | 202/1 |
+| C14 | Cable earthing bolts | not given | 3 | stud + nut | not given | 22. Draw out the CT unit | 202/9 |
+| C01 | Partition 374 screws | not given | 14 (4 capped up to 12 kV) | captive flat round-head; washer, contact washer, hex nut | not given | 19. Remove upper partition | 201/12-201/13; tightened properly; caps on screws in insulation only |
+| C02 | Partition 150 screws | not given | 14 (4 capped up to 12 kV) | captive flat round-head; washer, contact washer, hex nut | not given | 18. Remove lower partition | 201/12-201/13 |
+| B360 | Top barrier box screws | not given | 2 per box (photo 201/5 fig 8) | round head | not given | 19. Remove upper partition | 201/5; shown, not described |
+| B316 | Lower barrier box screws | not given | 2 per box (photo 201/5 fig 8) | round head | not given | 18. Remove lower partition | 201/5; shown, not described |
+| T01 | Front plate screw | not given | 1 at point R1 | slotted round head | not given | 14. Take off front plate | 300/22, 111/14 |
+| T02 | Lock angle 399 rivets | C 4.8 x 14 steel | 3 (or 2) | hollow rivet | not given | stays | 300/23; only drilled out (5 mm) to take the plate off in Service position |
+| T08 | Mechanism cover screws | not given | 4 (photo 106/2 fig 3) | small round head | not given | 15. Open mechanism housing | 106/2; shown, not described |
+| T06 | Interlock adjusting screw | not given | 1, couples 339.65.3 to 339.65.5 |  | not given | stays | 111/9; leave set; position inside the housing EST |
+| T03 | Contact arm screws | not given | 2 per arm (301/2 figs 2-3) | hex | not given | 16. Remove contact arms | 301/2; re-used for the earthing devices 291 / 419 |
+| T04 | Arm spring screws | not given | 4 per arm (?), photo 105/4 | screw + nut on spiral spring .13 | not given | stays | 105/3-105/4; stay on the arm |
+| C10 | Earth bar strap bolts | M12 | per strap to the next panel | hex; as supplied | **70 Nm** (201/11) | 24. Unbolt from the board | 201/11 |
+| C06 | LV compartment joint screws | M8 x 20 | 6 per joint | hex; 2 contact washers 8, hex nut | not given | 24. Unbolt from the board | 201/7; positions on the side wall EST |
+| C12 | Panel earthing bolt | M12 | 1, front left bottom on strut 654 | hex | not given | 24. Unbolt from the board | 201/11-201/12 |
+| C04 | Panel-to-panel bolts | not given | 23 drillings per side (S 15, K 6, D 2) | flat round-head; fig 11 / 12 stack | not given | 24. Unbolt from the board | 201/6-201/7 |
 
 ## Interlock conditions checked live (section 111, figs 1–4)
 

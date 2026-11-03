@@ -3,7 +3,7 @@
 // jumps to a step; views, display modes, isolate, an orbit you drag and a zoom on the wheel. No auto tour: the page
 // waits for the visitor.
 import {DISPLAY, ISO, VIEWS, createConsole} from './console.js';
-import {N, NAMES, P, STEPS, stateAt} from './kin.js';
+import {FASTENERS, N, NAMES, P, STEPS, fastTorque, stateAt} from './kin.js';
 import * as THREE from 'three';
 import {createView} from './view.js';
 
@@ -30,6 +30,7 @@ const VIEW_FN = {
   poles: (s) => ({tx: -0.75, ty: 0.5, tz: 0.15 + s.travel, az: -0.9, el: 0.42, d: 3.6}),
   top: () => ({tx: 0.4, ty: 1.1, tz: 0.6, az: 0.55, el: 0.82, d: 4.8}),
   open: () => ({tx: 0.45, ty: 0.75, tz: 0.15, az: 0.42, el: 0.42, d: 5.0}),
+  busbars: () => ({tx: 0.05, ty: 0.95, tz: -0.25, az: -0.42, el: 0.14, d: 3.7, walls: true}),
   rear: () => ({tx: 0.2, ty: 1.04, tz: -0.2, az: Math.PI - 0.62, el: 0.24, d: 4.4}),
 };
 
@@ -86,7 +87,7 @@ export function runLive() {
   let speed = 1;
   let view = STEPS[Math.min(N - 1, Math.floor(p))].view;
   let userView = false;
-  const display = {labels: 1, section: 0, xray: 0, follow: 1, orbit: 0};
+  const display = {labels: 1, section: 0, xray: 0, follow: 1, orbit: 0, screws: q.has('fasteners') ? 1 : 0};
   let iso = null;
   const off = {az: 0, el: 0, k: 1};
   let T = 0;
@@ -172,6 +173,7 @@ export function runLive() {
     else if (key === 's') ui.btn.section.click();
     else if (key === 'x') ui.btn.xray.click();
     else if (key === 'o') ui.btn.orbit.click();
+    else if (key === 'f') ui.btn.screws.click();
     else if (key === 'escape') iso = null;
     else return;
     e.preventDefault();
@@ -226,22 +228,29 @@ export function runLive() {
   let seenKey = '';
   const callouts = (s, fade) => {
     const st = STEPS[s.step];
-    const key = `${s.step}|${view}|${display.section}|${iso}`;
+    const key = `${s.step}|${view}|${display.section}|${iso}|${display.screws}`;
     if (key !== seenKey) {
       seenKey = key;
       seen.clear();
     }
     const out = [];
-    for (const id of st.focus) {
-      const a = v.panel.anchorAt(id);
+    // in fastener mode the labels are the fasteners of this step (or, with none, those still fitted in sight)
+    let items;
+    if (display.screws) {
+      const here = FASTENERS.filter((f) => f.step === st.id && s.fast[f.id] < 0.999);
+      const rest = FASTENERS.filter((f) => s.fast[f.id] < 0.999);
+      items = (here.length ? here : rest).map((f) => ({id: f.id, anchor: `f:${f.id}`, name: f.name, sub: `${f.size || 'size not given'}${f.cls ? ' ' + f.cls : ''} · ${fastTorque(f)}`}));
+    } else items = st.focus.map((id) => ({id, anchor: id, name: (NAMES[id] || [id])[0], sub: (NAMES[id] || [id, ''])[1]}));
+    for (const it of items) {
+      if (out.length >= 7) break;
+      const a = v.panel.anchorAt(it.anchor);
       if (!a) continue;
       const w = a.clone();
-      if (!visible(id, w)) continue;
+      if (!visible(it.anchor, w)) continue;
       const at = v.project(w);
       if (!at || at[0] < 330 || at[0] > 1270 || at[1] < 100 || at[1] > 740) continue;
-      const [name, sub] = NAMES[id] || [id, ''];
-      const wd = Math.max(name.length + id.length + 1, sub.length * 0.83) * 6.4 + 20;
-      out.push({id, name, sub, at, w: wd, o: fade});
+      const wd = Math.max(it.name.length + it.id.length + 1, it.sub.length * 0.83) * 6.4 + 20;
+      out.push({id: it.id, name: it.name, sub: it.sub, at, w: wd, o: fade, fast: !!display.screws});
     }
     // left of the screen centre the label goes left, right of it right; then stacked apart
     for (const side of [-1, 1]) {
@@ -310,7 +319,7 @@ export function runLive() {
     const k = window.LIVE?.snap ? 1 : 1 - Math.exp(-dt / 0.35);
     camK.az += wrap(tgt.az - camK.az) * k;
     for (const key of ['tx', 'ty', 'tz', 'el', 'd', 'sy']) camK[key] = (camK[key] ?? tgt[key]) + (tgt[key] - (camK[key] ?? tgt[key])) * k;
-    v.panel.setDisplay({iso, xray: display.xray ? 1 : 0, walls: !!tgt.walls, section: !!(display.section || tgt.cut)});
+    v.panel.setDisplay({iso, xray: display.xray ? 1 : 0, walls: !!tgt.walls, section: !!(display.section || tgt.cut), screws: !!display.screws});
     v.panel.setFocus(STEPS[s.step].focus, 0.07 + 0.04 * Math.sin(T * 4));
     v.frame(s, camK);
     const fade = display.labels ? (window.LIVE?.snap ? 1 : clamp((T - labelsT - 0.5) / 0.4, 0, 1)) : 0;

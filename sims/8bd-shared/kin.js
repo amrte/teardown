@@ -17,24 +17,46 @@ export const P = {
   track: 0.581, // truck wheel track s, 200/1
   armUp: [1.246, 1.046, 0.906], // upper contact arm heights L1 L2 L3 above the floor (left high to right low), 203/2 fig 1
   armLow: 0.665, // lower contact arm height "a", 12 kV 630-1600 A 3AF truck, 203/3 fig 2
-  phaseX: [-0.2175, 0, 0.2175], // phase columns at 21 / 50 / 79 % of the partition width, EST from photo 102/4 fig 4
-  body: 1.5, // HV body height: the arm heights above sit 0.18 / 0.30 / 0.39 of it below the roof, EST from 104/3 fig 6b
-  lvH: 0.62, // LV compartment height (0.43 x body), EST from 104/3 fig 6b
-  lvD: 0.52, // LV compartment depth (0.35-0.5 x depth), EST
-  truckComp: 0.667, // truck compartment depth (0.53 x depth), EST from 104/3 fig 6b
-  busFloor: 0.78, // horizontal partition 340 (busbar compartment about half the body height, 104/3 fig 6b), EST
-  testTravel: 0.24, // service -> test position: arms clear the barrier boxes 360/316 and the shutters drop, EST
-  outTravel: 1.06, // truck rolled completely out of the panel (300/14), EST: truck depth plus clearance
+  phaseX: [-0.22, 0, 0.22], // phase pitch 220 mm, middle phase on the centre line: measured on 102/4 fig 4 (+-10 mm)
+  // the side sections 104/3 fig 6b, 103/2-103/5 and 202/4-202/8 are drawn to scale: measured against the 1259 mm depth
+  // (they reproduce the 1246 / 1046 / 906 mm contact heights within 2 %), +-15-25 mm
+  body: 1.47, // HV body, bottom sheet to roof
+  lvH: 0.635, // LV compartment height (overall height about 2105 mm)
+  lvD: 0.448, // LV compartment depth
+  truckComp: 0.66, // partitions 374 / 150 behind the panel front
+  busFloor: 0.722, // horizontal partition 340
+  joint: 0.795, // joint between partitions 374 and 150 (fixing map 201/5 fig 8 scaled by the contact heights)
+  partTop: 1.415, // top edge of partition 374 under recess plate 568 (same fit)
+  partBot: 0.12, // bottom edge of partition 150, over a 110 mm sill (same fit, 202/4-202/8)
+  z396: 1.163, // support plate 396 behind the front: a 95 mm relief duct behind it to flap 480
+  zBus: 1.03, // busbars 450 behind the front (1010-1045 mm)
+  zCT: 1.087, // CT 290 body centre behind the front; body 136 deep x 265 high, terminals L at 670, K at 420 mm
+  ctD: 0.136,
+  ctH: 0.265,
+  ctTopY: 0.685,
+  lugY: 0.415, // cable lug bolting point on connection piece 280 above the floor, cable connection no. 1, 202/4 fig 9
+  esY: 0.32, // earthing switch shaft height, 202/4-202/8
+  esZ: 1.19, // earthing switch shaft behind the front
+  knife: 0.21, // earthing knife length
+  boxW: 0.13, // barrier box opening 130 x 90 mm, measured on 102/4 fig 4
+  boxH: 0.09,
+  winW: 0.115, // inspection windows 314: 115 x 60 mm at 450 mm, 102/4 fig 4
+  winH: 0.06,
+  winY: 0.45,
+  shaft51Y: 0.115, // locking shaft 51 above the floor, 106/2 fig 2
+  handleY: 0.935, // truck handles 401 / 649, 106/2 fig 2
+  leverDeg: [40, 25, -23], // lever 47 from vertical (+ = left) at out / in / interlocked, 300/11 fig 15 (+-25 %)
+  testTravel: 0.135, // Service -> Test: matched side photos 101/3 fig 2 and 101/4 fig 4 (+-30 mm)
+  outTravel: 1.06, // truck rolled completely out of the panel (300/14): truck depth about 800 mm plus clearance, EST
   aisle: 1.5, // operating aisle in front of the board, minimum, 200/3
-  plateLift: 0.04, // front plate 613 lifted about 4 cm to take it off, 300/22
-  shaftLift: 0.008, // front plate lift by shaft 51 leaving "interlocked" (111/14), EST
+  plateLift: 0.04, // front plate 613 lifted about 40 mm to take it off, 300/22
+  shaftLift: 0.008, // front plate lift by shaft 51 leaving "interlocked" (111/14), EST: not given
   viStroke: 0.011, // vacuum interrupter contact stroke, EST (the manual defers to the 3AF instructions)
 };
 P.zf = P.depth / 2; // front face of the panel
 P.zp = P.zf - P.truckComp; // partitions 374 / 150 (truck compartment to the rear compartments)
-P.zc = P.zp - 0.11; // fixed isolating contacts 430 / 300, inside the barrier boxes, EST
-P.zBox = 0.13; // barrier box depth behind the partition, EST
-
+P.zBox = 0.11; // barrier box depth behind the partition, EST
+P.zc = P.zp - 0.085; // end of the fixed contacts 430 / 300 inside the boxes: the arm tips clear the mouth at Test, EST
 export const RATING = [
   ['Panel', '8BD1 feeder panel no. 1 (103/1)'],
   ['Rated voltage', '12 kV, List 2 (100/2)'],
@@ -44,6 +66,7 @@ export const RATING = [
   ['Rated current', '1250 A, in the 630-1600 A class of 12 kV 3AF trucks (203/3)'],
   ['Breaking current', '12.5 / 20 / 25 kA class (203/3)'],
   ['Finish', 'RAL 7032 pebble grey (101/3)'],
+  ['Phase pitch', '220 mm, measured (102/4)'],
 ];
 
 // ------------------------------------------------------------ the procedure
@@ -98,38 +121,43 @@ export const STEPS = [
     ch: {wheel: [0, 1, 1]}, focus: ['41']},
   {id: 'front', t: 'Take off front plate', ref: '300/22', view: 'truck', dur: 3.2,
     say: 'Undo the slotted screw next to the shaft label, grip both handles, lift the front plate 613 about 4 cm and pull it forward. Not possible in Service position: an angle 399 locks it.',
-    ch: {front: [0, 1, 1]}, focus: ['613', '395']},
+    ch: {front: [0.3, 1, 1]}, focus: ['613', '395']},
   {id: 'mech', t: 'Open mechanism housing', ref: '400/5', view: 'mech', dur: 3.0,
     say: 'The 3AF mechanism housing is now exposed. Take off cover plate 339.60.1: closing spring, tripping spring 339.64, breaker shaft 339.63, dashpot 339.61.8. Work here only by trained fitters, springs discharged.',
-    ch: {mech: [0, 1, 1]}, focus: ['339.60.1', '339.64', '339.63']},
+    ch: {mech: [0.3, 1, 1]}, focus: ['339.60.1', '339.64', '339.63']},
   {id: 'arms', t: 'Remove contact arms', ref: '301/2', view: 'poles', dur: 3.4,
     say: 'Undo the hex screws of the 3 upper arms 423 (run-in contacts 429) and the 3 lower arms 295 (301). Each arm floats on spiral springs 423.13 / 295.13 on its bracket.',
-    ch: {armsU: [0, 0.6, 1], armsL: [0.35, 1, 1]}, focus: ['423', '295', '429', '301']},
+    ch: {armsU: [0.3, 0.75, 1], armsL: [0.5, 1, 1]}, focus: ['423', '295', '429', '301']},
   {id: 'poles', t: 'Take out breaker poles', ref: '106/3', view: 'poles', dur: 3.6,
     say: 'Each pole: vacuum interrupter 339.30 between upper and lower pole supports .20 / .40, on post insulators .16.1 / .16.2, braced by strut .28, driven by insulated coupler .48. Pole service per the 3AF instructions.',
     ch: {poles: [0, 1, 1]}, focus: ['339.30', '339.20', '339.40', '339.48']},
   {id: 'partL', t: 'Remove lower partition', ref: '400/3', view: 'boxes', dur: 3.0,
     say: 'Mark the lower partition 150 with the panel no., pull off the insulation caps, undo the nuts and pull it forward off its bolts (201/5). The cable compartment opens: CTs 290, fixed contacts 300, earthing switch 256.',
-    ch: {partL: [0, 1, 1]}, focus: ['150', '316']},
+    ch: {partL: [0.3, 1, 1]}, focus: ['150', '316']},
   {id: 'partU', t: 'Remove upper partition', ref: '400/3', view: 'boxes', dur: 3.0,
     say: 'Only with the busbars switched off, verified dead, earthed and short-circuited (VDE 0105, 400/1): take off partition 374 with the top barrier boxes 360. The busbar compartment opens.',
-    ch: {partU: [0, 1, 1]}, focus: ['374', '360']},
+    ch: {partU: [0.3, 1, 1]}, focus: ['374', '360']},
   {id: 'flaps', t: 'Lift off relief flaps', ref: '400/9', view: 'top', dur: 2.6,
     say: 'Take off the pressure-relief flaps 538 (truck), 486 (busbar) and 480 (cable compartment). The screws of the ribbed insulators 418 are reachable only from above.',
     ch: {flaps: [0, 1, 1]}, focus: ['538', '486', '480']},
-  {id: 'bus', t: 'Take out the busbars', ref: '201/8', view: 'open', dur: 3.6,
+  {id: 'bus', t: 'Take out the busbars', ref: '201/8', view: 'busbars', dur: 3.6,
     say: 'Undo the M12 joint bolts of the busbar straps (tightened to 70 Nm at erection) and lift out busbars 450 with fixed contacts 430; the ribbed insulators 418 come off with the long-handled wrench and a belt wrench (400/9).',
-    ch: {bus: [0, 1, 1]}, focus: ['450', '430', '418']},
+    ch: {bus: [0.3, 1, 1]}, focus: ['450', '430', '418']},
   {id: 'ct', t: 'Draw out the CT unit', ref: '400/10', view: 'open', dur: 3.6,
     say: 'Push the two mounting rods (26 mm x 2500 mm) through support plate 220, turn them 90 deg behind the traverse, undo the 4 nuts and draw the CT unit out: CTs 290, lower fixed contacts 300, earthing switch 256.',
-    ch: {ct: [0, 1, 1]}, focus: ['220', '290', '256']},
+    ch: {ct: [0.3, 1, 1]}, focus: ['220', '290', '256']},
   {id: 'lv', t: 'Open LV compartment', ref: '300/20', view: 'hero', dur: 2.6,
-    say: 'Open the LV compartment 530 with the standard key: instruments, relays and terminal blocks of the panel; the rating plate is inside the door at the bottom (100/1). Teardown complete.',
+    say: 'Open the LV compartment 530 with the standard key: instruments, relays and terminal blocks of the panel; the rating plate is inside the door at the bottom (100/1).',
     ch: {lv: [0, 1, 1]}, focus: ['530']},
+  {id: 'unbolt', t: 'Unbolt from the board', ref: '201/6', view: 'hero', dur: 3.4,
+    say: 'Erection in reverse (201/6-201/12): undo the 6 M8 x 20 screws between the LV compartments, the M12 earth-bar strap (70 Nm at erection), the panel earthing bolt M12 and the bolts in the side drillings S / K / D; then cut the foundation welds. Teardown complete.',
+    ch: {}, focus: ['654', '560']},
 ];
 export const N = STEPS.length;
 
 // the state before step 0
+// the fasteners of each step are undone in its first 30 % (they back out along their axis, then are taken off)
+export const UNDO = 0.3;
 const INIT = {brk: 1, cspr: 1, tspr: 1, lever: 0, shaft: 2, travel: 0, plug: 0, det: 0, earth: 0, wheel: 0, front: 0, mech: 0, armsU: 0, armsL: 0, poles: 0, partL: 0, partU: 0, flaps: 0, bus: 0, ct: 0, lv: 0};
 export const CHANNELS = Object.keys(INIT);
 
@@ -195,6 +223,12 @@ export function stateAt(p) {
     earthOn: c.earth > 0.5,
     plugIn: c.plug < 0.5,
   };
+  // each fastener group's removal: 0 fitted .. 1 taken off, in the first UNDO of its step
+  st.fast = {};
+  for (const f of FASTENERS) {
+    const i = STEP_INDEX[f.step];
+    st.fast[f.id] = i === undefined ? 0 : clamp((p - i) / UNDO, 0, 1);
+  }
   st.il = interlocks(st);
   return st;
 }
@@ -303,6 +337,37 @@ export const NAMES = {
   '592': ['LV socket', 'bracket .6 locks the plug, 300/13'],
   '593': ['LV plug', '24-pole, hose 587, 105/6'],
   '613': ['Truck front plate', 'closes the panel, 105/1'],
+  '560': ['Left side wall', 'side drillings S / K / D, 201/6 fig 10'],
+  '654': ['Left side strut', 'M12 earthing bolt at its foot, 201/12'],
   '653': ['ON push button', 'mechanical closing, 300/5'],
   '673': ['OFF push button', 'always possible, 300/6'],
 };
+
+// ------------------------------------------------------------ fasteners (inventory of the manual; positions in panel.js)
+// status: 'torque' = tightening torque stated in the manual; 'size' = thread size or rivet size stated, torque not;
+// 'none' = the manual shows or names the fastener but gives neither. No value here comes from anywhere but the manual.
+export const FASTENERS = [
+  {id: 'C07', name: 'Busbar joint bolts', size: 'M12', head: 'hex, heads to the front', washers: 'washers, spring or clamping washers as supplied', torque: 70, count: '4 per phase at 450.6 (2 x 2 drillings, fig 15)', step: 'bus', ref: '201/8-201/11', tref: '201/11'},
+  {id: 'C16', name: 'Ribbed insulator screws', size: null, head: 'hex, behind support plate 396', washers: null, torque: null, count: '1 per insulator 418', step: 'bus', ref: '400/9', note: 'long-handled wrench 845-4138.3; reach from above after flap 480'},
+  {id: 'C17', name: 'CT unit studs and nuts', size: null, head: 'stud + hex nut', washers: null, torque: null, count: '4', step: 'ct', ref: '400/10', note: 'unit hung on 2 mounting rods 26 x 2500 mm'},
+  {id: 'C13', name: 'Cable lug bolts', size: 'M12', cls: '8.8', head: 'hex', washers: 'washer, spring washer, hex nut', torque: null, count: 'per cable lug', step: 'ct', ref: '202/1'},
+  {id: 'C14', name: 'Cable earthing bolts', size: null, head: 'stud + nut', washers: null, torque: null, count: '3', step: 'ct', ref: '202/9'},
+  {id: 'C01', name: 'Partition 374 screws', size: null, head: 'captive flat round-head', washers: 'washer, contact washer, hex nut', torque: null, count: '14 (4 capped up to 12 kV)', step: 'partU', ref: '201/12-201/13', note: 'tightened properly; caps on screws in insulation only'},
+  {id: 'C02', name: 'Partition 150 screws', size: null, head: 'captive flat round-head', washers: 'washer, contact washer, hex nut', torque: null, count: '14 (4 capped up to 12 kV)', step: 'partL', ref: '201/12-201/13'},
+  {id: 'B360', name: 'Top barrier box screws', size: null, head: 'round head', washers: null, torque: null, count: '2 per box (photo 201/5 fig 8)', step: 'partU', ref: '201/5', note: 'shown, not described'},
+  {id: 'B316', name: 'Lower barrier box screws', size: null, head: 'round head', washers: null, torque: null, count: '2 per box (photo 201/5 fig 8)', step: 'partL', ref: '201/5', note: 'shown, not described'},
+  {id: 'T01', name: 'Front plate screw', size: null, head: 'slotted round head', washers: null, torque: null, count: '1 at point R1', step: 'front', ref: '300/22, 111/14'},
+  {id: 'T02', name: 'Lock angle 399 rivets', size: 'C 4.8 x 14', cls: 'steel', head: 'hollow rivet', washers: null, torque: null, count: '3 (or 2)', step: null, ref: '300/23', note: 'only drilled out (5 mm) to take the plate off in Service position'},
+  {id: 'T08', name: 'Mechanism cover screws', size: null, head: 'small round head', washers: null, torque: null, count: '4 (photo 106/2 fig 3)', step: 'mech', ref: '106/2', note: 'shown, not described'},
+  {id: 'T06', name: 'Interlock adjusting screw', size: null, head: '', washers: null, torque: null, count: '1, couples 339.65.3 to 339.65.5', step: null, ref: '111/9', note: 'leave set; position inside the housing EST'},
+  {id: 'T03', name: 'Contact arm screws', size: null, head: 'hex', washers: null, torque: null, count: '2 per arm (301/2 figs 2-3)', step: 'arms', ref: '301/2', note: 're-used for the earthing devices 291 / 419'},
+  {id: 'T04', name: 'Arm spring screws', size: null, head: 'screw + nut on spiral spring .13', washers: null, torque: null, count: '4 per arm (?), photo 105/4', step: null, ref: '105/3-105/4', note: 'stay on the arm'},
+  {id: 'C10', name: 'Earth bar strap bolts', size: 'M12', head: 'hex', washers: 'as supplied', torque: 70, count: 'per strap to the next panel', step: 'unbolt', ref: '201/11', tref: '201/11'},
+  {id: 'C06', name: 'LV compartment joint screws', size: 'M8 x 20', head: 'hex', washers: '2 contact washers 8, hex nut', torque: null, count: '6 per joint', step: 'unbolt', ref: '201/7', note: 'positions on the side wall EST'},
+  {id: 'C12', name: 'Panel earthing bolt', size: 'M12', head: 'hex', washers: null, torque: null, count: '1, front left bottom on strut 654', step: 'unbolt', ref: '201/11-201/12'},
+  {id: 'C04', name: 'Panel-to-panel bolts', size: null, head: 'flat round-head', washers: 'fig 11 / 12 stack', torque: null, count: '23 drillings per side (S 15, K 6, D 2)', step: 'unbolt', ref: '201/6-201/7'},
+];
+const STEP_INDEX = Object.fromEntries(STEPS.map((s, i) => [s.id, i]));
+export const FASTENER = Object.fromEntries(FASTENERS.map((f) => [f.id, f]));
+export const fastStatus = (f) => (f.torque ? 'torque' : f.size ? 'size' : 'none');
+export const fastTorque = (f) => (f.torque ? `${f.torque} Nm (${f.tref})` : 'torque not in manual');

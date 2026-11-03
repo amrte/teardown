@@ -7,7 +7,8 @@
 // boxes 360 (three, on a diagonal) and 316 (three, in a row); low-voltage compartment 530 on the roof at the front.
 import * as THREE from 'three';
 import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
-import {P, STEPS} from './kin.js';
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {FASTENERS, P, STEPS, fastStatus} from './kin.js';
 
 const V3 = THREE.Vector3;
 const PI = Math.PI;
@@ -162,6 +163,10 @@ export function buildPanel() {
   const zc = P.zc;
   const zr = -D / 2;
   const X = P.phaseX;
+  const zS = zf - P.z396; // support plate 396
+  const zB = zf - P.zBus; // busbars
+  const zT = zf - P.zCT; // CT body centre
+  const zE = zf - P.esZ; // earthing switch shaft
 
   // ============================================================ the cubicle (stationary part, even numbers)
   const cub = G('cubicle');
@@ -187,6 +192,8 @@ export function buildPanel() {
       box(0.03, H, 0.04, 'frame', grp.name, grp, sx * (W / 2 - 0.016), H / 2, zf - 0.02);
       for (const y of [0.32, 0.8, 1.28]) box(0.018, 0.035, 0.02, 'galv', grp.name, grp, sx * (W / 2 - 0.036), y, zf - 0.03);
     }
+    anchor('654', l, -W / 2 + 0.016, 0.3, zf);
+    anchor('560', G('560', cub), -W / 2 - 0.003, 0.95, -0.2);
     const m = G('156', cub);
     for (const sx of [-1, 1]) box(0.03, H, 0.03, 'frame', '156', m, sx * (W / 2 - 0.016), H / 2, zp - 0.02);
   }
@@ -210,17 +217,17 @@ export function buildPanel() {
     box(W, 0.008, 0.03, 'copper', '548', G('548', cub), 0, H + 0.006, zf - 0.03);
   }
   // recess plate 568 at the top of the truck compartment, LV socket 592 on its right with latch 588 (102/5)
-  const socket = new V3(0.2, 1.405, 0.06);
+  const socket = new V3(0.2, P.partTop - 0.035, 0.06);
   {
     const g = G('568', cub);
-    box(W - 0.02, 0.006, zf - zp - 0.06, 'sheetIn', '568', g, 0, 1.44, (zf + zp) / 2 - 0.02);
+    box(W - 0.02, 0.006, zf - zp - 0.06, 'sheetIn', '568', g, 0, P.partTop, (zf + zp) / 2 - 0.02);
     const s = G('592', cub);
-    box(0.1, 0.06, 0.05, 'dark', '592', s, socket.x, 1.415, socket.z - 0.03);
+    box(0.1, 0.05, 0.05, 'dark', '592', s, socket.x, socket.y + 0.01, socket.z - 0.03);
     cyl(0.034, 0.05, 'dark', '592', s, socket.x, socket.y, socket.z - 0.005, PI / 2);
     box(0.012, 0.05, 0.06, 'galv', '592', s, socket.x + 0.05, 1.4, socket.z);
     anchor('592', s, socket.x + 0.04, socket.y, socket.z);
     const l = G('588', cub);
-    box(0.02, 0.012, 0.16, 'galv', '588', l, socket.x - 0.05, 1.37, socket.z + 0.04);
+    box(0.02, 0.012, 0.16, 'galv', '588', l, socket.x - 0.05, socket.y - 0.035, socket.z + 0.04);
   }
   // floor: centring rail 66, stop 78 at its rear, interlocking channel 50 under shaft 51, earthing bar 40 (102/4 fig 5)
   {
@@ -237,28 +244,32 @@ export function buildPanel() {
   }
   // upper partition 374 with the top barrier boxes 360 on the diagonal, lower partition 150 with the boxes 316 in a
   // row and the two inspection windows 314; shutters inside every box (102/6 fig 9)
-  const BOX = 0.12;
+  const BW = P.boxW + 0.016; // outer size of a barrier box around its 130 x 90 mm opening
+  const BH = P.boxH + 0.016;
   const shutters = {U: [], L: []};
   const barrierBox = (id, parent, x, y, kind = 'insul') => {
     const z0 = zp;
     const d = P.zBox;
     const t = 0.008;
-    box(BOX, t, d, kind, id, parent, x, y + BOX / 2 - t / 2, z0 - d / 2);
-    box(BOX, t, d, kind, id, parent, x, y - BOX / 2 + t / 2, z0 - d / 2);
-    box(t, BOX, d, kind, id, parent, x - BOX / 2 + t / 2, y, z0 - d / 2);
-    box(t, BOX, d, kind, id, parent, x + BOX / 2 - t / 2, y, z0 - d / 2);
-    // the shutter: a flap hinged at the top of the mouth, lifted rearward by the arm's slide piece
+    box(BW, t, d, kind, id, parent, x, y + BH / 2 - t / 2, z0 - d / 2);
+    box(BW, t, d, kind, id, parent, x, y - BH / 2 + t / 2, z0 - d / 2);
+    box(t, BH, d, kind, id, parent, x - BW / 2 + t / 2, y, z0 - d / 2);
+    box(t, BH, d, kind, id, parent, x + BW / 2 - t / 2, y, z0 - d / 2);
+    // a flange round the mouth on the partition face
+    box(BW + 0.02, 0.01, 0.006, kind, id, parent, x, y + BH / 2 + 0.005, z0 + 0.011);
+    box(BW + 0.02, 0.01, 0.006, kind, id, parent, x, y - BH / 2 - 0.005, z0 + 0.011);
+    // the shutter: a flap hinged at the top of the mouth, lifted rearward by the arm's slide piece (102/6 fig 9)
     const hinge = new THREE.Group();
-    hinge.position.set(x, y + BOX / 2 - 0.012, z0 - 0.012);
+    hinge.position.set(x, y + BH / 2 - 0.012, z0 - 0.012);
     parent.add(hinge);
-    box(BOX - 0.02, BOX - 0.026, 0.005, 'dark', id, hinge, 0, -(BOX - 0.026) / 2, 0);
+    box(BW - 0.02, BH - 0.026, 0.005, 'dark', id, hinge, 0, -(BH - 0.026) / 2, 0);
     return hinge;
   };
   const partU = G('374', cub);
   {
-    const y0 = P.busFloor;
-    const holes = X.map((x, i) => [x, P.armUp[i] - y0, BOX - 0.016, BOX - 0.016]);
-    add(plateGeo(W - 0.008, 1.44 - y0, 0.008, holes), 'insul', '374', partU, 0, y0, zp + 0.004);
+    const y0 = P.joint;
+    const holes = X.map((x, i) => [x, P.armUp[i] - y0, P.boxW, P.boxH]);
+    add(plateGeo(W - 0.008, P.partTop - y0, 0.008, holes), 'insul', '374', partU, 0, y0, zp + 0.004);
     const bx = G('360', partU);
     X.forEach((x, i) => shutters.U.push(barrierBox('360', bx, x, P.armUp[i])));
     anchor('360', bx, X[0], P.armUp[0] + 0.05, zp);
@@ -268,31 +279,33 @@ export function buildPanel() {
   }
   const partL = G('150', cub);
   {
-    const y0 = 0.08;
-    const holes = X.map((x) => [x, P.armLow - y0, BOX - 0.016, BOX - 0.016]);
-    holes.push([X[0], 0.44 - y0, 0.09, 0.06], [X[2], 0.44 - y0, 0.09, 0.06]);
-    add(plateGeo(W - 0.008, P.busFloor - y0, 0.008, holes), 'insul', '150', partL, 0, y0, zp + 0.004);
+    const y0 = P.partBot;
+    const holes = X.map((x) => [x, P.armLow - y0, P.boxW, P.boxH]);
+    holes.push([X[0], P.winY - y0, P.winW, P.winH], [X[2], P.winY - y0, P.winW, P.winH]);
+    add(plateGeo(W - 0.008, P.joint - y0, 0.008, holes), 'insul', '150', partL, 0, y0, zp + 0.004);
     const bx = G('316', partL);
     X.forEach((x) => shutters.L.push(barrierBox('316', bx, x, P.armLow)));
-    for (const x of [X[0], X[2]]) box(0.09, 0.06, 0.004, 'glass', '150', partL, x, 0.44, zp + 0.004);
-    add(new THREE.CircleGeometry(0.035, 3), 'yellow', '150', partL, 0, 0.26, zp + 0.01, 0, 0, PI / 2);
+    for (const x of [X[0], X[2]]) box(P.winW, P.winH, 0.004, 'glass', '150', partL, x, P.winY, zp + 0.004);
+    add(new THREE.CircleGeometry(0.035, 3), 'yellow', '150', partL, 0, 0.27, zp + 0.01, 0, 0, PI / 2);
     anchor('316', bx, X[2], P.armLow - 0.05, zp);
-    anchor('150', partL, -0.27, 0.25, zp + 0.01);
+    anchor('150', partL, -0.27, 0.3, zp + 0.01);
   }
+  // the 110 mm sill under partition 150
+  box(W - 0.01, P.partBot - 0.004, 0.012, 'sheetIn', '30', G('30s', cub), 0, P.partBot / 2 + 0.002, zp);
   // horizontal partition 340 between busbar and cable compartments
   box(W - 0.01, 0.008, zp - zr - 0.01, 'insul', '340', G('340', cub), 0, P.busFloor, (zp + zr) / 2 - 0.003);
   // busbar compartment: support plate 396 with the diagonal brace 402, ribbed insulators 418, busbars 450 at three
   // heights running through the board, fixed contacts 430 reaching forward into the barrier boxes (102/3 fig 3)
   {
     const sp = G('396', cub);
-    box(W - 0.01, H - P.busFloor - 0.02, 0.006, 'sheetIn', '396', sp, 0, (H + P.busFloor) / 2, -0.52);
+    box(W - 0.01, H - P.busFloor - 0.02, 0.006, 'sheetIn', '396', sp, 0, (H + P.busFloor) / 2, zS);
     const br = G('402', cub);
-    const pts = X.map((x, i) => new V3(x, P.armUp[i], -0.512));
+    const pts = X.map((x, i) => new V3(x, P.armUp[i], zS + 0.008));
     const a = pts[0].clone().add(new V3(-0.1, 0.1, 0));
     const b = pts[2].clone().add(new V3(0.1, -0.06, 0));
     for (const [p0, p1] of [[a, pts[0]], [pts[0], pts[1]], [pts[1], pts[2]], [pts[2], b]]) {
-      const m = box(0.05, 0.012, p0.distanceTo(p1) + 0.03, 'frame', '402', br, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2, -0.512);
-      m.lookAt(p1.x, p1.y, -0.512);
+      const m = box(0.05, 0.012, p0.distanceTo(p1) + 0.03, 'frame', '402', br, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2, zS + 0.008);
+      m.lookAt(p1.x, p1.y, zS + 0.008);
     }
   }
   const bus = G('bus', cub);
@@ -305,66 +318,72 @@ export function buildPanel() {
       const bb = ph;
       const fc = ph;
       const y = P.armUp[i];
-      add(ribbedGeo(0.15, 0.028, 0.048, 4), 'resin', '418', ins, x, y, -0.512, PI / 2);
+      add(ribbedGeo(zB - zS - 0.035, 0.026, 0.045, 3), 'resin', '418', ins, x, y, zS + 0.003, PI / 2);
       // two parallel flat bars on edge with the intermediate piece 450.6 at the insulator (201/8)
-      for (const dz of [-0.018, 0.018]) box(W - 0.01, 0.08, 0.01, 'copper', '450', bb, 0, y, -0.33 + dz);
-      box(0.06, 0.08, 0.026, 'copper', '450', bb, x, y, -0.33);
+      for (const dz of [-0.018, 0.018]) box(W - 0.01, 0.08, 0.01, 'copper', '450', bb, 0, y, zB + dz);
+      box(0.06, 0.08, 0.026, 'copper', '450', bb, x, y, zB);
       // fixed contact 430: a silvered flat bar forward into the box
-      box(0.05, 0.014, -0.33 - zc + 0.01, 'copper', '430', fc, x, y, (zc - 0.33) / 2 + 0.005);
+      box(0.05, 0.014, zB - zc + 0.01, 'copper', '430', fc, x, y, (zc + zB) / 2 + 0.005);
       box(0.054, 0.018, 0.05, 'silver', '430', fc, x, y, zc + 0.02);
     });
-    anchor('450', busPh[0], X[1] + 0.15, P.armUp[0], -0.33);
-    anchor('430', busPh[1], X[1], P.armUp[1] + 0.01, (zc - 0.33) / 2);
-    anchor('418', busPh[2], X[2], P.armUp[2] + 0.04, -0.44);
+    anchor('450', busPh[0], X[1] + 0.15, P.armUp[0], zB);
+    anchor('430', busPh[1], X[1], P.armUp[1] + 0.01, (zc + zB) / 2);
+    anchor('418', busPh[2], X[2], P.armUp[2] + 0.04, (zS + zB) / 2);
   }
   // cable compartment: support plate 220 under partition 340, post CTs 290 with the lower fixed contacts 300 at their
   // top terminal and the cable connectors 280 at the bottom, earthing switch 256 under them (102/8 fig 13)
   const ctu = G('ct', cub);
   const knives = [];
+  const zLug = zT + 0.13; // the cable lugs, in front of the CTs over the cable openings (200/3 fig 4)
+  const esContact = new V3(0, 0, 0); // fixed contact 256.18 on connection piece 280, one knife length from the shaft
   {
     const sp = G('220', ctu);
-    box(W - 0.03, 0.008, 0.36, 'galv', '220', sp, 0, P.busFloor - 0.012, -0.33);
-    anchor('220', sp, -0.3, P.busFloor - 0.012, -0.2);
+    box(W - 0.03, 0.008, 0.34, 'galv', '220', sp, 0, P.busFloor - 0.012, zT - 0.02);
+    anchor('220', sp, -0.3, P.busFloor - 0.012, zT + 0.1);
     const ct = G('290', ctu);
     const fx = G('300', ctu);
     const cn = G('280', ctu);
     X.forEach((x) => {
-      rbox(0.13, 0.25, 0.16, 0.012, 'resin', '290', ct, x, 0.5, -0.3);
-      box(0.07, 0.13, 0.06, 'resin', '290', ct, x, 0.69, -0.3);
-      // terminal L at the top carries the fixed contact 300 forward into box 316
-      box(0.05, 0.014, -0.27 - zc, 'copper', '300', fx, x, P.armLow, (zc - 0.27) / 2);
+      // post CT 136 x 265 mm hung from plate 220, terminal L (top, 670 mm) and K (bottom, 420 mm)
+      rbox(0.12, P.ctH, P.ctD, 0.012, 'resin', '290', ct, x, P.ctTopY - P.ctH / 2, zT);
+      box(0.07, P.busFloor - 0.016 - P.ctTopY, 0.07, 'resin', '290', ct, x, (P.busFloor - 0.016 + P.ctTopY) / 2, zT);
+      // terminal L carries the fixed contact 300 forward into box 316
+      box(0.05, 0.014, zT + P.ctD / 2 - zc, 'copper', '300', fx, x, P.armLow, (zc + zT + P.ctD / 2) / 2);
       box(0.054, 0.018, 0.05, 'silver', '300', fx, x, P.armLow, zc + 0.02);
-      // terminal K at the bottom, connector 280 for the cable lugs
-      box(0.05, 0.12, 0.014, 'copper', '280', cn, x, 0.33, -0.38);
-      box(0.05, 0.012, 0.09, 'copper', '280', cn, x, 0.385, -0.34);
+      // terminal K: connection piece 280 forward to the cable lug, bolting point at 415 mm (202/4)
+      box(0.05, 0.014, zLug - zT + 0.02, 'copper', '280', cn, x, 0.425, (zLug + zT) / 2 + 0.01);
+      box(0.05, 0.06, 0.014, 'copper', '280', cn, x, P.lugY - 0.012, zLug);
     });
-    anchor('290', ct, X[0] - 0.07, 0.5, -0.3);
-    anchor('300', fx, X[1], P.armLow + 0.01, (zc - 0.27) / 2);
-    // earthing switch 256: shaft .10 across the panel, knives .6 swing up onto the fixed contacts .18 at terminal K
+    anchor('290', ct, X[0] - 0.07, P.ctTopY - P.ctH / 2, zT);
+    anchor('300', fx, X[1], P.armLow + 0.01, (zc + zT) / 2);
+    // earthing switch 256: shaft .10 across the panel low at the rear (320 mm), knives .6 (210 mm) swing up onto the
+    // fixed contacts .18 on the connection pieces 280 (102/8 fig 13, 202/4-202/8)
     const es = G('256', ctu);
-    const shaftY = 0.2;
-    const shaftZ = -0.14;
-    cyl(0.012, W - 0.06, 'galv', '256', es, 0, shaftY, shaftZ, 0, 0, PI / 2);
+    cyl(0.012, W - 0.06, 'galv', '256', es, 0, P.esY, zE, 0, 0, PI / 2);
+    const dirC = new V3(0, 0.13, 0.17).normalize();
+    esContact.set(0, P.esY + dirC.y * P.knife, zE + dirC.z * P.knife);
     X.forEach((x) => {
-      box(0.04, 0.03, 0.03, 'copper', '256', es, x, 0.29, -0.38);
+      box(0.04, 0.025, 0.03, 'copper', '256', es, x, esContact.y + 0.01, esContact.z);
+      box(0.012, esContact.y + 0.01 - 0.425, 0.012, 'copper', '256', es, x, (esContact.y + 0.425) / 2 + 0.005, esContact.z);
+      cyl(0.02, 0.05, 'galv', '256', es, x, P.esY, zE, 0, 0, PI / 2);
       const k = new THREE.Group();
-      k.position.set(x, shaftY, shaftZ);
+      k.position.set(x, P.esY, zE);
       es.add(k);
-      box(0.012, 0.29, 0.03, 'copper', '256', k, -0.012, 0.145, 0);
-      box(0.012, 0.29, 0.03, 'copper', '256', k, 0.012, 0.145, 0);
+      box(0.01, P.knife, 0.03, 'copper', '256', k, -0.011, P.knife / 2, 0);
+      box(0.01, P.knife, 0.03, 'copper', '256', k, 0.011, P.knife / 2, 0);
       knives.push(k);
     });
-    anchor('256', es, X[2] + 0.05, shaftY, shaftZ);
+    anchor('256', es, X[2] + 0.05, P.esY, zE);
   }
-  // the cables: three single-core cables up through the 3-part bottom cover 200 to the connectors 280
+  // the cables: three single-core cables up through the 3-part bottom cover 200 to the connection pieces 280
   const cables = G('cables', cub);
   {
     X.forEach((x) => {
-      cyl(0.022, 0.62, 'cable', 'cables', cables, x, -0.03, -0.42);
-      cyl(0.032, 0.13, 'black', 'cables', cables, x, 0.2, -0.42);
-      box(0.04, 0.05, 0.012, 'copper', 'cables', cables, x, 0.3, -0.39);
+      cyl(0.022, 0.55, 'cable', 'cables', cables, x, 0.005, zLug + 0.03);
+      cyl(0.032, 0.14, 'black', 'cables', cables, x, 0.28, zLug + 0.03);
+      box(0.04, 0.06, 0.012, 'copper', 'cables', cables, x, P.lugY - 0.015, zLug + 0.014);
     });
-    box(W - 0.01, 0.006, -0.0 - zr - 0.1, 'sheetIn', '200', G('200', cub), 0, 0.08, (zr + zp) / 2);
+    box(W - 0.01, 0.006, zp - zr, 'sheetIn', '200', G('200', cub), 0, 0.006, (zr + zp) / 2);
   }
   // earthing switch drive shaft 248, low on the right from the cable compartment to the truck front, with stop 130
   // and the detachable handle 75 (102/10, 111/13, 300/19)
@@ -372,7 +391,7 @@ export function buildPanel() {
   const shaft248 = new THREE.Group();
   shaft248.position.set(W / 2 - 0.05, 0.14, 0);
   es248.add(shaft248);
-  cyl(0.011, zf + 0.12, 'galv', '248', shaft248, 0, 0, (zf - 0.16) / 2, PI / 2);
+  cyl(0.011, zf - zE - 0.02, 'galv', '248', shaft248, 0, 0, (zf - 0.02 + zE) / 2, PI / 2);
   const stop130 = new THREE.Group();
   stop130.position.set(0, 0, zp + 0.12);
   shaft248.add(stop130);
@@ -389,7 +408,7 @@ export function buildPanel() {
   anchor('75', handle75, 0, 0.32, 0.015);
   // linkage 240 from a crank on 248 to a crank on the earthing shaft
   const crank248 = new THREE.Group();
-  crank248.position.set(0, 0, -0.13);
+  crank248.position.set(0, 0, zE + 0.02);
   shaft248.add(crank248);
   box(0.012, 0.07, 0.012, 'galv', '256', crank248, 0, 0.035, 0);
 
@@ -462,18 +481,18 @@ export function buildPanel() {
   }
   // locking shaft 51 low on the front plate, its crank down into channel 50 (111/3-111/4), the locating lever 47
   const shaft51 = new THREE.Group();
-  shaft51.position.set(-0.12, 0.16, 0);
+  shaft51.position.set(-0.12, P.shaft51Y, 0);
   tk.add(shaft51);
   groups['51'] = shaft51;
   cyl(0.012, zf - 0.38, 'galv', '51', shaft51, 0, 0, (zf + 0.38) / 2, PI / 2);
   const crank51 = new THREE.Group();
   crank51.position.set(0, 0, zf - 0.17);
   shaft51.add(crank51);
-  box(0.02, 0.15, 0.016, 'galv', '51', crank51, 0, -0.075, 0);
-  cyl(0.012, 0.03, 'galv', '51', crank51, 0, -0.14, 0, PI / 2);
+  box(0.02, 0.09, 0.016, 'galv', '51', crank51, 0, -0.045, 0);
+  cyl(0.012, 0.03, 'galv', '51', crank51, 0, -0.085, 0, PI / 2);
   anchor('51', shaft51, 0, 0, zf + 0.005);
   const lever = new THREE.Group();
-  lever.position.set(-0.12, 0.16, zf + 0.01);
+  lever.position.set(-0.12, P.shaft51Y, zf + 0.01);
   tk.add(lever);
   groups['47'] = lever;
   cyl(0.009, 0.62, 'galv', '47', lever, 0, 0.31, 0.012);
@@ -534,14 +553,15 @@ export function buildPanel() {
   });
   scaleTex.redraw();
   {
-    box(0.744, 1.47, 0.006, 'sheet', '613', front, 0, 0.75, zf - 0.003);
+    const FH = H - 0.03; // the plate from 15 mm above the floor to just under the roof
+    box(0.744, FH, 0.006, 'sheet', '613', front, 0, 0.015 + FH / 2, zf - 0.003);
     // the plate's folded edges
-    for (const sx of [-1, 1]) box(0.006, 1.47, 0.035, 'sheet', '613', front, sx * 0.369, 0.75, zf - 0.0175);
-    box(0.744, 0.006, 0.035, 'sheet', '613', front, 0, 1.482, zf - 0.0175);
+    for (const sx of [-1, 1]) box(0.006, FH, 0.035, 'sheet', '613', front, sx * 0.369, 0.015 + FH / 2, zf - 0.0175);
+    box(0.744, 0.006, 0.035, 'sheet', '613', front, 0, 0.012 + FH, zf - 0.0175);
     for (const sx of [-1, 1]) {
       const h = G(sx < 0 ? '649' : '401', front);
-      cyl(0.011, 0.2, 'galv', h.name, h, sx * 0.25, 1.0, zf + 0.04);
-      for (const dy of [-0.1, 0.1]) cyl(0.008, 0.045, 'galv', h.name, h, sx * 0.25, 1.0 + dy, zf + 0.02, PI / 2);
+      cyl(0.011, 0.2, 'galv', h.name, h, sx * 0.25, P.handleY, zf + 0.04);
+      for (const dy of [-0.1, 0.1]) cyl(0.008, 0.045, 'galv', h.name, h, sx * 0.25, P.handleY + dy, zf + 0.02, PI / 2);
     }
     const on = G('653', front);
     cyl(0.022, 0.025, 'black', '653', on, 0.12, 1.22, zf + 0.012, PI / 2);
@@ -563,9 +583,7 @@ export function buildPanel() {
     // slide plate 389 over the hand-crank opening, the rating plate, the shaft scale
     box(0.05, 0.11, 0.004, 'galv', '389', G('389', front), -0.27, 1.22, zf + 0.004);
     box(0.13, 0.06, 0.002, 'galv', '613', front, -0.09, 1.03, zf + 0.002);
-    add(new THREE.PlaneGeometry(0.2, 0.1), 'white', '613', front, -0.12, 0.25, zf + 0.002).material.map = scaleTex.tex;
-    // the slotted fixing screw next to the scale (300/22 fig 38)
-    cyl(0.008, 0.006, 'galv', '613', front, 0.04, 0.22, zf + 0.003, PI / 2);
+    add(new THREE.PlaneGeometry(0.2, 0.1), 'white', '613', front, -0.12, P.shaft51Y + 0.085, zf + 0.002).material.map = scaleTex.tex;
     // hooks 395 on the rear, three per side (111/15)
     const hk = G('395', front);
     for (const sx of [-1, 1]) for (const y of [0.32, 0.8, 1.28]) box(0.02, 0.03, 0.03, 'galv', '395', hk, sx * 0.34, y + 0.03, zfp - 0.012);
@@ -669,7 +687,7 @@ export function buildPanel() {
     const ag = G('423', g);
     box(0.045, Math.max(0.02, y - yUp), 0.014, 'copper', '423', ag, x, (y + yUp) / 2, zr0);
     box(0.045, 0.014, zr0 - tipZ - 0.06, 'copper', '423', ag, x, y, (zr0 + tipZ + 0.06) / 2);
-    box(0.1, 0.1, 0.012, 'insul', '423', ag, x, y, zp + 0.02);
+    box(P.boxW + 0.02, P.boxH + 0.02, 0.012, 'insul', '423', ag, x, y, zp + 0.02);
     const fg = G('429', g);
     fingers('galv', '429', fg, x, y);
     armsU.push(g);
@@ -679,7 +697,7 @@ export function buildPanel() {
     const y = P.armLow;
     const ag = G('295', g);
     box(0.045, 0.014, zPole - 0.05 - tipZ - 0.06, 'copper', '295', ag, x, y, (zPole - 0.05 + tipZ + 0.06) / 2);
-    box(0.1, 0.1, 0.012, 'insul', '295', ag, x, y, zp + 0.02);
+    box(P.boxW + 0.02, P.boxH + 0.02, 0.012, 'insul', '295', ag, x, y, zp + 0.02);
     const fg = G('301', g);
     fingers('galv', '301', fg, x, y);
     armsL.push(g);
@@ -723,6 +741,157 @@ export function buildPanel() {
     anchor('361', det, 0, 0.04, 0.2);
   }
 
+
+  // ============================================================ fasteners (kin.js FASTENERS; facts from 201/5-201/13,
+  // 202/1-202/9, 300/22-300/23, 301/2, 400/9-400/10). Positions are the manual's where it shows them (partition fixing
+  // maps 201/12-201/13, side drillings 201/6 fig 10, photos), EST where it only gives a count. Each fastener is drawn on
+  // its own axis: +y of its geometry points out of the part, the way it unscrews.
+  const FAST_COL = {torque: '#2f9a64', size: '#d9952b', none: '#4d79a8'};
+  const headGeo = (kind, d) => {
+    const parts = [];
+    const s = d * 1.6; // across flats about 1.5-1.6 d (hex heads, nuts)
+    const k = d * 0.65;
+    const shank = new THREE.CylinderGeometry(d / 2, d / 2, d * 2.2, 10);
+    shank.translate(0, -d * 1.1, 0);
+    parts.push(shank);
+    const washer = new THREE.CylinderGeometry(s * 0.62, s * 0.62, d * 0.16, 16);
+    washer.translate(0, d * 0.08, 0);
+    if (kind === 'hex' || kind === 'stud') {
+      parts.push(washer);
+      const h = new THREE.CylinderGeometry(s / Math.sqrt(3), s / Math.sqrt(3), k, 6);
+      h.translate(0, d * 0.16 + k / 2, 0);
+      parts.push(h);
+      if (kind === 'stud') {
+        const t = new THREE.CylinderGeometry(d / 2, d / 2, d * 0.9, 10);
+        t.translate(0, d * 0.16 + k + d * 0.45, 0);
+        parts.push(t);
+      }
+    } else if (kind === 'cap') {
+      const c = new THREE.SphereGeometry(d * 1.05, 14, 8, 0, PI * 2, 0, PI / 2);
+      const f = new THREE.CylinderGeometry(d * 1.35, d * 1.35, d * 0.14, 16);
+      f.translate(0, d * 0.07, 0);
+      parts.push(f, c);
+    } else {
+      // round and slotted heads: a low dome
+      const c = new THREE.SphereGeometry(d * 0.9, 14, 6, 0, PI * 2, 0, PI / 2);
+      c.scale(1, 0.55, 1);
+      parts.push(c);
+    }
+    const g = mergeGeometries(parts.map((x) => x.toNonIndexed()));
+    for (const x of parts) x.dispose();
+    return g;
+  };
+  const FGEO = {};
+  const geoFor = (kind, d) => (FGEO[`${kind}${d}`] ??= headGeo(kind, d));
+  const fastMats = {};
+  for (const st of ['torque', 'size', 'none']) {
+    const m = new THREE.MeshStandardMaterial({color: '#9aa0a4', roughness: 0.4, metalness: 0.6, envMapIntensity: 0.6});
+    m.userData = {kind: 'fast', id: `fast:${st}`, baseOpacity: 1, baseTransparent: false, sys: 'fast', sheet: false, wall: false, status: st};
+    fastMats[st] = m;
+    allMats.push(m);
+  }
+  const capMat = mat('black', 'fast:cap');
+  capMat.userData.sys = 'fast';
+  const fastGroups = []; // {spec, parent, kind, d, items: [{p, q}], mesh}
+  const up = new V3(0, 1, 0);
+  const fastAnchor = {};
+  const fasten = (id, parent, kind, d, pts, dir) => {
+    const spec = FASTENERS.find((f) => f.id === id);
+    const q = new THREE.Quaternion().setFromUnitVectors(up, new V3(...dir).normalize());
+    const items = pts.map((pt) => ({p: new V3(...pt), q, dir: new V3(...dir).normalize()}));
+    const g = {spec, parent, kind, d, items};
+    fastGroups.push(g);
+    if (!fastAnchor[id]) fastAnchor[id] = [parent, items[0].p.clone()];
+    return g;
+  };
+  const M12 = 0.012;
+  const M8 = 0.008;
+  const DU = 0.01; // size not given: drawn at 10 mm
+  // C07 busbar joint bolts: 2 x 2 on the front of the intermediate piece 450.6 of every phase, heads to the front
+  busPh.forEach((ph, i) => fasten('C07', ph, 'hex', M12, [[-0.015, 0.02], [0.015, 0.02], [-0.015, -0.02], [0.015, -0.02]].map(([dx, dy]) => [X[i] + dx, P.armUp[i] + dy, zB + 0.013]), [0, 0, 1]));
+  // C16 insulator screws: heads behind support plate 396
+  busPh.forEach((ph, i) => fasten('C16', ph, 'hex', DU, [[X[i], P.armUp[i], zS - 0.004]], [0, 0, -1]));
+  // C17 CT unit: 4 studs with nuts through support plate 220, two at the front, two at the rear traverse
+  fasten('C17', ctu, 'stud', DU, [[-0.33, zT + 0.13], [0.33, zT + 0.13], [-0.33, zT - 0.17], [0.33, zT - 0.17]].map(([x, z]) => [x, P.busFloor - 0.008, z]), [0, 1, 0]);
+  // C13 cable lug bolts M12 8.8 on the connectors 280
+  fasten('C13', ctu, 'hex', M12, X.map((x) => [x, P.lugY, zLug - 0.007]), [0, 0, -1]);
+  // C14 the three earthing bolts low at the front of the cable compartment
+  fasten('C14', cub, 'stud', DU, X.map((x) => [x, 0.01, zp - 0.07]), [0, 1, 0]);
+  // C01 / C02 the partition screws from the fixing maps (fractions of width from the left seen from the front, of
+  // height down from the top edge); caps (12 kV, fig 21) on the screws along the 374 / 150 joint
+  const onPlate = (x0, x1, top, bottom) => ([xf, yf]) => [lerp(x0, x1, xf), lerp(top, bottom, yf), zp + 0.009];
+  const map374 = [[0.15, 0.02], [0.33, 0.02], [0.65, 0.02], [0.89, 0.02], [0.035, 0.1], [0.035, 0.39], [0.035, 0.67], [0.97, 0.085], [0.97, 0.375], [0.97, 0.66]];
+  const cap374 = [[0.035, 0.96], [0.97, 0.95], [0.34, 0.96], [0.66, 0.96]];
+  const map150 = [[0.035, 0.29], [0.035, 0.555], [0.035, 0.81], [0.97, 0.28], [0.97, 0.555], [0.97, 0.81], [0.035, 0.97], [0.35, 0.97], [0.66, 0.97], [0.98, 0.97]];
+  const cap150 = [[0.04, 0.03], [0.35, 0.03], [0.66, 0.03], [0.98, 0.03]];
+  const pU = onPlate(-W / 2 + 0.004, W / 2 - 0.004, P.partTop, P.joint);
+  const pL = onPlate(-W / 2 + 0.004, W / 2 - 0.004, P.joint, P.partBot);
+  fasten('C01', partU, 'hex', DU, map374.map(pU), [0, 0, 1]);
+  fasten('C01', partU, 'cap', DU, cap374.map(pU), [0, 0, 1]);
+  fasten('C02', partL, 'hex', DU, map150.map(pL), [0, 0, 1]);
+  fasten('C02', partL, 'cap', DU, cap150.map(pL), [0, 0, 1]);
+  // barrier box screws: two round heads beside every box (photo 201/5 fig 8)
+  fasten('B360', partU, 'round', DU, X.flatMap((x, i) => [[x - 0.076, P.armUp[i], zp + 0.009], [x + 0.076, P.armUp[i], zp + 0.009]]), [0, 0, 1]);
+  fasten('B316', partL, 'round', DU, X.flatMap((x) => [[x - 0.076, P.armLow, zp + 0.009], [x + 0.076, P.armLow, zp + 0.009]]), [0, 0, 1]);
+  // T01 front plate screw at R1, left of the shaft scale; T02 the rivets of lock angle 399 to its right (positions EST)
+  fasten('T01', front, 'round', DU, [[-0.25, P.shaft51Y + 0.1, zf + 0.001]], [0, 0, 1]);
+  fasten('T02', front, 'round', 0.0048, [[0.03, P.shaft51Y + 0.1], [0.09, P.shaft51Y + 0.1], [0.15, P.shaft51Y + 0.16]].map(([x, y]) => [x, y, zf + 0.001]), [0, 0, 1]);
+  // T08 the mechanism cover's four corner screws, T06 the interlock adjusting screw inside the housing (EST)
+  fasten('T08', cover, 'round', 0.006, [[-0.2, 0.25], [0.2, 0.25], [-0.2, 0.67], [0.2, 0.67]].map(([x, y]) => [x, y, zm1 + 0.006]), [0, 0, 1]);
+  fasten('T06', mech, 'hex', 0.006, [[-0.17, 0.5, 0.46]], [0, 0, 1]);
+  // T03 two hex screws per arm into the pole support, T04 the four spring screws on each arm
+  armsU.forEach((g, i) => {
+    fasten('T03', g, 'hex', DU, [[X[i], yUp + 0.025], [X[i], yUp + 0.065]].map(([x, y]) => [x, y, zPole - 0.052]), [0, 0, -1]);
+    fasten('T04', g, 'hex', 0.006, [[-0.012, 0.13], [0.012, 0.13], [-0.012, 0.09], [0.012, 0.09]].map(([dx, z]) => [X[i] + dx, P.armUp[i] + 0.008, z]), [0, 1, 0]);
+  });
+  armsL.forEach((g, i) => {
+    fasten('T03', g, 'hex', DU, [[X[i], yLo + 0.02], [X[i], yLo + 0.055]].map(([x, y]) => [x, y, zPole - 0.052]), [0, 0, -1]);
+    fasten('T04', g, 'hex', 0.006, [[-0.012, 0.13], [0.012, 0.13], [-0.012, 0.09], [0.012, 0.09]].map(([dx, z]) => [X[i] + dx, P.armLow + 0.008, z]), [0, 1, 0]);
+  });
+  // C10 earth bar strap at the left end, C06 the LV joint screws on the left wall (positions EST), C12 the panel
+  // earthing bolt, C04 the side drillings S / K / D (201/6 fig 10: depth from the rear, height from the floor)
+  fasten('C10', cub, 'hex', M12, [[-W / 2 + 0.025, H + 0.012, zf - 0.03], [-W / 2 + 0.06, H + 0.012, zf - 0.03]], [0, 1, 0]);
+  fasten('C06', cub, 'hex', M8, [0.15, 0.31, 0.47].flatMap((y) => [zf - 0.1, zf - P.lvD + 0.1].map((z) => [-W / 2 - 0.002, H + y, z])), [-1, 0, 0]);
+  fasten('C12', cub, 'hex', M12, [[-W / 2 + 0.016, 0.06, zf + 0.001]], [0, 0, 1]);
+  const SIDE = [[0.01, 0.98], [0.02, 0.73], [0.02, 0.48], [0.03, 0.26], [0.03, 0.04], [0.09, 0.45], [0.26, 0.45], [0.44, 0.44], [0.48, 0.99], [0.5, 0.94], [0.48, 0.51], [0.48, 0.08], [0.47, 0.02], ...[1.0, 0.94, 0.84, 0.74, 0.61, 0.48, 0.36, 0.24, 0.13, 0.01].map((h) => [0.98, h])];
+  fasten('C04', cub, 'round', DU, SIDE.map(([d, h]) => [-W / 2 - 0.002, clamp(h, 0.015, 0.985) * H, -D / 2 + d * D]), [-1, 0, 0]);
+  for (const g of fastGroups) {
+    const geo = geoFor(g.kind, g.d);
+    const m = new THREE.InstancedMesh(geo, g.kind === 'cap' ? capMat : fastMats[fastStatus(g.spec)], g.items.length);
+    m.castShadow = true;
+    m.frustumCulled = false;
+    g.parent.add(m);
+    g.mesh = m;
+    for (const [id, [obj, pt]] of Object.entries(fastAnchor)) anchors[`f:${id}`] = [obj, pt];
+  }
+  const fm = new THREE.Matrix4();
+  const fs = new V3();
+  const fp = new V3();
+  let fastKey = '';
+  const updateFasteners = (st, show) => {
+    const key = `${show}|${FASTENERS.map((f) => (st.fast[f.id] || 0).toFixed(3)).join(',')}`;
+    if (key === fastKey) return;
+    fastKey = key;
+    for (const g of fastGroups) {
+      const k = st.fast[g.spec.id] || 0;
+      // back out along the axis (about 3 thread diameters), then gone
+      const out = ease(Math.min(1, k / 0.8)) * Math.max(0.02, g.d * 3);
+      const sc = (k >= 0.999 ? 0 : 1) * (show ? 1.7 : 1);
+      g.items.forEach((it, i) => {
+        fp.copy(it.p).addScaledVector(it.dir, out);
+        fs.set(sc, sc, sc);
+        fm.compose(fp, it.q, fs);
+        g.mesh.setMatrixAt(i, fm);
+      });
+      g.mesh.instanceMatrix.needsUpdate = true;
+    }
+    for (const [st2, m] of Object.entries(fastMats)) {
+      m.color.set(show ? FAST_COL[st2] : '#9aa0a4');
+      m.emissive.set(show ? FAST_COL[st2] : '#000000');
+      m.emissiveIntensity = show ? 0.45 : 0;
+    }
+  };
+
   // ------------------------------------------------------------ removal paths
   // keyframes [x, y, z, rx, ry, rz] in the parent's frame, walked by the removal channel 0..1
   const pathAt = (keys, k) => {
@@ -758,7 +927,7 @@ export function buildPanel() {
     ct: [Z, [0, 0, 1.15, 0, 0, 0], [0.85, 0, 1.15, 0, 0, 0], [0.85, -0.17, 0.7, 0, 0, 0]],
   };
   const PIV = {
-    front: new V3(0, 0.75, zf),
+    front: new V3(0, 0.735, zf),
     cover: new V3(0, 0.46, zm1),
     pole: X.map((x) => new V3(x, 0.74, 0.3)),
     partL: new V3(0, 0.43, zp - 0.06),
@@ -767,14 +936,14 @@ export function buildPanel() {
 
   // ------------------------------------------------------------ display state: isolate, x-ray, section, accent
   const section = new THREE.Plane(new V3(1, 0, 0), 0.03); // keeps x > -0.03: the left half comes off, cutting L2
-  let disp = {iso: null, xray: 0, walls: false, section: false};
+  let disp = {iso: null, xray: 0, walls: false, section: false, screws: false};
   const applyDisplay = () => {
     for (const m of allMats) {
       const u = m.userData;
       let o = u.baseOpacity;
       if (disp.xray > 0 && u.sheet) o = Math.min(o, 1 - 0.86 * disp.xray);
       if (disp.walls && u.wall) o = Math.min(o, 0.12);
-      if (disp.iso && u.sys !== disp.iso) o = Math.min(o, 0.07);
+      if (disp.iso && u.sys !== disp.iso && !(disp.screws && u.sys === 'fast')) o = Math.min(o, 0.07);
       const tr = o < 0.999 || u.baseTransparent;
       if (m.transparent !== tr) {
         m.transparent = tr;
@@ -792,7 +961,7 @@ export function buildPanel() {
   applyDisplay();
   const setDisplay = (d) => {
     const next = {...disp, ...d};
-    if (next.iso === disp.iso && Math.abs(next.xray - disp.xray) < 1e-3 && next.section === disp.section && next.walls === disp.walls) return;
+    if (next.iso === disp.iso && Math.abs(next.xray - disp.xray) < 1e-3 && next.section === disp.section && next.walls === disp.walls && next.screws === disp.screws) return;
     disp = next;
     applyDisplay();
   };
@@ -815,15 +984,17 @@ export function buildPanel() {
   let lastCnt = -1;
   const tmp = new V3();
   const update = (s) => {
+    updateFasteners(s, disp.screws);
     // the truck: travel along z; the wheeling device lifts its front onto the swivel roller
     truck.position.z = s.travel;
     wheel.visible = s.wheel > 0.01;
     wheel.position.z = (1 - clamp(s.wheel * 2, 0, 1)) * 0.25;
     tilt.rotation.x = -0.035 * clamp((s.wheel - 0.5) * 2, 0, 1);
     // locking shaft 51: lever angle out / in / interlocked = -55 / 0 / +55 deg; the crank follows
-    const ang = (s.shaft - 1) * 0.96;
-    shaft51.rotation.z = -ang;
-    lever.rotation.z = -ang;
+    const [aOut, aIn, aLock] = P.leverDeg.map((d) => (d * PI) / 180);
+    const ang = s.shaft < 1 ? lerp(aOut, aIn, s.shaft) : lerp(aIn, aLock, s.shaft - 1);
+    shaft51.rotation.z = ang;
+    lever.rotation.z = ang;
     lever.visible = s.lever > 0.01;
     lever.position.z = zf + 0.01 + (1 - s.lever) * 0.3;
     // front plate: lifted by the shaft, then taken off along its path
@@ -882,7 +1053,7 @@ export function buildPanel() {
     const e = s.earth;
     shaft248.rotation.z = -e * PI / 2;
     handle75.visible = STEPS[s.step].id === 'earth' && s.k > 0.04 && s.k < 0.96;
-    knives.forEach((k) => (k.rotation.x = lerp(1.42, -0.607, ease(e))));
+    knives.forEach((k) => (k.rotation.x = lerp(2.52, 0.918, ease(e))));
     // the LV plug: in its socket, or on the truck; its hose runs from the truck's cross girder
     const onTruck = new V3(0.12, 1.355, zfp - 0.24 + s.travel);
     const inSock = socket.clone().add(new V3(0, 0, 0.075));
@@ -938,5 +1109,5 @@ export function buildPanel() {
     obj.updateWorldMatrix(true, false);
     return wp.copy(local).applyMatrix4(obj.matrixWorld);
   };
-  return {root, P, groups, update, setDisplay, setFocus, anchorAt, anchors, section, allMats};
+  return {root, P, groups, update, setDisplay, setFocus, anchorAt, anchors, section, allMats, fastGroups};
 }

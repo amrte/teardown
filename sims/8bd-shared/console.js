@@ -2,13 +2,14 @@
 // procedure checklist, the interlocks (what the operator may do now and which condition of section 111 forbids the
 // rest), views, display, isolate, the panel data and the procedure transport at the bottom. update(s) redraws every
 // live part from the frame's state; nothing here computes a number of its own.
-import {ACTIONS, MANUAL, N, P, STEPS} from './kin.js';
+import {ACTIONS, FASTENERS, MANUAL, N, P, STEPS, fastStatus} from './kin.js';
 
 export const C = {ink: '#23272a', mute: '#8a9094', faint: '#d3d8d8', line: '#e2e6e5', panel: 'rgba(250,251,250,.95)', or: '#e3562a', green: '#2f9a64', red: '#c8402f', blue: '#3c79a8'};
 export const VIEWS = ['hero', 'front', 'side', 'iso', 'open', 'top', 'truck', 'mech', 'rear'];
-export const VIEW_LABEL = {hero: 'HERO', front: 'FRONT', side: 'SIDE CUT', iso: 'AISLE', open: 'OPEN ¾', top: 'ROOF', truck: 'TRUCK', mech: 'MECHANISM', rear: 'REAR', shaft: 'SHAFT 51', plug: 'LV PLUG', boxes: 'PARTITIONS', earth: 'EARTHING', poles: 'POLES'};
-export const DISPLAY = ['labels', 'section', 'xray', 'follow', 'orbit'];
-export const DISPLAY_LABEL = {labels: 'LABELS', section: 'SECTION', xray: 'X-RAY', follow: 'FOLLOW STEP', orbit: 'ORBIT'};
+export const VIEW_LABEL = {hero: 'HERO', front: 'FRONT', side: 'SIDE CUT', iso: 'AISLE', open: 'OPEN ¾', top: 'ROOF', truck: 'TRUCK', mech: 'MECHANISM', rear: 'REAR', shaft: 'SHAFT 51', plug: 'LV PLUG', boxes: 'PARTITIONS', earth: 'EARTHING', poles: 'POLES', busbars: 'BUSBARS'};
+export const DISPLAY = ['labels', 'section', 'xray', 'follow', 'orbit', 'screws'];
+export const DISPLAY_LABEL = {labels: 'LABELS', section: 'SECTION', xray: 'X-RAY', follow: 'FOLLOW STEP', orbit: 'ORBIT', screws: 'FASTENERS'};
+const FC = {torque: '#2f9a64', size: '#d9952b', none: '#4d79a8'};
 export const ISO = ['all', 'truck', 'poles', 'mech', 'bus', 'cable', 'locks', 'lv'];
 export const ISO_LABEL = {all: 'ALL', truck: 'TRUCK', poles: 'POLES + ARMS', mech: 'MECHANISM', bus: 'BUSBARS', cable: 'CABLE COMP.', locks: 'INTERLOCKS', lv: 'LV COMP.'};
 
@@ -101,6 +102,17 @@ export function createConsole(app) {
     return n;
   });
 
+  // ------------------------------------------------------------ 03b fasteners (shown over the checklist in fastener mode)
+  const fastPanel = add(`<div style="position:absolute;left:28px;top:570px;width:282px;height:290px;display:none"></div>`);
+  fastPanel.innerHTML = `<div class="cp" style="left:0;top:0;width:282px;height:290px"></div>
+    <div class="ph" style="left:14px;top:13px"><i></i>FASTENERS</div><div class="pn" data-n style="right:14px;top:15px"></div>
+    <div style="position:absolute;left:14px;top:36px;display:flex;gap:10px" class="sm">${Object.entries({torque: 'TORQUE GIVEN', size: 'SIZE ONLY', none: 'NOT GIVEN'}).map(([k, n]) => `<span style="display:flex;align-items:center;gap:4px"><i style="display:block;width:7px;height:7px;border-radius:50%;background:${FC[k]}"></i>${n}</span>`).join('')}</div>
+    <div data-rows style="position:absolute;left:14px;top:56px;width:254px"></div>
+    <div style="position:absolute;left:14px;top:244px;width:254px;font-size:8.6px;line-height:11.5px;color:${C.mute}">The manual's only tightening torque is 70 Nm, for the M12 busbar and earth-bar joints (201/11). Values it does not give are left blank, not filled in.</div>`;
+  const fastRows = fastPanel.querySelector('[data-rows]');
+  const fastNum = fastPanel.querySelector('[data-n]');
+  let fastKey = '';
+
   // ------------------------------------------------------------ 04 interlocks
   panel(1290, 106, 282, 346, 'INTERLOCKS · 111', '04');
   add(`<div class="sm" style="position:absolute;left:1304px;top:136px">THE OPERATOR MAY NOW</div>`);
@@ -185,19 +197,19 @@ export function createConsole(app) {
     rect(zx(P.zf - P.lvD), yy(P.body + P.lvH), P.lvD * k, P.lvH * ky, '#eceeec');
     const pL = 1 - s.partL;
     const pU = 1 - s.partU;
-    if (pU > 0.5) ln(zx(P.zp), yy(P.busFloor), zx(P.zp), yy(1.44), C.ink, 2);
-    if (pL > 0.5) ln(zx(P.zp), yy(0.08), zx(P.zp), yy(P.busFloor), C.ink, 2);
+    if (pU > 0.5) ln(zx(P.zp), yy(P.joint), zx(P.zp), yy(P.partTop), C.ink, 2);
+    if (pL > 0.5) ln(zx(P.zp), yy(P.partBot), zx(P.zp), yy(P.joint), C.ink, 2);
     ln(zx(-P.depth / 2), yy(P.busFloor), zx(P.zp), yy(P.busFloor), C.mute, 1);
     // busbars (three heights), fixed contacts
-    if (s.bus < 0.5) P.armUp.forEach((y) => h += `<circle cx="${zx(-0.33).toFixed(1)}" cy="${yy(y).toFixed(1)}" r="2.6" fill="${C.or}"/>`);
+    if (s.bus < 0.5) P.armUp.forEach((y) => h += `<circle cx="${zx(P.zf - P.zBus).toFixed(1)}" cy="${yy(y).toFixed(1)}" r="2.6" fill="${C.or}"/>`);
     if (s.ct < 0.5) {
-      rect(zx(-0.38), yy(0.625), 0.16 * k, 0.25 * ky, '#d9cfc7', C.mute);
+      rect(zx(P.zf - P.zCT - P.ctD / 2), yy(P.ctTopY), P.ctD * k, P.ctH * ky, '#d9cfc7', C.mute);
       // earthing switch knife
       const a = s.earth;
-      const ex = zx(-0.14);
-      const ey = yy(0.2);
-      const ang = -0.607 + (1 - a) * (1.42 + 0.607);
-      h += `<line x1="${ex}" y1="${ey}" x2="${(ex + Math.sin(ang) * 0.29 * k).toFixed(1)}" y2="${(ey - Math.cos(ang) * 0.29 * ky).toFixed(1)}" stroke="${a > 0.5 ? C.or : C.ink}" stroke-width="2"/>`;
+      const ex = zx(P.zf - P.esZ);
+      const ey = yy(P.esY);
+      const ang = 2.52 + (0.918 - 2.52) * a;
+      h += `<line x1="${ex}" y1="${ey}" x2="${(ex + Math.sin(ang) * P.knife * k).toFixed(1)}" y2="${(ey - Math.cos(ang) * P.knife * ky).toFixed(1)}" stroke="${a > 0.5 ? C.or : C.ink}" stroke-width="2"/>`;
     }
     // shutters at the partition mouths
     const shut = (y, open) => ln(zx(P.zp) - 2, yy(y) - 5, zx(P.zp) - 2 - open * 5, yy(y) - 5 + (1 - open) * 10, open > 0.5 ? C.green : C.or, 1.6);
@@ -206,7 +218,7 @@ export function createConsole(app) {
     // the truck: front plate, frame, poles, arms
     const tz = s.travel;
     const fr = s.front;
-    if (fr < 0.5) rect(zx(P.zf + tz) - 3, yy(1.48 + s.lift), 3, 1.47 * ky, C.or, C.or);
+    if (fr < 0.5) rect(zx(P.zf + tz) - 3, yy(P.body - 0.015 + s.lift), 3, (P.body - 0.03) * ky, C.or, C.or);
     rect(zx(0 + tz), yy(0.1), (P.zf - 0.035) * k, 0.012 * k, '#999', '#999');
     for (const z of [0.06, P.zf - 0.115]) h += `<circle cx="${zx(z + tz).toFixed(1)}" cy="${(Y0 - 3).toFixed(1)}" r="3" fill="none" stroke="${C.ink}"/>`;
     if (s.poles < 0.5) rect(zx(0.19 + tz), yy(0.99), 0.09 * k, 0.41 * ky, s.brkOn ? C.or : '#fff', C.ink);
@@ -253,6 +265,28 @@ export function createConsole(app) {
       stepEls.forEach((n, i) => {
         n.className = 'stp' + (i < s.step || (i === s.step && s.k >= 0.999) ? ' done' : '') + (i === s.step ? ' cur' : '');
       });
+      // fasteners of this step
+      fastPanel.style.display = view.display.screws ? 'block' : 'none';
+      for (const n of stepEls) n.style.visibility = view.display.screws ? 'hidden' : 'visible';
+      if (view.display.screws) {
+        const here = FASTENERS.filter((f) => f.step === STEPS[s.step].id);
+        const k = `${s.step}`;
+        if (k !== fastKey) {
+          fastKey = k;
+          fastNum.textContent = `STEP ${String(s.step + 1).padStart(2, '0')}`;
+          const nextI = STEPS.findIndex((st, i) => i > s.step && FASTENERS.some((f) => f.step === st.id));
+          fastRows.innerHTML = here.length
+            ? here
+                .slice(0, 6)
+                .map((f) => {
+                  const stt = fastStatus(f);
+                  const tq = f.torque ? `${f.torque} Nm` : 'NOT GIVEN';
+                  return `<div style="display:flex;gap:7px;margin-bottom:5px;align-items:flex-start"><i style="display:block;flex:none;width:7px;height:7px;margin-top:3px;border-radius:50%;background:${FC[stt]}"></i><div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:6px"><span style="font-size:9.8px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="mo" style="color:${C.or};font-size:8.6px">${f.id}</span> ${f.name}</span><span class="pill" style="background:${f.torque ? FC.torque : '#9aa1a5'}">${tq}</span></div><div class="mo" style="font-size:7.8px;line-height:10.5px;color:${C.mute};margin-top:1px">${f.size || 'size not given'}${f.cls ? ' · ' + f.cls : ''} · ${f.count} · ${f.ref}${f.note ? '<br>' + f.note : ''}</div></div></div>`;
+                })
+                .join('')
+            : `<div style="font-size:10px;line-height:14px;color:#454c50">No fasteners are undone in this step.${nextI >= 0 ? `<br><span class="sm" style="letter-spacing:1px">NEXT: STEP ${String(nextI + 1).padStart(2, '0')} · ${STEPS[nextI].t.toUpperCase()}</span>` : ''}</div>`;
+        }
+      }
       // interlocks: actions, then the conditions in force at this position
       for (const {k, p} of acts) {
         const a = s.il.act[k];
@@ -300,7 +334,8 @@ export function createConsole(app) {
         const right = lx > ax;
         const ex = right ? lx - 6 : lx + c.w + 6;
         lh += `<polyline points="${ax.toFixed(1)},${ay.toFixed(1)} ${ex.toFixed(1)},${(ly + 6).toFixed(1)}" fill="none" stroke="${C.or}" stroke-width=".9" opacity="${c.o.toFixed(2)}"/><circle cx="${ax.toFixed(1)}" cy="${ay.toFixed(1)}" r="2.4" fill="${C.or}" opacity="${c.o.toFixed(2)}"/>`;
-        ch += `<div class="call" style="left:${lx.toFixed(1)}px;top:${(ly - 1).toFixed(1)}px;opacity:${c.o.toFixed(2)}"><b><i></i><em>${c.id}</em> ${c.name}</b><span>${c.sub}</span></div>`;
+        const col = c.fast ? FC[fastStatus(FASTENERS.find((f) => f.id === c.id))] : C.or;
+        ch += `<div class="call" style="left:${lx.toFixed(1)}px;top:${(ly - 1).toFixed(1)}px;opacity:${c.o.toFixed(2)}"><b><i style="background:${col}"></i><em>${c.id}</em> ${c.name}</b><span>${c.sub}</span></div>`;
       }
       callSvg.innerHTML = lh;
       callG.innerHTML = ch;

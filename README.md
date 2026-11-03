@@ -53,9 +53,15 @@ in 23 steps: trip, rack to Test, unplug, discharge the springs, withdraw, verify
 apart the truck (front plate, mechanism, contact arms, poles) and the cubicle (partitions, relief flaps, busbars,
 CT unit, LV compartment). Every step cites its manual page. The interlock panel works out the manual's
 interlock conditions (section 111) from the current pose, so it always shows what the operator may do now and which
-condition blocks the rest. Measured values (panel 750 × 1259 mm, wheel track 581 mm, contact-arm heights
-1246 / 1046 / 906 / 665 mm, M12 at 70 Nm) come from the manual. Values the manual leaves to other documents (body height,
-test travel) are marked `EST` in `sims/8bd-shared/kin.js`.
+condition blocks the rest. Printed values (panel 750 × 1259 mm, wheel track 581 mm, contact-arm heights 1246 / 1046 / 906 / 665 mm, cable lug
+point 415 mm) come from the manual; the rest of the cubicle is measured off its to-scale side sections (about ±20 mm).
+Values the manual does not give at all are marked `EST` in `sims/8bd-shared/kin.js`.
+
+**FASTENERS** (key `F`) shows every screw, bolt, nut, stud, rivet and insulation cap the manual shows or names, at its
+position (the partition fixing maps, the side drillings, the photos) and colour-coded by what the manual gives:
+green for a stated torque, amber for a stated size only, blue for neither. Each one backs out when its step undoes it.
+The manual states one torque, 70 Nm for the M12 busbar and earth-bar joints; no other value is filled in.
+The full plan with the fastener table is in `sims/8bd-shared/TEARDOWN.md`.
 
 ## What is inside
 
