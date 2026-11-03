@@ -1148,6 +1148,28 @@ export function buildTrafo(sp) {
     const lifted = ['tank', 'plate', 'drain', 'earth', 'roller', 'pan', 'oil'].includes(k) ? 0 : lift.position.y;
     return [a[0] * 0.001, (a[1] + lifted) * 0.001, a[2] * 0.001];
   };
+  // the overall size as built (mm), for the dimension lines: the highest point of tank, lid and fittings
+  let topY = 0;
+  let topX = 0;
+  let topZ = 0;
+  {
+    const bb = new THREE.Box3();
+    const skip = new Set([dipstick, G.leads, G.active, G.caps, G.arrows, G.flow, G.oil, FX].filter(Boolean));
+    const walk = (o) => {
+      if (skip.has(o)) return;
+      if (o.isMesh) {
+        o.updateWorldMatrix(true, false);
+        bb.setFromObject(o);
+        if (bb.max.y > topY) {
+          topY = bb.max.y;
+          topX = (bb.min.x + bb.max.x) / 2;
+          topZ = (bb.min.z + bb.max.z) / 2;
+        }
+      }
+      for (const c of o.children) walk(c);
+    };
+    for (const g of [G.base, G.tank, G.lid]) walk(g);
+  }
   // modelled in mm; one world unit is a metre
   root.scale.setScalar(0.001);
   const dispose = () => {
@@ -1156,6 +1178,6 @@ export function buildTrafo(sp) {
   };
   return {
     root, update, setCut, CLIP, anchor, anchors, dispose, M,
-    dims: {yT, yLid, yTop, h: (yLid + 300) * 0.001, l: T.l * 0.001, b: T.b * 0.001, coilY: coilY * 0.001, coreTop: (limbY1 + yokeH) * 0.001, coreMid: ((limbY0 + limbY1) / 2) * 0.001},
+    dims: {yT, yLid, yTop, topY, topX, topZ, wheelZ, gauge: ch.gauge, Lmm: T.l, Bmm: T.b, h: (yLid + 300) * 0.001, l: T.l * 0.001, b: T.b * 0.001, coilY: coilY * 0.001, coreTop: (limbY1 + yokeH) * 0.001, coreMid: ((limbY0 + limbY1) / 2) * 0.001},
   };
 }

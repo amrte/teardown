@@ -81,6 +81,17 @@ hermetic, single HV, plug-in bushings (p.18–19); full protection only hermetic
   Se, roller forces FD/FA/FQ and the flowchart verdict (p.32–34), parallel load sharing (p.49).
 - **Service**: the 5 safety rules, commissioning, maintenance plan, Buchholz test contacts (p.43), transport.
 
+## Dimensions and torques
+
+OVERLAYS → DIMS draws dimension lines for L, B, H and the track gauge on the model; they follow the camera. On a
+datasheet unit the labels are the sheet's values; otherwise they are the model's measured size, marked est.
+
+SERVICE → INSTALLATION TORQUES lists what the manual gives: porcelain bushing studs by current class (Tab. 2, p.47:
+250 A M12 15 Nm · 630 A M20 30 Nm · 1000 A M30×2 75 Nm · 2000 A M42×3 95 Nm · 3150 A M48×3 110 Nm, torque wrench) with
+this unit's LV and HV classes lit, the earth terminals M12 75 Nm (p.46), lid bolts never to be loosened (p.45) and the
+5-yearly bolt check (p.57). R&S gives no torque for roller brackets, wheel locks, connection flags or HV plug-in
+connectors, and the tab says so.
+
 ## Monitoring and protection (PROTECT tab)
 
 Every device shows its reading and contact states live; devices the configuration does not carry are listed as

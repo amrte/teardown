@@ -64,7 +64,7 @@ export const cutAt = (t) => lastOf('cut', t, 'solid');
 export const viewAt = (t) => lastOf('view', t, 'all');
 export const tabAt = (t) => lastOf('tab', t, 'operate');
 export const overlaysAt = (t) => {
-  const on = {parts: 0, flux: 1, current: 1, flow: 1, untank: 0};
+  const on = {parts: 0, flux: 1, current: 1, flow: 1, untank: 0, dims: 0};
   for (const e of SCRIPT) if (e.overlay && e.t <= t) on[e.overlay] = 1;
   return on;
 };
@@ -336,6 +336,29 @@ export function makeConsoleFrame(ui, st) {
     if (op.tab === 'operate' && (op.cam === 'lid' || op.cam === 'hero') && op.explode < 0.05)
       callouts.push({name: '', sub: '', at: P(tr.anchor('thermo')), label: [1318 - 0.01, 110], w: 0, o: 0.7 * lead});
     const parts = PARTS.map((p) => P(tr.anchor(p.key)));
+    // dimension lines (mm): the datasheet's values on a real unit, the model's measured size otherwise (est.)
+    const dimLines = [];
+    if (op.overlays.dims && op.explode < 0.05) {
+      const D = tr.dims;
+      const ds = sp.ds?.dims;
+      const L = D.Lmm;
+      const Bw = D.Bmm;
+      const H = ds ? ds.h : D.topY;
+      const m = (x, y, z) => P([x * 0.001, y * 0.001, z * 0.001]);
+      const dim = (p1, p2, off, label, est) => {
+        const q1 = p1.map((v, i) => v + off[i]);
+        const q2 = p2.map((v, i) => v + off[i]);
+        const over = off.map((v) => Math.sign(v) * 40);
+        dimLines.push({e1: m(...p1), e2: m(...p2), a: m(...q1), b: m(...q2), label, est, x1: m(...q1.map((v, i) => v + over[i]))});
+      };
+      dim([-L / 2, 0, Bw / 2], [L / 2, 0, Bw / 2], [0, 0, 460], `L ${ds ? ds.l : Math.round(L)} mm`, !ds);
+      dim([L / 2, 0, -Bw / 2], [L / 2, 0, Bw / 2], [320, 0, 0], `B ${ds ? ds.b : Math.round(Bw)} mm`, !ds);
+      dim([-L / 2, 0, Bw / 2], [-L / 2, H, Bw / 2], [-320, 0, 0], `H ${Math.round(H)} mm`, !ds);
+      // the top: a short extension from the highest part over to the height line
+      dimLines.push({e1: m(D.topX, H, D.topZ), e2: m(-L / 2 - 320, H, Bw / 2), a: m(-L / 2 - 320, H, Bw / 2), b: m(-L / 2 - 320, H, Bw / 2), label: '', est: false, top: true});
+      const g = D.gauge;
+      dim([-g / 2, 0, D.wheelZ], [g / 2, 0, D.wheelZ], [0, 0, Bw / 2 - D.wheelZ + 150], `GAUGE ${g} mm`, !ds);
+    }
     const partsO = op.overlays.parts ? ss(0, 0.5, op.partsSince ?? 9) : 0;
     let card = null;
     if (op.partSel) {
@@ -388,6 +411,7 @@ export function makeConsoleFrame(ui, st) {
       energised: op.energised !== false,
       card,
       callouts,
+      dimLines,
       parts,
       partsO,
       partSel: op.partSel,

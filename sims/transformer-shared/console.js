@@ -6,6 +6,7 @@
 // numbers (Fig. 6) as callouts into the model. update(s) redraws every live part from the frame's state.
 import {coordination, FAULTS, fitted, FUSE_CURVE, fuseTime, pt100Err, pt100R, SET, statusOf} from './protect.js';
 import {ecotapVariant, FLAGS, MR, ORDER_CODES, PT100_COLOURS, RS_DOCS, THERMOMETER_RS} from './trafo.js';
+import {TORQUES as TORQUES_TABLE} from './trafo.js';
 import {BUCHHOLZ, ECOTAP, efficiency, FLUIDS, LIMITS, MAINT, OPTION_KEYS, OPTIONS, optText, PARTS, SAFETY_RULES, UT1_STANDARD} from './trafo.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', blue: '#3d8fe0', grey: '#5d6670', orange: '#f05a23', hot: '#ff7a2e', cool: '#5aa7e6', est: '#a3a7ad'};
@@ -13,7 +14,7 @@ export const PH_COL = ['#3d8fe0', '#16181b', '#9aa0a7'];
 export const CAMS = ['hero', 'front', 'side', 'top', 'lid', 'inside'];
 export const CUTS = ['solid', 'glass', 'section'];
 export const VIEWS = ['all', 'active', 'core', 'windings', 'oil', 'fittings'];
-export const OVERLAYS = ['parts', 'flux', 'current', 'flow', 'untank'];
+export const OVERLAYS = ['parts', 'flux', 'current', 'flow', 'untank', 'dims'];
 export const TABS = ['operate', 'configure', 'datasheet', 'protect', 'wiring', 'service'];
 const TAB_LABEL = {operate: 'OPERATE', configure: 'CONFIG', datasheet: 'DATA', protect: 'PROTECT', wiring: 'WIRING', service: 'SERVICE'};
 export const LOAD_MAX = 1.5;
@@ -223,6 +224,7 @@ export function createConsole(app) {
   };
 
   // ------------------------------------------------------------ callouts, part numbers, the pointer
+  const dimSvg = add(`<svg style="position:absolute;inset:0;overflow:visible" width="1600" height="900"></svg>`);
   const callSvg = add(`<svg style="position:absolute;inset:0;overflow:visible" width="1600" height="900"></svg>`);
   const callG = add(`<div style="position:absolute;inset:0"></div>`);
   const numG = add(`<div style="position:absolute;inset:0"></div>`);
@@ -463,7 +465,7 @@ export function createConsole(app) {
       if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
       for (const f of FAULTS) setBtn('f_' + f.key, !!s.faults?.[f.key], true);
       if (s.tab === 'wiring') once('wr', `${cfg.design}|${cfg.monitor}|${cfg.hv}|${cfg.rating}|${s.tap}|${s.avr?.state}|${(s.buchholz ?? 0).toFixed(2)}|${JSON.stringify(s.prot?.contacts ?? {})}|${Math.round(s.thermal.top)}`, () => (wrBox.innerHTML = wiringHTML(s)));
-      if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${(s.buchholz ?? 0).toFixed(2)}|${s.prot?.contacts?.buchAlarm}|${s.prot?.contacts?.buchTrip}`, () => (svBox.innerHTML = serviceHTML(s)));
+      if (s.tab === 'service') once('sv', `${cfg.design}|${cfg.monitor}|${cfg.rating}|${cfg.hv}|${cfg.hvBushing}|${cfg.preset}|${(s.buchholz ?? 0).toFixed(2)}|${s.prot?.contacts?.buchAlarm}|${s.prot?.contacts?.buchTrip}`, () => (svBox.innerHTML = serviceHTML(s)));
 
       // ---------------------------------------------------------------- toggles
       for (const k of CAMS) setBtn(k, s.cam === k);
@@ -519,6 +521,7 @@ export function createConsole(app) {
         if (c.name) ch += `<div class="call" style="left:${lx.toFixed(1)}px;top:${(ly - 10).toFixed(1)}px;opacity:${c.o.toFixed(2)}"><b>${c.name}</b><span>${c.sub}</span></div>`;
       }
       callSvg.innerHTML = lh;
+      dimSvg.innerHTML = dimsSVG(s.dimLines);
       callG.innerHTML = ch;
       PARTS.forEach((p, i) => {
         const at = s.parts?.[i];
@@ -598,13 +601,10 @@ function serviceHTML(s) {
     h('5 SAFETY RULES · p.8'),
     P(SAFETY_RULES.map((r, i) => `${i + 1}. ${r}`).join(' · ')),
     h('COMMISSIONING · p.41–51'),
-    P(herm ? 'Hermetic: under pressure — open nothing, keep the lacquered bolts.' : 'Remove the transport plugs from vent and filler.'),
-    P('Oil level at the filler or conservator: the mark is 20 °C, 1 cm ≈ 10 K.'),
-    P('Drain tight · earthing resistance · phase sequence · all terminal bolts.'),
-    P('Tap changer de-energised to position 1–5; level I/II on switchable units.'),
-    P('Contact thermometer alarm 85 °C, trip 95 °C · then energise HV (no-load), check phases, connect LV.'),
-    h('PARALLEL · p.47'),
-    P('Same vector-group index, ratio within 0.5 %, uk within ±10 %, power ratio ≤ 3:1, same phase sequence.'),
+    P(`${herm ? 'Hermetic: under pressure — open nothing, keep the lacquered bolts.' : 'Remove the transport plugs from vent and filler.'} Oil level at the 20 °C mark (1 cm ≈ 10 K). Drain tight, earthing resistance, phase sequence, all terminal bolts.`),
+    P('Tap changer de-energised to the wanted position (level I/II on switchable units); thermometer contacts alarm 85 / trip 95 °C; energise HV at no load, check phases, connect LV.'),
+    h('INSTALLATION TORQUES · p.46–47'),
+    torquesHTML(s),
     h('MAINTENANCE · p.57–58'),
     ...MAINT.map((m) => P(`<b>${m.every}</b> <span class="m">· ${m.who}</span> — ${m.what}`)),
   ].join('');
@@ -890,5 +890,59 @@ function presetSheetHTML(s) {
     `<div style="white-space:normal;color:${q.lift || q.reinforced ? C.red : C.ink};font-weight:600;display:block">${q.verdict}</div>`,
     h('ACCESSORIES'),
     `<div style="white-space:normal;display:block;line-height:12px;font-size:8.4px"><b>Fitted:</b> ${d.fitted.join(' · ')}. <span style="color:${C.mute}">Standard: ${d.standard.join(', ')}.</span></div>`,
+  ].join('');
+}
+
+// dimension lines: two extension lines from the object, the dimension line with arrows between, the value on a card
+function dimsSVG(list) {
+  if (!list?.length) return '';
+  let h = '';
+  for (const d of list) {
+    const {e1, e2, a, b, label, est} = d;
+    if (!e1 || !e2 || !a || !b) continue;
+    if (d.top) {
+      h += `<line x1="${e1[0].toFixed(1)}" y1="${e1[1].toFixed(1)}" x2="${e2[0].toFixed(1)}" y2="${e2[1].toFixed(1)}" stroke="${C.mute}" stroke-width=".7" stroke-dasharray="3 2"/>`;
+      continue;
+    }
+    const col = '#16181b';
+    h += `<line x1="${e1[0].toFixed(1)}" y1="${e1[1].toFixed(1)}" x2="${a[0].toFixed(1)}" y2="${a[1].toFixed(1)}" stroke="${C.mute}" stroke-width=".7"/>`;
+    h += `<line x1="${e2[0].toFixed(1)}" y1="${e2[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${C.mute}" stroke-width=".7"/>`;
+    h += `<line x1="${a[0].toFixed(1)}" y1="${a[1].toFixed(1)}" x2="${b[0].toFixed(1)}" y2="${b[1].toFixed(1)}" stroke="${col}" stroke-width="1"/>`;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const arrow = (p, sgn) => {
+      const bx = p[0] + sgn * ux * 7;
+      const by = p[1] + sgn * uy * 7;
+      return `<path d="M${p[0].toFixed(1)} ${p[1].toFixed(1)} L${(bx - uy * 2.6).toFixed(1)} ${(by + ux * 2.6).toFixed(1)} L${(bx + uy * 2.6).toFixed(1)} ${(by - ux * 2.6).toFixed(1)} Z" fill="${col}"/>`;
+    };
+    h += arrow(a, 1) + arrow(b, -1);
+    const mx = (a[0] + b[0]) / 2;
+    const my = (a[1] + b[1]) / 2;
+    const w = label.length * 5.6 + (est ? 22 : 10);
+    h += `<rect x="${(mx - w / 2).toFixed(1)}" y="${(my - 8).toFixed(1)}" width="${w.toFixed(1)}" height="15" rx="2" fill="#fff" stroke="${C.line}"/>`;
+    h += `<text x="${mx.toFixed(1)}" y="${(my + 3).toFixed(1)}" font-size="9.4" font-weight="700" text-anchor="middle" fill="${col}" font-family="Inter,sans-serif">${label}${est ? ' <tspan font-size="7" font-weight="500" fill="#a3a7ad">est.</tspan>' : ''}</text>`;
+  }
+  return h;
+}
+
+// the tightening torques the manual gives: earth terminals (p.46) and the porcelain bushing studs (Tab. 2, p.47), this
+// unit's classes lit; what the R&S documents leave open is said
+function torquesHTML(s) {
+  const sp = s.sp;
+  const hvClass = sp.cfg.hvBushing === 'porcelain' ? TORQUES_TABLE.find((t) => t.a >= sp.i1) : null;
+  const cell = (t) => {
+    const lv = t.a === sp.lvBushA;
+    const hv = hvClass && t.a === hvClass.a;
+    const on = lv || hv;
+    return `<td style="padding:1px 3px;border:1px solid ${C.line};text-align:center;${on ? `background:${C.red};color:#fff;font-weight:700` : ''}">${t.a} A<br>${t.thread}<br><b>${t.nm} Nm</b>${on ? `<br>${[hv ? 'HV' : '', lv ? 'LV' : ''].filter(Boolean).join('+')}` : ''}</td>`;
+  };
+  return [
+    `<table style="border-collapse:collapse;width:100%;font-size:8px;line-height:10px;margin:2px 0 3px"><tr>${TORQUES_TABLE.map(cell).join('')}</tr></table>`,
+    `<p>Porcelain bushing studs, torque wrench (Tab. 2). This unit: LV ${Math.round(sp.i2)} A → ${sp.lvBushA} A class${hvClass ? `, HV ${sp.i1.toFixed(1)} A → ${hvClass.a} A class <span class="m">(assumes the bushing is that class)</span>` : ' · HV plug-in: <span class="m">no torque in the R&S documents, use the connector maker\'s</span>'}.</p>`,
+    `<p>Earth terminals M12 on lid and tank: <b>${LIMITS.earthTorque} Nm</b> (p.46). Lid bolts: never loosen (p.45). Re-check the bushing bolts every 5 years (p.57).</p>`,
+    `<p class="m">No torques given for roller brackets (M16 / M24), wheel locks (M12), flags DIN 42530 or HV plug-in connectors.</p>`,
   ].join('');
 }
