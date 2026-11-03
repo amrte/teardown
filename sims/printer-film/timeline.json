@@ -1,0 +1,1 @@
+{"duration": 30, "beats": {"open": 0.9, "host": 2.6, "screen": 5.2, "menu": 6.8, "thermal": 9.6, "head": 12.9, "follow": 15.7, "parser": 16.6, "planner": 17.4, "stepper": 18.9, "driver": 20.0, "mech": 21.0, "hotend": 23.9, "board": 26.6, "hero": 29.2}}

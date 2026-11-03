@@ -17,7 +17,7 @@ cd "$SKILL_DIR" && npm install && npx playwright install chromium
 
 The pages need nothing else. The video needs `ffmpeg` on PATH and the score needs Python 3 (standard library only). Set `FFMPEG`, `PYTHON` or `CHROMIUM` to point at other binaries.
 
-## The 3 examples
+## The 4 examples
 
 Build one, open the HTML, press buttons. Copy the closest one when you start a new machine.
 
@@ -26,12 +26,13 @@ Build one, open the HTML, press buttons. Copy the closest one when you start a n
 | `v8-*` | A cross-plane V8 with glass liners: the charge burns inside the cylinder you track, valves lift on their cams, 8 pistons move from the exact slider-crank. | Crank angle. Firing order 1-8-4-3-6-5-7-2, a chamber pressure model for the indicator diagram. | Cutaway modes (glass, section, solid), the firing order as a cylinder picker, live charts synced to the crank. |
 | `cessna-*` | The Cessna 337 main landing gear folding into the airframe on takeoff and dropping on landing. | Stroke 0..1: a 201 mm rack turns a 32-tooth pinion (module 4 mm) through exactly 180°. | One degree of freedom posing a whole mechanism, flight phases as functions of time, a runway that rolls under the model. |
 | `strandbeest-*` | Theo Jansen's Strandbeest, 20 legs on one crankshaft, walking broadside over sand. | Wind. The crank speed is integrated from it; every joint follows by circle intersection from Jansen's 11 link lengths. | An exact linkage solver in 67 lines, instanced tubes, foot traces, a contact chart of all 20 feet. |
+| `printer-*` | A Cartesian FDM 3D printer, hardware **and** firmware: G-code → parser → planner → stepper ISR → driver → motor → belt → nozzle, plus the PID loop, the screen and the serial host. | A G-code program and the machine clock. A Marlin-style firmware model runs once at load; every pose, trace, register and screen pixel is a lookup by machine time. | Software as panels linked to the parts they drive, follow-a-line and follow-a-part, a logic analyzer with a time lens, faults that re-run the model, a 1-bit LCD drawn in a bitmap font. `check.mjs` tests the model; `REFERENCES.md` sources every number. |
 
 Each comes in 3 folders: `<name>-shared/` holds the machine, `<name>-film/` the recorded tour, `<name>-live/` the page you drive.
 
 ```
 node "$SKILL_DIR/sims/build.mjs" v8-live          # → teardown-out/dist/v8-live.html, offline, ~800 KB
-node "$SKILL_DIR/sims/build.mjs"                  # all 6
+node "$SKILL_DIR/sims/build.mjs"                  # all 8
 ```
 
 ## How a machine is built
@@ -47,6 +48,10 @@ One folder per machine, split by job. The examples follow this exactly:
 | `film.js` | A `SCRIPT` of operator moves (views, isolate, cutaway, throttle) and `render(t)` as a pure function of time. |
 | `live.js` | The same machine in real time: buttons, sliders, orbit, zoom, keys. With no input it plays `film.js`'s script as an auto tour with a cursor; any click, drag, wheel or key hands control over, 25 s of quiet hands it back. |
 | `score.py` | The sound on the film's timeline. |
+
+### When the machine runs on software
+
+The one input becomes **a program plus the clock**. Run the program through a deterministic model of the firmware once at load (`printer-shared/model.js`): parser, planner, step generation, control loops, UI and host traffic, all written to arrays by time. `render(t)` maps film time to machine time (`makeClock` in `printer-shared/film.js`, keyframes pinned to the model's own events) and only reads. Give each software layer a panel and make opening it light the hardware it drives; that link is the teardown. Label both time scales whenever playback is not 1×. Say on the page that it shows a model of the firmware, not the firmware image. The brief in `docs/tasks/hardware-software-teardown.md` walks through it.
 
 For a machine outside `SKILL_DIR`, make a folder with a `main.js` and import the kit by name: `import {runSim} from 'teardown-kit/runtime.js'`. Build it with `node "$SKILL_DIR/sims/build.mjs" ./my-machine`.
 
