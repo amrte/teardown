@@ -258,8 +258,12 @@ export function resolve(cfg0, changed = null) {
     }
   };
   // a datasheet preset: choosing it sets every option; changing one of them leaves the datasheet for a generic model
+  // site and add-on accessories the sheet does not fix keep the datasheet; everything else leaves it
+  const KEEP = ['pan', 'seismic', 'parallel', 'zone', 'lvFlags'];
   if (changed === 'preset' && c.preset !== 'none') Object.assign(c, PRESETS[c.preset].cfg);
-  else if (c.preset && c.preset !== 'none' && changed && changed !== 'preset' && c[changed] !== PRESETS[c.preset].cfg[changed]) {
+  else if (c.preset && c.preset !== 'none' && KEEP.includes(changed) && c[changed] !== PRESETS[c.preset].cfg[changed]) {
+    notes.push({k: changed, why: `Added to the ${PRESETS[c.preset].code.split('-S-')[0]}: datasheet values kept`, p: 10});
+  } else if (c.preset && c.preset !== 'none' && changed && changed !== 'preset' && c[changed] !== PRESETS[c.preset].cfg[changed]) {
     notes.push({k: 'preset', why: `Changed from the ${PRESETS[c.preset].code.split('-S-')[0]} datasheet: generic model from here`, p: 10});
     c.preset = 'none';
     delete c.devices;

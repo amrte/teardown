@@ -13,8 +13,9 @@ node sims/build.mjs transformer-film     # the scripted tour as a pure function 
 ## Real units (datasheet presets)
 
 `presets.js` holds units from their R&S datasheets. Choosing one (CONFIG → DATASHEET, or its own page) sets every
-option and replaces the model's estimates with the sheet's values; changing any option afterwards leaves the
-datasheet for the generic model, with a note.
+option and replaces the model's estimates with the sheet's values. Accessories the sheet does not fix (oil pan,
+mounting, LV flags, parallel, site) can be added and keep the datasheet, tagged ADDED; changing any other option
+leaves the datasheet for the generic model, with a note. Clicking DATASHEET brings the unit back.
 
 ```
 node sims/build.mjs transformer-dso1600-live   # opens on DSO-1600/10.0/0.40-S-NS-NU-CU-CU

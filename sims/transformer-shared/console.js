@@ -456,10 +456,13 @@ export function createConsole(app) {
         for (const k of OPTION_KEYS) {
           const on = s.cfgHi === k;
           rows[k].style.background = on ? 'rgba(214,24,43,.08)' : '';
-          rows[k].querySelector('.v').innerHTML = `${optText(k, cfg[k], cfg)}<i>${sp.ds && k !== 'preset' && k !== 'zone' ? 'DS' : 'p.' + OPTIONS[k].p}</i>`;
+          rows[k].querySelector('.v').innerHTML = `${optText(k, cfg[k], cfg)}<i>${sp.ds && k !== 'preset' ? (cfg[k] !== sp.preset.cfg[k] ? '<span style="color:#d6182b">ADDED</span>' : 'DS') : 'p.' + OPTIONS[k].p}</i>`;
           rows[k].querySelector('.v').style.color = on ? C.red : C.ink;
         }
-        cfgNotes.innerHTML = (s.notes?.length ? s.notes.map((n) => `<p style="color:${C.red}">⚑ ${n.why} <span class="m">(p.${n.p})</span></p>`).join('') : '') + `<p class="m">Rules applied from the manual: natural ester only hermetic (p.17); ECOTAP 400–1000 kVA, hermetic, single HV (p.18–19); full protection hermetic, Buchholz with conservator (p.38–39); quake anchoring only with the integrated pan (p.35).</p>`;
+        const presetHint = cfg.preset !== 'none'
+          ? `<p style="color:${C.ink}"><b>${sp.preset.code.split('-S-')[0]}</b>: oil pan, mounting, LV flags, parallel and site keep the datasheet; any other change gives the generic model. Click DATASHEET to come back.</p>`
+          : `<p class="m">Generic model. Click DATASHEET to load a real unit.</p>`;
+        cfgNotes.innerHTML = presetHint + (s.notes?.length ? s.notes.map((n) => `<p style="color:${C.red}">⚑ ${n.why} <span class="m">(p.${n.p})</span></p>`).join('') : '') + `<p class="m">Rules applied from the manual: natural ester only hermetic (p.17); ECOTAP 400–1000 kVA, single HV, hermetic standard (p.18–19); full protection hermetic, Buchholz with conservator (p.38–39); quake anchoring only with the integrated pan (p.35).</p>`;
       }
       if (s.tab === 'datasheet') once('ds', JSON.stringify(cfg) + s.seismicKey, () => (dsBox.innerHTML = sp.ds ? presetSheetHTML(s) : datasheetHTML(s)));
       if (s.tab === 'protect' && s.prot) renderProtect(s, {prChip, devBox, fuseSvg, fuseLeg, fuseChk, logBox});
@@ -889,6 +892,12 @@ function presetSheetHTML(s) {
     row(`Seismic ${s.seismicKey}: Se · FD / FA / FQ`, B(`${q.Se.toFixed(1)} · ${q.FD.toFixed(1)} / ${q.FA.toFixed(1)} / ${q.FQ.toFixed(1)} kN`)),
     `<div style="white-space:normal;color:${q.lift || q.reinforced ? C.red : C.ink};font-weight:600;display:block">${q.verdict}</div>`,
     h('ACCESSORIES'),
+    (() => {
+      const c = sp.cfg;
+      const P0 = sp.preset.cfg;
+      const add = ['pan', 'seismic', 'lvFlags', 'parallel', 'zone'].filter((k) => c[k] !== P0[k]).map((k) => `${OPTIONS[k].label.toLowerCase()}: ${optText(k, c[k], c).toLowerCase()}`);
+      return add.length ? `<div style="white-space:normal;display:block;color:${C.red};font-size:8.4px;line-height:12px"><b>Added in CONFIG (not on the sheet):</b> ${add.join(' · ')}</div>` : '';
+    })(),
     `<div style="white-space:normal;display:block;line-height:12px;font-size:8.4px"><b>Fitted:</b> ${d.fitted.join(' · ')}. <span style="color:${C.mute}">Standard: ${d.standard.join(', ')}.</span></div>`,
   ].join('');
 }
