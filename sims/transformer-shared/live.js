@@ -3,8 +3,9 @@
 // flux, current, flow, untanking); sliders for the load, the ambient, the power factor, the grid voltage and the
 // time-lapse; the tap changer strip; the four tabs on the right, the CONFIGURE one rebuilding the unit option by option
 // under the manual's rules; click a part number for its page in the manual; drag to orbit, scroll to zoom, H hides the
-// overlay. The thermal state integrates in real time (IEC 60076-7), so the drag pointer keeps the maximum. Left alone it
-// plays the film's script as an auto tour; a click, drag, wheel or key hands control over, 25 s of quiet hands it back.
+// overlay. The thermal state integrates in real time (IEC 60076-7), so the drag pointer keeps the maximum. On load it
+// plays the film's script as an auto tour; a click, drag, wheel or key hands control over and the camera then holds
+// still where it is put; the tour only comes back from the RESUME TOUR chip.
 import {warmComposer} from '../kit/warm.js';
 import {CAMS, createConsole, CUTS, LOAD_MAX, OVERLAYS, TA_RANGE, TABS, VIEWS} from './console.js';
 import {
@@ -17,7 +18,6 @@ import {defaultConfig, LIMITS, oltcPosition, OPTION_KEYS, OPTIONS, PARTS, resolv
 
 const W = 1600;
 const H = 900;
-const IDLE = 25;
 const D2R = Math.PI / 180;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const wrap = (d) => ((((d + 180) % 360) + 360) % 360) - 180;
@@ -477,9 +477,9 @@ export function runLive() {
         history.push({ago, top: r.top, hot: r.hot, ta: 20});
       }
     } else {
-      if (T - lastInput > IDLE) startTour();
+      // the visitor's camera holds still: no sway, no return to the tour until RESUME TOUR is clicked
       since = T - viewAt0;
-      tgt = VIEW_FN[view](since, z);
+      tgt = VIEW_FN[view](0, z);
       tgt.az += off.az;
       tgt.el = clamp(tgt.el + off.el, -10, 85);
       tgt.d *= off.k;

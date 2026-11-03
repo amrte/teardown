@@ -450,7 +450,9 @@ export function buildTrafo(sp) {
 
   // the thermometer with its drag pointer [38]
   const th = new THREE.Group();
-  th.position.set(li / 2 - 170, yTop, -bi * 0.02);
+  // with the ECOTAP drive on the lid centre line the thermometer moves to the front corner, clear of it
+  const thZ = sp.oltc ? bi * 0.3 : -bi * 0.02;
+  th.position.set(li / 2 - 170, yTop, thZ);
   G.lid.add(th);
   add(th, new THREE.CylinderGeometry(22, 26, 30, 6), M.brass).position.y = 15;
   add(th, new THREE.CylinderGeometry(10, 10, 110, 12), M.brass).position.y = 85;
@@ -495,9 +497,9 @@ export function buildTrafo(sp) {
   add(drag, new THREE.BoxGeometry(4, dialR - 18, 1.5), M.red, false).position.y = (dialR - 18) / 2 - 2;
   add(dial, new THREE.CylinderGeometry(6, 6, 4, 12), M.black, false).rotation.x = Math.PI / 2;
   dial.children[dial.children.length - 1].position.z = 22;
-  anchors.thermo = [li / 2 - 170, yTop + 190, -bi * 0.02 + 40];
+  anchors.thermo = [li / 2 - 170, yTop + 190, thZ + 40];
   if (cfg.monitor === 'pt100') {
-    const pt = at(new THREE.Group(), li / 2 - 170, yTop, -bi * 0.22);
+    const pt = at(new THREE.Group(), li / 2 - 170, yTop, -bi * 0.36);
     G.lid.add(pt);
     add(pt, new THREE.CylinderGeometry(10, 10, 60, 12), M.steel).position.y = 30;
     add(pt, new THREE.CylinderGeometry(36, 36, 50, 20), M.alu).position.y = 85;
@@ -564,7 +566,7 @@ export function buildTrafo(sp) {
       add(dgptGas, new THREE.CylinderGeometry(17, 17, 1, 16), keep(new THREE.MeshBasicMaterial({color: '#ffffff', transparent: true, opacity: 0.85})), false).position.y = -0.5;
       anchors.dgpt = [ventX + 30, yTop + 260, -bi * 0.2];
       // the pressure relief valve beside it (hermetic option, p.12)
-      const prv = at(new THREE.Group(), -li * 0.12, yTop, -bi * 0.36);
+      const prv = at(new THREE.Group(), -li * 0.12, yTop, -bi * 0.4);
       G.lid.add(prv);
       add(prv, new THREE.CylinderGeometry(34, 38, 40, 20), M.steel).position.y = 20;
       prvCap = new THREE.Group();
@@ -572,7 +574,7 @@ export function buildTrafo(sp) {
       prv.add(prvCap);
       add(prvCap, new THREE.CylinderGeometry(44, 44, 18, 24), M.red).position.y = 9;
       add(prvCap, new THREE.CylinderGeometry(8, 8, 30, 10), M.steel).position.y = 30;
-      anchors.prv = [-li * 0.12, yTop + 80, -bi * 0.36];
+      anchors.prv = [-li * 0.12, yTop + 80, -bi * 0.4];
     }
   } else {
     // conservator: a drum across the lid on two brackets, a pipe with the Buchholz relay, a silica-gel breather
