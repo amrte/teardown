@@ -5,6 +5,7 @@
 // configuration on every change (refresh) and the live parts (callouts, slider, hover card) move every frame (frame).
 import {FIELD_TYPES, MODULE_KINDS, SYSTEM} from './catalog.js';
 import {STAGES} from './registry.js';
+import {activeSettings, com35Data, isWL, orderNo, tripTime, WL_STEPS} from './wl.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', copper: '#c8784a', blue: '#3d8fe0'};
 export const VIEWS = ['iso', 'front', 'rear', 'side', 'top', 'field'];
@@ -61,6 +62,9 @@ const CSS = `
 .lb{font-size:8.2px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:${C.mute};margin:8px 0 4px;white-space:nowrap}
 .srow{display:grid;grid-template-columns:52px minmax(0,1fr);gap:4px;align-items:start;margin-top:3px}
 .srow .lb{margin:0;padding-top:4px;font-size:7.8px;letter-spacing:1px}
+.stp{display:grid;grid-template-columns:22px minmax(0,1fr) 22px;gap:3px;align-items:center}
+.stp span{font-size:9.6px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wl{background:#fff;border:1px solid ${C.line};padding:7px 8px;margin-top:8px}
 .sys .tb,.vw .tb{height:17px;font-size:8px}
 .stg{position:absolute;top:0;font-size:7.6px;font-weight:600;color:${C.mute};transform:translateX(-50%)}
 .stg.on{color:${C.red}}
@@ -319,14 +323,20 @@ export function createConsole(app, act) {
           ${T.locked ? '' : `<div class="lb" style="color:${C.ink};font-weight:700">ADD MODULE</div>${pal}`}
           ${modTools}`;
       }
+      const wl = f.type === 'acb' && isWL(f);
       const opts = (T.options || [])
-        .map(
-          (o) =>
-            `<div class="lb">${o.label}</div>${gr(Math.max(3, o.values.length), o.values
-              .map((v) => `<div class="tb ${String(f.opts?.[o.key] ?? o.values[0]) === String(v) ? 'on' : ''}" data-a="opt:${o.key}:${v}">${v}</div>`)
-              .join(''))}`,
-        )
-        .join('');
+        .filter((o) => !o.when || o.when(f))
+        .map((o) => {
+          const vals = typeof o.values === 'function' ? o.values(f) : o.values;
+          const row = `<div class="lb">${o.label}</div>${gr(o.cols || Math.max(3, vals.length), vals
+            .map((v) => `<div class="tb ${String(f.opts?.[o.key] ?? vals[0]) === String(v) ? 'on' : ''}" data-a="opt:${o.key}:${v}">${o.fmt ? o.fmt(v) : v}</div>`)
+            .join(''))}`;
+          // the 3WL's own teardown sits right under the breaker choice
+          return o.key === 'acb' && wl
+            ? row + `<div class="lb">3WL TEARDOWN · ${orderNo(f.opts)}</div>${gr(3, [['0', 'assembled'], ['0.5', 'half'], ['1', 'exploded']].map(([v, t]) => `<div class="tb ${Math.abs((S.wlx || 0) - Number(v)) < 0.01 ? 'on' : ''}" data-a="wlx:${v}">${t}</div>`).join(''))}`
+            : row;
+        })
+        .join('') + (wl ? wlPanel(S, f) : '');
       insp.innerHTML = `
         <div class="hd"><span class="cp">FIELD ${f.tag}</span><span class="cp mu">${T.short}</span></div>
         ${gr(4, `<div class="tb ${S.sel === 0 ? 'dis' : ''}" data-a="fieldmove:-1">◀ move</div><div class="tb ${S.sel === cfg.fields.length - 1 ? 'dis' : ''}" data-a="fieldmove:1">move ▶</div><div class="tb" data-a="fielddup">duplicate</div><div class="tb acc ${cfg.fields.length < 2 ? 'dis' : ''}" data-a="fielddel">remove</div>`)}
@@ -383,6 +393,49 @@ export function createConsole(app, act) {
     }
     tdBtns.scope.textContent = S.scope === 'all' ? 'lineup' : 'one field';
     tdBtns.scope.classList.toggle('on', S.scope === 'all');
+  };
+
+  // ------------------------------------------------------------ the 3WL panel: trip unit settings, curve, COM35 data
+  const wlPanel = (S, f) => {
+    const o = f.opts;
+    const P = activeSettings(o);
+    const In = o.wlIn;
+    const val = {wlIr: `${o.wlIr} × In · ${Math.round(P.Ir * In)} A`, wltR: `${P.tR} s`, wlIsd: `${o.wlIsd} × IR · ${Math.round(P.Isd * P.Ir * In)} A`, wltsd: `${P.tsd} s`, wlIi: `${o.wlIi} × In · ${Math.round(P.Ii * In)} A`, wlIg: `${o.wlIg} × In · ${Math.round(o.wlIg * In)} A`, wltg: `${o.wltg} s`};
+    const steps = Object.entries(WL_STEPS)
+      .filter(([, s]) => !s.gf || o.wlGf === 'yes')
+      .map(([k, s]) => `<div class="srow"><span class="lb">${s.label} · DP ${s.dp}</span><div class="stp"><div class="tb" data-a="optstep:${k}:-1">−</div><span>${val[k]}</span><div class="tb" data-a="optstep:${k}:1">+</div></div></div>`)
+      .join('');
+    // the time-current curve, log-log: I / In from 0.5 to 50, t from 0.01 to 10 000 s
+    const Wd = 238;
+    const Hd = 120;
+    const X = (k) => ((Math.log10(k) - Math.log10(0.5)) / (Math.log10(50) - Math.log10(0.5))) * Wd;
+    const Y = (t) => Hd - ((Math.log10(t) + 2) / 6) * Hd;
+    let d = '';
+    for (let i = 0; i <= 160; i++) {
+      const k = 0.5 * 100 ** (i / 160);
+      const t = tripTime(o, k * In);
+      if (!isFinite(t)) continue;
+      d += `${d ? 'L' : 'M'}${X(k).toFixed(1)} ${Math.max(0, Math.min(Hd, Y(Math.min(1e4, t)))).toFixed(1)} `;
+    }
+    let grid = '';
+    for (const k of [1, 10]) grid += `<line x1="${X(k)}" x2="${X(k)}" y1="0" y2="${Hd}" stroke="${C.line}"/><text x="${X(k) + 2}" y="${Hd - 3}" font-size="7" fill="${C.mute}">${k}× In</text>`;
+    for (const t of [0.1, 1, 10, 100, 1000]) grid += `<line x1="0" x2="${Wd}" y1="${Y(t)}" y2="${Y(t)}" stroke="${C.line}"/><text x="2" y="${Y(t) - 2}" font-size="7" fill="${C.mute}">${t} s</text>`;
+    const pos = f.modules.find((m) => m.kind === 'acb')?.pos || 'connected';
+    const C35 = o.wlCom === 'COM35' ? com35Data(o, pos) : null;
+    const ledc = (s) => (s === 'green' ? '#2fbf55' : s === 'flash' ? '#9fe3b0' : '#c9ccd0');
+    return `<div class="wl">
+      <div class="hd" style="margin-bottom:4px"><span class="cp">TRIP UNIT · SET ${P.set}</span><span class="cp mu">${o.wlGf === 'yes' ? 'LSIG' : 'LSI'} · TYPICAL</span></div>
+      ${steps}
+      <svg width="${Wd}" height="${Hd}" style="display:block;margin-top:6px;background:#fafafa;border:1px solid ${C.line}">${grid}<path d="${d}" fill="none" stroke="${C.red}" stroke-width="1.6"/></svg>
+      <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Data points from the COM35 manual (Tab. 4-10). Setting ranges and the curve are typical values, not from the manual.</div>
+    </div>
+    <div class="wl">
+      <div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">${C35 ? (C35.live ? 'BREAKER DATA LIVE' : 'NO BREAKER DATA') : 'NOT FITTED'}</span></div>
+      ${C35
+        ? `<div style="display:flex;gap:10px;margin:2px 0 5px">${['PN', 'TCP', 'CUB'].map((k) => `<span style="font-size:8.6px;font-weight:700;display:flex;align-items:center;gap:4px"><i style="width:8px;height:8px;border-radius:50%;background:${ledc(C35.leds[k])};display:block"></i>${k}</span>`).join('')}</div>
+          ${C35.rows.map(([k, v]) => `<div class="kv" style="font-size:9.4px;line-height:14px"><span class="mu">${k}</span><b>${v}</b></div>`).join('')}`
+        : '<div class="mu" style="font-size:9.4px">No COM35 at X7: the breaker has no PROFINET / Modbus TCP connection. X7 is a plain terminal block.</div>'}
+    </div>`;
   };
 
   // ------------------------------------------------------------ the hovered/pinned part card

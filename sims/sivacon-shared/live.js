@@ -12,6 +12,7 @@ import {layout} from './layout.js';
 import {NSTAGE} from './registry.js';
 import {createStage} from './stage.js';
 import {TOUR, TOUR_LEN} from './tour.js';
+import {WL_STEPS} from './wl.js';
 
 const W = 1600;
 const H = 900;
@@ -71,6 +72,7 @@ export function runLive() {
     layers: {enclosure: 'solid', doors: true, busbar: true, units: true, hardware: true, labels: true},
     doors: 0,
     doorsT: 0,
+    wlx: 0,
   };
   let R = layout(S.cfg);
   let board = null;
@@ -157,6 +159,7 @@ export function runLive() {
       case 'field':
         S.sel = Number(arg);
         S.mod = -1;
+        S.wlx = 0;
         if (S.view === 'field') S.viewAt = T;
         ui.refresh(S, R);
         break;
@@ -218,6 +221,7 @@ export function runLive() {
         break;
       case 'opt':
         f.opts = {...(f.opts || {}), [a0]: isNaN(Number(a1)) ? a1 : Number(a1)};
+        if (a0 === 'acb') S.wlx = 0;
         if (FIELD_TYPES[f.type].fixedModules) f.modules = defaultModules(f.type, f.width, cfg, f.opts);
         rb = true;
         break;
@@ -233,6 +237,24 @@ export function runLive() {
         S.mod = -1;
         rb = true;
         break;
+      case 'wlx': {
+        // the 3WL's own exploded view: the breaker is drawn out of its guide frame first
+        S.wlx = Number(arg);
+        if (S.wlx > 0) for (const m of f.modules) if (m.kind === 'acb' && f.opts.wlMount !== 'fixed') m.pos = 'removed';
+        if (S.view !== 'field' && S.wlx > 0) {
+          S.view = 'field';
+          S.viewAt = T;
+        }
+        ui.refresh(S, R);
+        break;
+      }
+      case 'optstep': {
+        const st = WL_STEPS[a0];
+        const i = st.steps.indexOf(f.opts[a0]);
+        f.opts[a0] = st.steps[Math.max(0, Math.min(st.steps.length - 1, i + Number(a1)))];
+        rb = true;
+        break;
+      }
       case 'mod':
         S.mod = S.mod === Number(arg) ? -1 : Number(arg);
         ui.refresh(S, R);
@@ -318,6 +340,7 @@ export function runLive() {
     S.mod = -1;
     S.x = S.xT = 0;
     S.scope = 'field';
+    S.wlx = 0;
     S.view = 'iso';
     S.viewAt = T;
     S.layers = {enclosure: 'solid', doors: true, busbar: true, units: true, hardware: true, labels: true};
@@ -370,7 +393,8 @@ export function runLive() {
     top: () => ({tx: R.length / 2000, ty: 1.2, tz: 0, az: 0.01, el: 84, d: Math.max(4.4, (R.length / 1000) * 1.7 + 2)}),
     field: () => {
       const fx = board?.fieldCentre(S.sel) ?? 0.5;
-      return {tx: fx - 0.15 * S.x, ty: 1.15 + 0.1 * S.x, tz: 0.25 + 0.3 * S.x, az: 28, el: 12 + 6 * S.x, d: 5.6 + 3.2 * S.x};
+      const k = S.wlx || 0;
+      return {tx: fx - 0.15 * S.x, ty: 1.15 + 0.1 * S.x, tz: 0.25 + 0.3 * S.x + 0.55 * k, az: 28 + 6 * k, el: 12 + 6 * S.x + 4 * k, d: (5.6 + 3.2 * S.x) * (1 - 0.18 * k)};
     },
   };
   const cam = {...VIEW.iso(), sx: 0, sy: 0};

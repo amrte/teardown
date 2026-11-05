@@ -2,12 +2,35 @@
 // which doors close it. The parts every field shares (frame, plinth, enclosure, main busbar, PE) come from
 // cabinet.js and are built by board.js before these run.
 import * as THREE from 'three';
-import {BREAKERS, DOOR_T, FEED_Y, HEAD, MODULE_KINDS, POST} from './catalog.js';
+import {breakerOf, DOOR_T, FEED_Y, HEAD, MODULE_KINDS, POST} from './catalog.js';
 import {bb, buildCableCompartment, buildDoor, bx, cy, label, mk, part} from './cabinet.js';
+import {breakerWL, com35Cables} from './breaker3wl.js';
+import {activeSettings} from './wl.js';
 import {breaker, capStage, converter, fixedModule, plugAdapter, strip4, strip63, unitWithdrawable} from './modules.js';
-import {bentBarGeo, faceTex, plateGeo} from './parts.js';
+import {bentBarGeo, faceTex, plateGeo, ringGeo} from './parts.js';
 
 // ------------------------------------------------------------ shared pieces
+// the DSP800 display in the auxiliary compartment door, reading the 3WL through the COM35 (COM35 p.83)
+const dspTex = (o) => {
+  const P = activeSettings(o);
+  return faceTex(192, 192, (c) => {
+    c.fillStyle = '#1f2327';
+    c.fillRect(0, 0, 192, 192);
+    c.fillStyle = '#dfe9ee';
+    c.fillRect(12, 14, 168, 120);
+    c.fillStyle = '#16303a';
+    c.font = '700 15px Inter, sans-serif';
+    c.fillText(`3WL · ${o.acb} · ${o.wlIn} A`, 20, 34);
+    c.font = '600 14px Inter, sans-serif';
+    ['L1', 'L2', 'L3'].forEach((p, i) => c.fillText(`I ${p}  ${Math.round(o.wlIn * (0.61 + i * 0.03))} A`, 20, 58 + i * 20));
+    c.fillText(`IR ${Math.round(P.Ir * o.wlIn)} A · set ${P.set}`, 20, 122);
+    c.fillStyle = '#c9cfd3';
+    for (let k = 0; k < 4; k++) c.fillRect(20 + k * 40, 150, 30, 22);
+    c.fillStyle = '#e8eef2';
+    c.font = '700 11px Inter, sans-serif';
+    c.fillText('DSP800', 20, 186);
+  });
+};
 // the plug-in bus duct texture: four contact openings (L1 L2 L3 N) every 50 mm segment
 let ductTex = null;
 const ductMat = (M) => {
@@ -334,7 +357,7 @@ export const BUILD = {
 
   acb(ctx, main) {
     const {f, yDt, yDb, M, hw, W, cfg} = ctx;
-    const br = BREAKERS[f.opts.acb];
+    const br = breakerOf(f);
     sepPlate(ctx);
     const out = [];
     const boxes = stack(f, yDt);
@@ -344,15 +367,16 @@ export const BUILD = {
       const h = b.y1 - b.y0;
       const loc = ctx.R.loc(ctx.i, j);
       if (m.kind === 'aux') {
+        const dsp = br.wl && f.opts.wlCom === 'COM35';
         const g = part(ctx, {name: `Auxiliary device carrier · ${loc}`, layer: 'unit', stage: 'units', module: j, at: [W / 2, b.y0 + h / 2, -60], dir: [0, 0.05, 1], dist: 700, lines: ['Hilfsgeräteträger', 'Meters, protection relays, terminals']});
         bx(g, W - 2 * POST - 20, h - 30, 3, M.zincPerf, 0, 0, -60, 10);
         bx(g, W - 2 * POST - 60, 35, 7.5, M.zinc, 0, -h / 2 + 60, -55);
         for (let k = 0; k < Math.floor((W - 160) / 18); k++) bx(g, 17, 80, 60, k % 5 === 4 ? M.devDark : M.devLight, -(W - 160) / 2 + k * 18, -h / 2 + 60, -25);
         buildDoor(ctx, {
           name: `Auxiliary compartment door ${loc}`, module: j, x: 0, y: b.y0, w: W, h, lock: 'quarter', dist: 1050,
-          cut: [[-W * 0.18, 30, 96, 96]], lines: ['Door with meter and indicator lamps', 'Form 3a / 4b: 3-part door'],
+          cut: [[-W * 0.18, 30, dsp ? 92 : 96, dsp ? 92 : 96]], lines: dsp ? ['Door with the DSP800 display (cut-out 92 × 92 mm)', 'Reads the 3WL over Modbus TCP from the COM35', 'DSP800 3VA9987-0TD10 · 24 V DC · 2.2 W (COM35 p.83)'] : ['Door with meter and indicator lamps', 'Form 3a / 4b: 3-part door'],
           extra: (dg) => {
-            const t = faceTex(128, 128, (c) => {
+            const t = dsp ? dspTex(f.opts) : faceTex(128, 128, (c) => {
               c.fillStyle = '#e3e4e2';
               c.fillRect(0, 0, 128, 128);
               c.fillStyle = '#2b2d31';
@@ -366,7 +390,7 @@ export const BUILD = {
               c.fillStyle = '#e3e4e2';
               for (let k = 0; k < 4; k++) c.fillRect(18 + k * 24, 92, 16, 12);
             });
-            const mm = new THREE.Mesh(new THREE.PlaneGeometry(92, 92), new THREE.MeshStandardMaterial({map: t, roughness: 0.5}));
+            const mm = new THREE.Mesh(new THREE.PlaneGeometry(dsp ? 96 : 92, dsp ? 96 : 92), new THREE.MeshStandardMaterial({map: t, roughness: 0.5}));
             mm.position.set(-W * 0.18, 30, DOOR_T / 2 - 4);
             mm.userData.keep = true;
             dg.add(mm);
@@ -374,13 +398,17 @@ export const BUILD = {
           },
         });
       } else if (m.kind === 'acb') {
-        const r = breaker(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out);
+        const r = br.wl ? breakerWL(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out, br) : breaker(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out);
+        if (br.wl && r.com) com35Cables(ctx, r);
         acbs.push({...r, b, j});
+        const cyc = r.yb + 8 + br.h / 2 - (b.y0 + h / 2);
         buildDoor(ctx, {
           name: `Breaker door ${loc}`, module: j, x: 0, y: b.y0, w: W, h, lock: 'handle', dist: 1100,
           open: () => (m.pos === 'removed' ? 1 : 0),
-          cut: [[0, r.yb + 8 + br.h / 2 - (b.y0 + h / 2), br.w + 10, br.h + 10]],
-          lines: ['Door with cut-out for the breaker front', 'Racking with the door closed', 'Door frame seal for IP54'],
+          cut: [[0, cyc, br.w + 10, br.h + 10]],
+          lines: ['Door with cut-out for the breaker front', 'Racking with the door closed', br.wl ? 'Door sealing frame around the cut-out' : 'Door frame seal for IP54'],
+          // the 3WL door sealing frame around the cut-out
+          extra: br.wl ? (dg) => mk(dg, ringGeo(br.w + 34, br.h + 34, 6, 12), M.devDark, 0, cyc, DOOR_T / 2 + 3) : null,
         });
       } else {
         // the louvred compartment: cable connection behind it
@@ -396,7 +424,7 @@ export const BUILD = {
       const g = part(ctx, {name: 'Connection bars, busbar side', layer: 'busbar', stage: 'devices', at: [0, 0, 0], dir: [0, 0.3, -1], dist: 420, lines: [`${main.packT > 30 ? '2 × 100 × 10' : '2 × 60 × 10'} Cu per phase`, 'From the guide frame to the main busbar', 'M12 · 70 Nm · DIN 6796']});
       order.forEach((n, p) => {
         const ph = main.phases.find((q) => q.n === n);
-        const px = cx + (p - 1) * B.w * 0.3;
+        const px = cx + (a.px ? a.px[p] : (p - 1) * B.w * 0.3);
         const yA = yb + B.h * 0.78;
         const zA = zTerm;
         if (ctx.rear) {
@@ -418,7 +446,7 @@ export const BUILD = {
       // customer side: lower terminals down to the cable connection bars in the foot of the field, with the CT set
       const cg = part(ctx, {name: 'Cable connection bars with CT set', layer: 'busbar', stage: 'devices', at: [0, 0, 0], dir: [0, -0.3, 1], dist: 460, lines: ['One CT set L1–L3 on the customer side', 'Studs for earthing & short-circuiting (M12 SW19 · 70 Nm)', 'Up to 12 × 240 mm² per phase (3WA12)']});
       order.forEach((n, p) => {
-        const px = cx + (p - 1) * B.w * 0.3;
+        const px = cx + (a.px ? a.px[p] : (p - 1) * B.w * 0.3);
         const yB = yb + B.h * 0.32;
         // down behind the breaker, forward under the guide frame, down the front of the connection compartment
         const zA = zTerm + 6;

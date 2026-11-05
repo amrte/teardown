@@ -50,6 +50,9 @@ export function createRegistry() {
       hinge: o.hinge || null,
       open: o.open || null,
       draw: o.draw || null,
+      // an exploded view of the device itself (the 3WL's own teardown): offset [x, y, z] mm and its start 0..0.5
+      fly: o.fly ? new THREE.Vector3(...o.fly) : null,
+      flyAt: o.flyAt ?? 0,
       openCur: 0,
       drawCur: 0,
       base: g.position.clone(),
@@ -79,6 +82,10 @@ export function createRegistry() {
         r.drawCur += (t - r.drawCur) * kz;
         if (Math.abs(t - r.drawCur) < 0.05) r.drawCur = t;
         r.g.position.z += r.drawCur;
+      }
+      if (r.fly && opts.fly) {
+        const k = smoother((opts.fly(r) - r.flyAt) / (1 - r.flyAt));
+        if (k > 0) r.g.position.addScaledVector(r.fly, k);
       }
       if (r.sub) continue;
       const k = scope(r.field);

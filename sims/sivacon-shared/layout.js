@@ -2,7 +2,7 @@
 // busbar fishplate joints fall), how much of each device compartment is used, the rated values the panels show, an
 // estimated weight and the configuration rules the documents state. One configuration in, one result out; the
 // geometry and every panel read from it, so nothing on screen can disagree (rule 2).
-import {BREAKERS, BUSBAR, FIELD_TYPES, MODULE_KINDS, SIDE_DESIGN, SIDE_T, TU_MAX, barsFor, devHeight, ROWS, HEAD} from './catalog.js';
+import {breakerOf, BUSBAR, FIELD_TYPES, MODULE_KINDS, SIDE_DESIGN, SIDE_T, TU_MAX, barsFor, devHeight, ROWS, HEAD} from './catalog.js';
 
 export function layout(cfg) {
   const side = cfg.designStrip ? SIDE_DESIGN : SIDE_T;
@@ -18,7 +18,7 @@ export function layout(cfg) {
   let cur = [];
   let len = 0;
   cfg.fields.forEach((f, i) => {
-    if (cur.length && (len + f.width > TU_MAX || f.opts?.acb === '3WA13')) {
+    if (cur.length && (len + f.width > TU_MAX || ['3WA13', '3WL13'].includes(f.opts?.acb))) {
       tu.push(cur);
       cur = [];
       len = 0;
@@ -51,11 +51,11 @@ export function layout(cfg) {
     kg += k0 * (f.width / w0) * Math.sqrt(cfg.depth / d0) * (cfg.height === 2000 ? 0.93 : 1);
     if (T.needsRear && cfg.busbar === 'top') warnings.push(`${f.tag}: 3NJ4 needs a rear main busbar`);
     if (f.type === 'acb') {
-      const br = BREAKERS[f.opts.acb];
-      if (f.width < br.minW) warnings.push(`${f.tag}: ${f.opts.acb} needs ≥ ${br.minW} mm`);
+      const br = breakerOf(f);
+      if (f.width < br.minW) warnings.push(`${f.tag}: ${f.opts.acb}${br.wl ? ` ${f.opts.wlPoles}p` : ''} needs ≥ ${br.minW} mm`);
       if (f.opts.n === 2 && cfg.busbar === 'top') warnings.push(`${f.tag}: 2 ACBs need a rear busbar`);
       if (f.opts.n === 2 && cfg.height !== 2200) warnings.push(`${f.tag}: 2 ACBs need frame 2200`);
-      if ((f.opts.acb === '3WA13') && cfg.height !== 2200) warnings.push(`${f.tag}: 3WA13 needs frame 2200`);
+      if (['3WA13', '3WL13'].includes(f.opts.acb) && cfg.height !== 2200) warnings.push(`${f.tag}: ${f.opts.acb} needs frame 2200`);
       if (br.In[br.In.length - 1] > cfg.In * 1.6 && f.opts.role === 'infeed') warnings.push(`${f.tag}: breaker exceeds busbar`);
       kg += br.kg * (f.opts.n || 1);
       loss += br.loss * 0.64 * (f.opts.n || 1);

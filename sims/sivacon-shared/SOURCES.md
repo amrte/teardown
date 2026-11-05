@@ -32,3 +32,30 @@ document gives are marked `[inferred]` in the code. They only shape the geometry
 Inferred values, because no document gives them: breaker outer dimensions, the contact travel per position
 (about 12 / 26 mm), frame profile section (40 mm), busbar compartment depth (200 mm at 600 mm depth, 400 mm at 800 mm),
 and the maximum transport-unit length (2400 mm).
+
+## SENTRON 3WL air circuit-breaker (`wl.js`, `breaker3wl.js`)
+
+Source: *3WL Air Circuit Breaker COM35 Communication Guide PROFINET IO, Modbus TCP*, Equipment Manual 03/2020,
+L1V30536190-04 (`MAN_L1V30536190-04_en_en-US.pdf`, page numbers as printed).
+
+| Value | Source |
+|---|---|
+| COM35 at position X7 of the auxiliary conductor plug-in system; X7 terminals not usable with it | p.15–16 |
+| COM35 body 72 × 60 × 92 mm, 160 g; 24 V DC ±20 %, 125 mA, 2.6 VA; terminals 0.5 Nm | p.47–50 |
+| LEDs PN / TCP / CUB and their states; CUB flashing = no ETU found | p.12 |
+| Terminals 1–9: Write Enable, free input, free output, Close (Y1), Open (F1, F2) | p.16–19 |
+| Two Ethernet ports X1 X2 with switch; function button S1; CubicleBUS RJ45 at the rear with terminating plug; 4-wire lead to X8:1–4 | p.11–20, 39 |
+| Position detection: micro-switches S46 (rear), S47 (centre), S48 (front) → connected / test / disconnected / not available; data point 24 values 1 / 2 / 0 / 3 | p.30, Format (24) p.178 |
+| Breaker data available only in the connected and test positions | p.13 |
+| Order number structure (3WL · market · size · rated current - class · ETU · G/B · poles · connections - mechanism · releases · aux switch) | Format (103) p.180 |
+| Interrupting class codes N 2, S 3, H 4, C 5; frame size 1 / 2 / 3 | Format (99), (100) p.180 |
+| ETU letters E (ETU45B), F (ETU45B with display), Y (ETU55B), N (ETU76B); G = with ground-fault module | Format (103) p.180 |
+| Trip unit type codes ETU45B 4 / 5 / 6 / 7, ETU76B 13 / 14 | Format (412) p.193 |
+| Poles: 1 = 3-pole, 2 = 4-pole; rating plug = data point 377 | Format (108) p.181, Tab. 4-6 |
+| Protection parameters IR, tR, Ii, Isd, tsd, IN, Ig, tg (data points 333–342), sets A / B (data point 370) | Tab. 4-10 p.106 |
+| DAS maintenance mode: ETU76B parameter set B switched by the COM35 free input, indicated by its free output | p.24–29 |
+| DSP800 in the door: cut-out 92 × 92 mm, 24 V DC, 2.2 W, up to 8 breakers | p.83 |
+| TD400 at the ETU front interface | p.85–89 |
+
+The manual does not give the breaker's outer dimensions, the inner layout, the racking travel, or the setting ranges and
+curve of the trip unit. Those are typical values, marked `[inferred]` in the code. The curve on screen is labelled as typical.

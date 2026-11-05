@@ -2,7 +2,8 @@
 // cursor glides to (a selector in the console, or a function giving a stage point) and what pressing it does,
 // through the same act() the visitor's clicks call. It takes the default lineup apart stage by stage, draws a
 // withdrawable unit through TEST and DISCONNECTED out of its compartment, opens the whole lineup, reassembles,
-// racks the breaker out and back, adds a field and replaces its type, and ends on the glass enclosure.
+// racks the breaker out and back, adds a field and replaces its type, turns the infeed into a 3WL and takes that
+// breaker apart, and ends on the glass enclosure.
 export const TOUR = [
   {t: 1.8, at: '[data-a="td:step"]', do: (act) => act('td', 'step')},
   {t: 3.9, at: '[data-a="td:step"]', do: (act) => act('td', 'step')},
@@ -22,6 +23,11 @@ export const TOUR = [
   {t: 30.4, at: '[data-a="modpos:connected"]', do: (act) => act('modpos', 'connected')},
   {t: 32.2, at: '[data-a="fieldadd:1"]', do: (act) => act('fieldadd', '1')},
   {t: 34.0, at: '[data-a="type:fc"]', do: (act) => act('type', 'fc')},
-  {t: 36.2, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
+  // the infeed becomes a 3WL with a COM35, is drawn out of its guide frame and comes apart
+  {t: 36.0, at: '[data-a="field:0"]', do: (act) => act('field', '0')},
+  {t: 37.4, at: '[data-a="opt:acb:3WL12"]', do: (act) => act('opt', 'acb:3WL12')},
+  {t: 39.4, at: '[data-a="wlx:1"]', do: (act) => act('wlx', '1')},
+  {t: 44.6, at: '[data-a="wlx:0"]', do: (act) => act('wlx', '0')},
+  {t: 46.4, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
 ];
-export const TOUR_LEN = 41;
+export const TOUR_LEN = 51;

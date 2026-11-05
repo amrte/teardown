@@ -5,6 +5,8 @@
 // Values the documents do not give (busbar cross-sections, device outer dimensions, sheet thickness) are marked
 // [inferred]; they only shape the geometry and never a rating on screen. No three.js in here.
 
+import {WL_OPTIONS, isWL, normaliseWL, wlBreaker} from './wl.js';
+
 // ------------------------------------------------------------ tightening torques (Nm) by thread, OI El. Anschluss / Feldverbund
 // 8.8 bolts with DIN 6796 conical spring washers (OI El. Anschluss p.9); M6 frame joint screw + nut 6 Nm and
 // thread-forming M6 Torx T30 into sheet 4 Nm (OI Feldverbund p.6, Aufstellung p.14); M4 terminal carriers ~1.5 Nm
@@ -89,6 +91,11 @@ export const BREAKERS = {
   '3VA': {name: '3VA15 MCCB, fixed', In: [400, 630, 800, 1000], w: 210, h: 320, d: 190, minW: 400, kg: 18, loss: 180, tag: '3VA1510', fixed: true},
 };
 
+/** the breaker a circuit-breaker field holds: a 3WA / 3VA from BREAKERS, or a configured 3WL (wl.js) */
+export function breakerOf(f) {
+  return isWL(f) ? wlBreaker(normaliseWL({...f.opts})) : BREAKERS[f.opts.acb] || BREAKERS['3WA12'];
+}
+
 // ------------------------------------------------------------ module kinds (what fills a device compartment)
 // heights in mm on the 50 mm grid (TIP p.49, 55, 56); positions: the withdrawable unit's switching positions
 // OI OFFW p.12–14: DISCONNECTED (green 0), TEST (blue), CONNECTED (red I); delivered in DISCONNECTED
@@ -130,12 +137,13 @@ export const MODULE_KINDS = {
 // modules: kinds allowed in it; capacity(cfg, f): the space the modules share (height, or width for axis x)
 export const FIELD_TYPES = {
   acb: {
-    name: 'Circuit-breaker', short: '3WA ACB · ≤ 6300 A', glyph: 'acb', width: 800, widths: [400, 600, 800, 1000, 1200, 1400],
+    name: 'Circuit-breaker', short: '3WA / 3WL · ≤ 6300 A', glyph: 'acb', width: 800, widths: [400, 600, 800, 1000, 1200, 1400],
     modular: true, locked: true, fixedModules: true, compartment: 'BREAKER FIELD',
     options: [
-      {key: 'acb', label: 'BREAKER', values: ['3WA11', '3WA12', '3WA13', '3VA']},
+      {key: 'acb', label: 'BREAKER', values: ['3WA11', '3WA12', '3WA13', '3WL11', '3WL12', '3WL13', '3VA'], cols: 4},
       {key: 'role', label: 'FUNCTION', values: ['infeed', 'outgoing', 'coupling']},
       {key: 'n', label: 'BREAKERS IN FIELD', values: [1, 2]},
+      ...WL_OPTIONS,
     ],
     capacity: (cfg) => devHeight(cfg.height), dev: (W) => W, kg: [545, 800, 600],
     lines: ['Infeed, outgoing, bus-section coupling', '3-part door for Form 3a/4b', 'One CT set L1–L3 on the customer side'],
@@ -192,13 +200,13 @@ export function defaultModules(type, width, cfg, opts = {}) {
   switch (type) {
     case 'acb': {
       const n = opts.n === 2 ? 2 : 1;
-      const br = BREAKERS[opts.acb || '3WA12'];
+      const br = breakerOf({opts: {acb: '3WA12', ...opts}});
       const dev = devHeight(cfg.height);
       const ah = n === 2 ? 0 : 400;
       const bh = n === 2 ? Math.min(800, dev / 2) : br.h > 450 ? 800 : 700;
       const mods = [];
       if (ah) mods.push(M('aux', ah, {label: opts.role === 'coupling' ? 'coupling relay' : 'PAC4200 meter'}));
-      for (let i = 0; i < n; i++) mods.push(M('acb', bh, {label: `${br.tag} ${br.In[br.In.length - 1 - Math.min(i, 1)]} A`, pos: 'connected'}));
+      for (let i = 0; i < n; i++) mods.push(M('acb', bh, {label: br.wl ? `${br.tag} ${br.In[0]} A` : `${br.tag} ${br.In[br.In.length - 1 - Math.min(i, 1)]} A`, pos: 'connected'}));
       const rest = dev - mods.reduce((a, m) => a + m.h, 0);
       if (rest > 0) mods.push(M('louvre', rest));
       return mods;
@@ -263,7 +271,7 @@ export const PRESETS = {
   standard: DEFAULT,
   mcc: {
     height: 2200, base: 100, busbar: 'rear-top', In: 2520, depth: 600, form: '4b', ip: 'IP43', designStrip: true,
-    fields: [field('acb', 600, {acb: '3WA11', role: 'infeed', n: 1}), field('universal', 1000), field('universal', 1000), field('universal', 1200), field('fc', 800), field('ccs', 400, {plate: 'perforated'})],
+    fields: [field('acb', 600, normaliseWL({acb: '3WL11', role: 'infeed', n: 1, wlIn: 2000})), field('universal', 1000), field('universal', 1000), field('universal', 1200), field('fc', 800), field('ccs', 400, {plate: 'perforated'})],
   },
   small: {
     height: 2000, base: 100, busbar: 'rear-top', In: 1630, depth: 600, form: '2b', ip: 'IP31', designStrip: false,
@@ -287,11 +295,15 @@ export function normalise(cfg) {
     const T = FIELD_TYPES[f.type];
     if (!T.widths.includes(f.width)) f.width = T.width;
     f.opts = f.opts || {};
-    for (const o of T.options || []) if (!o.values.map(String).includes(String(f.opts[o.key] ?? o.values[0]))) f.opts[o.key] = o.values[0];
+    for (const o of T.options || []) {
+      if (o.when) continue;
+      if (!o.values.map(String).includes(String(f.opts[o.key] ?? o.values[0]))) f.opts[o.key] = o.values[0];
+    }
     if (f.type === 'acb') {
       f.opts.acb = f.opts.acb || '3WA12';
       f.opts.role = f.opts.role || 'infeed';
-      f.opts.n = f.opts.n === 2 && f.opts.acb !== '3WA13' ? 2 : 1;
+      f.opts.n = f.opts.n === 2 && !['3WA13', '3WL13'].includes(f.opts.acb) ? 2 : 1;
+      if (isWL(f)) normaliseWL(f.opts);
     }
     f.modules = (f.modules || []).filter((m) => MODULE_KINDS[m.kind]);
     if (T.fixedModules) {

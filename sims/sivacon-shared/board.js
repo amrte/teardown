@@ -141,7 +141,17 @@ export function buildBoard(cfg, R) {
   let lastSel = -1;
   let lastScope = '';
   const spreadOf = (S) => smoother((S.x * NSTAGE - 1.4) / 1.6);
+  // the selected field's 3WL comes apart on its own (S.wlx), eased here
+  let wlx = 0;
+  let wlxField = -1;
   const pose = (S, dt) => {
+    const wt = S.wlx || 0;
+    if (wlxField !== S.sel) wlx = 0;
+    wlxField = S.sel;
+    const wPrev = wlx;
+    wlx += (wt - wlx) * (1 - Math.exp(-(dt || 0.016) / 0.5));
+    if (Math.abs(wt - wlx) < 1e-3) wlx = wt;
+    if (wlx !== wPrev) dirty = true;
     const n = fields.length;
     const sp = spreadOf(S);
     fields.forEach((fd, i) => {
@@ -152,7 +162,7 @@ export function buildBoard(cfg, R) {
       fd.g.position.x = R.side + R.xs[i] + dx;
     });
     const scope = (fi) => (S.scope === 'all' ? 1 : fi === S.sel || fi < 0 ? 1 : 0);
-    const moving = reg.pose(S.x, scope, {dt, doors: S.doors, distK: S.scope === 'all' ? 0.7 : 1});
+    const moving = reg.pose(S.x, scope, {dt, doors: S.doors, distK: S.scope === 'all' ? 0.7 : 1, fly: (r) => (r.field === S.sel ? wlx : 0)});
     for (const t of ticks) t();
     if (dirty || moving > 0.01 || S.x !== lastX || S.sel !== lastSel || S.scope !== lastScope) {
       hw.update();

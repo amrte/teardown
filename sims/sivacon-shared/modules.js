@@ -7,7 +7,7 @@
 // tool opening, the position indicator (green 0 · blue TEST · red I) and the swing-out instrument panel. In HFD units
 // the body stays latched and only the contact systems travel; SFD units slide as a whole.
 import * as THREE from 'three';
-import {BREAKERS, DOOR_T, MODULE_KINDS, UNIT_W} from './catalog.js';
+import {breakerOf, DOOR_T, MODULE_KINDS, UNIT_W} from './catalog.js';
 import {bb, buildDoor, bx, cy, label, mk, part} from './cabinet.js';
 import {faceTex, plateGeo, cableGeo} from './parts.js';
 
@@ -374,7 +374,7 @@ export function converter(ctx, m, j, x0, w, yb, yt, out) {
 /** the ACB: breaker in its guide frame with the racking crank; cradle rails extend when it is drawn out */
 export function breaker(ctx, m, j, box, out) {
   const {M, hw, f} = ctx;
-  const br = BREAKERS[f.opts.acb];
+  const br = breakerOf(f);
   const loc = ctx.R.loc(ctx.i, j);
   const h = box.y1 - box.y0;
   const w = box.x1 - box.x0;
