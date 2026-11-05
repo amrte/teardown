@@ -27,9 +27,17 @@ const ALLOW = [
   [/^connBars:Cable connection bar/, /^cts:Block-type current transformer/, 'primary conductor passes through the CT window'],
   [/^busbars:Main busbar/, /^transPart:Transverse partition plate/, 'busbars pass through the openings (12 mm clearance)'],
   [/^bushL:Lower bushing/, /^partition:Vertical partition/, 'bushing passes through the partition hole (r spoutRo + 3)'],
-  [/^lvPlug(#[^:]*)?:LV plug cable/, /^bkX0plug:-X0 cable gland|^lvPlug:LV plug \(64-pole/, 'cable leaves the -X0 gland on the breaker and is moulded into the plug'],
+  [/^lvPlug(#[^:]*)?:LV plug cable/, /^(bkX0plug|breaker|mech):-X0 cable gland|^lvPlug:LV plug \(64-pole/, 'cable leaves the -X0 gland on the breaker and is moulded into the plug'],
   [/^bk(Tulips|Arms|Sleeves):/, /^(partition:Vertical partition|shellB:Bushing plate)/, 'arms pass through the bushing holes of the partition / plate (radial check below)'],
   [/^bolt:cbTulip/, /^bush[UL]:/, 'contact-system joint inside the bushing bore in service'],
+  [/^hvdoor(#[^:]*)?:Shared operating slide/, /^hvdoor:Actuating opening/, 'the slide covers the actuating openings on the door'],
+  [/^feeders:Feeder bar/, /^ltriSwitch:Upper fixed contact/, 'feeder bar bolted to the upper fixed contact'],
+  [/^cts:Primary terminal/, /^(connBars:|ltriSwitch:Connection)/, 'bar bolted to the CT primary terminal'],
+  [/^ltriSwitch:Earthing-switch fixed contact/, /^esw:Earthing knife/, 'closed earthing knife on its fixed contact'],
+  [/^bkArms:Threaded bolt/, /^breaker:Insulating body of the disconnector link/, 'threaded bolt screwed into the metal insert of the link body'],
+  [/^breaker:(Contact arm|Contact finger|Ring spring|Contact system cage)/, /^(bush[UL]:|shellB:Bushing plate|partition:Vertical partition)/, 'contact arm of the metering part in the bushing bore (radial check below)'],
+  [/^wvt:VT bushing/, /^partition:Vertical partition/, 'VT bushing through its hole in the partition'],
+  [/^wvt:Lead from the VT bushing/, /^connBars:Cable connection bar/, 'lead bolted to the connection bar'],
   [/^endWall:/, /^busbars:Main busbar|^bolt:(prcUp|prcLow|lv|earthLink)/, 'at the row end the busbars stop at the end panel and the panel-to-panel bolts are not fitted (drawn on every panel)'],
   [/^earthDev:Earthing tulip|^earthDev:Spindle/, /^bush[UL]:|^shutters:|^partition:Vertical partition|^shellB:Bushing plate/, 'earthing tulip on the fixed contact inside the bushing bore, spindle through the open shutter'],
   [/Padlock shackle/, /Operating slide/, 'the padlock hangs in the hole of the operating slide'],
@@ -137,7 +145,7 @@ function clashes(list, sameKeyOk = true) {
       if (pen <= TOL) continue;
       if (allowed(a.pkey, b.pkey)) continue;
       if (/^bk/.test(a.pkey) && /^bk/.test(b.pkey)) continue; // inside the breaker: checked on its own below
-      if ((/^lvPlug#LV plug cable/.test(a.key) || /^lvPlug#LV plug cable/.test(b.key)) && /^bk/.test(/^bk/.test(a.pkey) ? a.pkey : b.pkey) && cableClear(null, /^bk/.test(a.pkey) ? a : b)) continue; // box of a bent cable
+      if ((/^lvPlug#LV plug cable/.test(a.key) || /^lvPlug#LV plug cable/.test(b.key)) && /^(bk|breaker:|mech:)/.test(/^(bk|breaker:|mech:)/.test(a.pkey) ? a.pkey : b.pkey) && cableClear(null, /^(bk|breaker:|mech:)/.test(a.pkey) ? a : b)) continue; // box of a bent cable
       res.push({a: a.key, b: b.key, pa: a.pkey, pb: b.pkey, pen: Math.round(pen), at: [Math.round((Math.max(a.box.min.x, b.box.min.x) + Math.min(a.box.max.x, b.box.max.x)) / 2), Math.round((Math.max(a.box.min.y, b.box.min.y) + Math.min(a.box.max.y, b.box.max.y)) / 2), Math.round((Math.max(a.box.min.z, b.box.min.z) + Math.min(a.box.max.z, b.box.max.z)) / 2)]});
     }
   }
@@ -196,18 +204,23 @@ const mats = makeMaterials([]);
 let total = 0;
 for (const W of widths) {
   const EQS = [null, {vds: 'capdis', busES: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true}, {vds: 'vois', fan: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true}];
-  for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) for (const eq of EQS) {
+  // other panel types: once per allowed width and depth (busbar 2500 A), with and without options
+  const PTS = {dp: [800, 1000], mp: [800], wvt: [800, 1000], cp600: [600], ltri: [800]};
+  for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) for (const eq of EQS) for (const ptype of ['cbp', ...Object.keys(PTS)]) {
     if (eq && bus !== 2500) continue; // options: once per width and depth
-    const panel = buildPanel(mats, {W, D, bus, ur: 17.5, eq: eq || undefined});
+    if (ptype !== 'cbp' && (bus !== 2500 || !PTS[ptype].includes(W) || (eq && eq.fan))) continue;
+    const panel = buildPanel(mats, {W, D, bus, ur: 17.5, eq: eq || undefined, ptype});
     for (const r of radial(panel)) { console.log(`W${W} D${D}: ${r}`); total++; }
     for (const [truck, z] of [['service', 0], ['test', TRAVEL], ...(eq ? [['out', 1150]] : [])]) for (const esw of [0, 1]) {
       for (const k of ['truck', 'mech', 'breaker']) for (const g of panel.parts[k] || []) g.position.z = z;
       const edSide = truck === 'out' ? (esw ? 'lower' : 'upper') : null;
       for (const g of panel.parts.shutters || []) for (const c of g.children) if (c.userData.shut) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (truck === 'service' || (edSide === 'upper' && c.userData.shut > 0) || (edSide === 'lower' && c.userData.shut < 0) ? 1 : 0); }
       { const L = panel.lvCable, pr = panel.root.position; lvRun = {y: L.y0 - 3 - 8 + pr.y, z0: L.z0 + pr.z, z1: L.z1 + z + 30 + pr.z, zDown: L.z1 + z + 31 + pr.z, y1: L.y1 + 24 + pr.y}; }
-      panel.parts.lvPlug[0].traverse((c) => { if (c.userData.lvCable) c.visible = truck !== 'out'; });
-      panel.parts.lvPlug[0].traverse((c) => { if (c.userData.lvCable) { c.geometry = lvCableGeometry(panel.lvCable, z); c.geometry.computeBoundingBox(); c.userData.prims = [{label: 'LV plug cable (64-pole)', box: c.geometry.boundingBox.clone()}]; } });
+      for (const g of panel.parts.lvPlug || []) g.traverse((c) => { if (c.userData.lvCable) c.visible = truck !== 'out'; });
+      for (const g of panel.parts.lvPlug || []) g.traverse((c) => { if (c.userData.lvCable) { c.geometry = lvCableGeometry(panel.lvCable, z); c.geometry.computeBoundingBox(); c.userData.prims = [{label: 'LV plug cable (64-pole)', box: c.geometry.boundingBox.clone()}]; } });
       for (const g of panel.parts.esw || []) for (const c of g.children) if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + (c.userData.openDelta ?? 1.25) * (1 - esw);
+      // L-TRI: the earthing switch closes only with the switch open (O §7.3)
+      for (const g of panel.parts.ltriSwitch || []) for (const c of g.children) if (c.userData.ltBlade) c.rotation.x = esw ? c.userData.open : c.userData.closed;
       for (const g of panel.parts.busES || []) for (const c of g.children) if (c.userData.busBlade) c.rotation.x = esw ? c.userData.closed : c.userData.open;
       // breaker out: earthing device fitted on the upper (ES open) or lower (ES closed) contacts, that shutter open
       for (const g of panel.parts.earthDev || []) g.visible = truck === 'out' && g.userData.earthDev === (esw ? 'lower' : 'upper');
@@ -215,7 +228,7 @@ for (const W of widths) {
       panel.root.updateMatrixWorld(true);
       const res = clashes(collect(panel.root).concat(args.includes('--bolts') ? boltBoxes(panel) : []));
       if (res.length) {
-        console.log(`\n== W${W} D${D} ${bus} A ${eq ? JSON.stringify(eq) : ''} · truck ${truck} · ES ${esw ? 'closed' : 'open'}: ${res.length}`);
+        console.log(`\n== ${ptype} W${W} D${D} ${bus} A ${eq ? JSON.stringify(eq) : ''} · truck ${truck} · ES ${esw ? 'closed' : 'open'}: ${res.length}`);
         const seen = new Set();
         for (const r of res.sort((x, y) => y.pen - x.pen)) {
           const k = [r.a, r.b].sort().join(' × ');

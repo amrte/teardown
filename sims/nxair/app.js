@@ -17,7 +17,25 @@ import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
 import {CHECKS, IO, LV_JOINTS, LV_TOUR, X0, FUNCS, SETTINGS, analogSvg, controlSvg} from './lvpane.js';
 const bkById = Object.fromEntries(BK_PARTS.map((p) => [p.id, p]));
 const lvById = Object.fromEntries(LV_PARTS.map((p) => [p.id, p]));
-const partInfo = (id) => partById[id] || bkById[id] || lvById[id];
+// panel types modelled (O §4.6, §6, §11–19): allowed widths and what is drawn instead of the breaker
+const PTYPES = {
+  cbp: {label: 'Circuit-breaker panel', widths: [600, 800, 1000]},
+  dp: {label: 'Disconnecting panel', widths: [800, 1000]},
+  mp: {label: 'Metering panel', widths: [800]},
+  wvt: {label: 'CB panel + removable VTs', widths: [800, 1000]},
+  cp600: {label: 'Contactor panel 600 (3TL8, 7.2 kV)', widths: [600]},
+  ltri: {label: 'Switch-disconnector L-TRI 5F', widths: [800]},
+};
+const TYPE_PARTS = {
+  dp: {breaker: {id: 'breaker', comp: 'truck', name: 'Withdrawable disconnector link', desc: 'Per phase an insulating body joining the upper and lower contact arm (with contact systems as on the breaker), no vacuum interrupter, no operating mechanism; front box with the pull handles and the -X0 interface; on the same withdrawable truck (O §11.9 Fig. 165, 110-0250.9 DP). Isolating distance M0. Racking only off-load: never rack with the busbar and the feeder at operational voltage, get the authorisation of the control station; the racking slide is always padlocked (O §11.5). Body sizes drawn.'}},
+  mp: {breaker: {id: 'breaker', comp: 'truck', name: 'Withdrawable metering part', desc: 'Busbar-side contact arms only, an HV fuse-link per phase (Bussmann/Eaton 12ABCNA 3.15 A 195 mm at 12 kV, 17.5CAV2 2 A 220 mm with insulating cover at 17.5 kV; 7.2ABWNA 3.15 A 142 mm at 7.2 kV) and a cast-resin VT per phase; MCBs for the VT secondaries on its front: switch them OFF before the LV plug is pulled and ON after it is plugged on. No feeder earthing switch, no cables (O §12). Fuse change with the part out: ≤ 12 kV upper end out of its clamp first; always replace all; no bridging links. Sizes drawn.'}},
+};
+TYPE_PARTS.cp600 = {
+  truck: {id: 'truck', comp: 'truck', name: 'Contactor truck (truck type)', desc: 'Contactor panels exist only in the truck-type design (O §7.1): the whole truck rolls in and out on its castors in guide rails at the bottom of the compartment, no service truck. Two locking levers at the centre (turn outward = unlock) and the locking bracket at the bottom: pull it up into its retaining hook to unlock; on insertion lift the hook and pull the bracket fully down until it snaps in (LOCKED); never set it to LOCK outside the panel or part-way in (O §14.17–14.18).'},
+  mech: {id: 'mech', comp: 'truck', name: 'Vacuum contactor 3TL8 and operating unit', desc: 'Vacuum contactor 3TL8, 7.2 kV, ≤ 400 A (fuse-dependent), electrical closing only; closing needs the HV HRC fuses not tripped (O §7.2). Manual opening with the double-bit key 90° CCW in service / CW in test. Operating and interlocking unit for racking and earthing on the truck; the earthing-switch shaft runs through the truck (its coupling pin must be vertical before insertion). Fuse operation-state indicator on the front, reset lever on the right side to "I". LV plug manual and coded: 4 coding pins, symbols for the fuse configuration and the electromagnetic-interlock variant. Optional control transformer with 2 fuses 7.2ABWNA 3.15 A 142 mm behind the outer-phase HV fuses.'},
+  breaker: {id: 'breaker', comp: 'truck', name: 'Contact arms and HV HRC fuses', desc: 'Contact arms with contact systems to the bushings as on the breaker; per phase two HV HRC fuse-links in parallel (SIBA HHM motor back-up, DIN 43625, e = 442 mm, 7.2 kV: 50–125 A one per phase, 160 / 200 / 250 A one or two, 315 A one), standing almost upright with the top towards the rear, striker DOWN to the lower clamp. Fuse change with the truck out and the door closed: outer phases first, upper end out of its bracket first, then L2 from the right; insert in reverse, tug to check, reset the indicator lever (O §14.19). Positions and sizes read off the drawings or drawn.'},
+};
+const partInfo = (id) => TYPE_PARTS[state.ptype]?.[id] || partById[id] || bkById[id] || lvById[id];
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'})[c]);
@@ -30,8 +48,8 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------------------------------------- state
 const state = {
-  W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', gas: false, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
+  W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp',
+  mode: 'panel', gas: false, ltSw: 1, ltSlide: 0, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
   peq: {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
@@ -117,7 +135,7 @@ function build() {
   const row = new THREE.Group();
   row.scale.setScalar(0.001);
   scene.add(row);
-  const opts = {W: state.W, D: state.D, bus: state.bus, ur: state.ur, eq: state.peq};
+  const opts = {W: state.W, D: state.D, bus: state.bus, ur: state.ur, eq: state.peq, ptype: state.ptype};
   const subject = buildPanel(mats, opts);
   subject.root.position.z = -state.D / 2;
   row.add(subject.root);
@@ -252,7 +270,7 @@ function syncPanelCb() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {door: 0, busEs: 0, busSlide: 0, busLever: 0, shutU: 0, shutL: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
+const anim = {ltSw: 1, door: 0, busEs: 0, busSlide: 0, busLever: 0, shutU: 0, shutL: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -294,6 +312,8 @@ function applyPose(force) {
     if (c.userData.eswSlide) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + 75 * anim.slide; }
     if (c.userData.eswInd) c.rotation.z = (1 - anim.esw) * Math.PI / 2;
     if (c.userData.truckInd) c.rotation.z = anim.truck > 110 ? Math.PI / 2 : 0;
+    if (c.userData.ltSlide) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + 190 * state.ltSlide; }
+    if (c.userData.ltInd) c.rotation.z = (1 - anim.ltSw) * Math.PI / 2;
     if (c.userData.eswLever) { c.visible = anim.lever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.lever); c.rotation.z = -Math.PI * anim.esw; }
   }
   // HV door: swings outward about its hinges on the left edge (x = -W/2, z = D)
@@ -309,6 +329,7 @@ function applyPose(force) {
     if (c.userData.busSlide) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + 70 * anim.busSlide; }
     if (c.userData.busInd) c.rotation.z = (1 - anim.busEs) * Math.PI / 2;
   }
+  for (const g of subject.parts.ltriSwitch || []) for (const c of g.children) if (c.userData.ltBlade) c.rotation.x = c.userData.open + (c.userData.closed - c.userData.open) * anim.ltSw;
   for (const g of subject.parts.endWall || []) g.visible = !state.row;
   for (const g of subject.parts.shutterMech || []) for (const c of g.children) {
     if (c.userData.slipLever) { c.visible = state.slip === c.userData.slipLever; c.rotation.x = -0.3 * (c.userData.slipLever === 'L' ? anim.shutU : anim.shutL); }
@@ -631,7 +652,7 @@ function frame(now) {
   let moved = false;
   const doorT = state.truck === 'out' ? 1 : state.door;
   if (Math.abs(anim.door - doorT) > 1e-3) { anim.door += (doorT - anim.door) * (reduced ? 1 : 1 - Math.exp(-dt * 3)); moved = true; }
-  for (const [a, b] of [['busEs', 'busEs'], ['busSlide', 'busSlide'], ['busLever', 'busLever'], ['shutU', 'shutU'], ['shutL', 'shutL'], ['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
+  for (const [a, b] of [['ltSw', 'ltSw'], ['busEs', 'busEs'], ['busSlide', 'busSlide'], ['busLever', 'busLever'], ['shutU', 'shutU'], ['shutL', 'shutL'], ['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
   if (moved) applyPose();
@@ -717,7 +738,7 @@ function renderStep() {
     <ul class="body">${s.body.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>
     ${s.warn ? `<div class="warn">${esc(s.warn)}</div>` : ''}
     ${extra}
-    ${s.drill ? drillHtml(s.drill) : ''}
+    ${s.drill && state.ptype !== 'ltri' && state.ptype !== 'mp' ? drillHtml(s.drill) : ''}
     ${s.drills ? pdrillHtml(s.drills) : ''}
     ${joints.length ? `<h3>Fasteners in this step</h3><div class="joints">${joints.map((j) => jointRow(j, {sel: state.selJoint === j.id})).join('')}</div>` : ''}
     <h3>All steps</h3>
@@ -732,6 +753,7 @@ function setStep(i, {view = true} = {}) {
   state.eswT = s.esw ?? (state.truck === 'service' ? 0 : 1);
   state.slide = 0;
   state.lever = 0;
+  if (state.ptype === 'ltri') { state.truck = 'service'; state.ltSw = state.eswT > 0.5 ? 0 : 1; state.ltSlide = 0; }
   Object.assign(state, {door: 0, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, earthDev: null, busSlide: 0, busLever: 0, lrm: null});
   pdrill = null;
   drill = null;
@@ -878,31 +900,38 @@ function applyGas() { if (world?.subject?.gas) world.subject.gas.visible = state
 function renderSld() {
   const el = $('#sld');
   if (!el) return;
+  const pt = state.ptype;
   const conn = state.truck === 'service', out = state.truck === 'out';
-  const closed = state.bk.s > 0.5, earthed = state.eswT > 0.5;
-  const x = 58, dx = conn ? 0 : out ? 44 : 20; // the breaker block slides out of the fixed contacts in test / out
+  const closed = state.bk.s > 0.5, earthed = state.eswT > 0.5 && pt !== 'mp';
+  const x = 58, dx = conn ? 0 : out ? 44 : 20; // the withdrawable part slides out of the fixed contacts in test / out
   const chev = (cx, y, down) => `<path d="M${cx - 7},${y - (down ? 4 : -4)} L${cx},${y + (down ? 3 : -3)} L${cx + 7},${y - (down ? 4 : -4)}" class="sl"/>`;
   const bx = x + dx;
-  el.innerHTML = `<svg viewBox="0 0 150 250" role="img" aria-label="Single-line diagram: breaker ${closed ? 'closed' : 'open'}, ${state.truck} position, feeder ${earthed ? 'earthed' : 'not earthed'}">
-    <text x="4" y="11" class="st">Single-line diagram</text>
-    <line x1="8" y1="24" x2="142" y2="24" stroke="#c47a4a" stroke-width="4"/><text x="108" y="19" class="sm">Busbar</text>
-    <line x1="${x}" y1="24" x2="${x}" y2="44" class="sl"/>${chev(x, 47, true)}
-    ${chev(x, 186, false)}<line x1="${x}" y1="189" x2="${x}" y2="232" class="sl"/>
-    <g>
-      <rect x="${bx - 16}" y="52" width="32" height="128" rx="3" class="sl dash" fill="none"/>
-      ${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="98" class="sl"/>
+  const fuse = (cx, y) => `<rect x="${cx - 4}" y="${y}" width="8" height="16" class="sl"/><line x1="${cx}" y1="${y}" x2="${cx}" y2="${y + 16}" class="sl"/>`;
+  const vt = (cx, y) => `<circle cx="${cx}" cy="${y}" r="6" class="sl"/><circle cx="${cx}" cy="${y + 9}" r="6" class="sl"/>`;
+  const posTxt = pt === 'ltri' ? '' : `<text x="4" y="112" class="sm">${conn ? 'service' : out ? 'removed' : 'test'}</text>`;
+  let part;
+  if (pt === 'ltri') part = `<line x1="${x}" y1="50" x2="${x}" y2="70" class="sl"/><line x1="${x}" y1="96" x2="${state.ltSw > 0.5 ? x : x + 14}" y2="${state.ltSw > 0.5 ? 70 : 74}" class="sl blade"/><line x1="${x}" y1="96" x2="${x}" y2="112" class="sl"/>${fuse(x, 112)}<line x1="${x}" y1="128" x2="${x}" y2="183" class="sl"/><text x="${x + 19}" y="84" class="sm">-Q1 ${state.ltSw > 0.5 ? 'CLOSED' : 'OPEN'}</text><text x="${x + 19}" y="124" class="sm">fuses</text>`;
+  else if (pt === 'cp600') part = `<rect x="${bx - 16}" y="52" width="32" height="128" rx="3" class="sl dash"/>${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="72" class="sl"/>${fuse(bx, 72)}<line x1="${bx}" y1="88" x2="${bx}" y2="102" class="sl"/><path d="M${bx - 6},102 A6 6 0 0 0 ${bx + 6},102" class="sl"/><line x1="${bx}" y1="132" x2="${closed ? bx : bx + 14}" y2="${closed ? 104 : 108}" class="sl blade"/><line x1="${bx}" y1="132" x2="${bx}" y2="174" class="sl"/>${chev(bx, 177, false)}<text x="${bx + 19}" y="84" class="sm">fuses</text><text x="${bx + 19}" y="112" class="sm">-Q1</text><text x="${bx + 19}" y="122" class="sm">${closed ? 'CLOSED' : 'OPEN'}</text>`;
+  else if (pt === 'mp') part = `<rect x="${bx - 16}" y="52" width="32" height="96" rx="3" class="sl dash"/>${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="84" class="sl"/>${fuse(bx, 84)}<line x1="${bx}" y1="100" x2="${bx}" y2="118" class="sl"/>${vt(bx, 124)}<text x="${bx + 19}" y="96" class="sm">fuse</text><text x="${bx + 19}" y="130" class="sm">VT</text>`;
+  else if (pt === 'dp') part = `<rect x="${bx - 16}" y="52" width="32" height="128" rx="3" class="sl dash"/>${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="174" class="sl"/>${chev(bx, 177, false)}<text x="${bx + 19}" y="112" class="sm">link</text>`;
+  else part = `<rect x="${bx - 16}" y="52" width="32" height="128" rx="3" class="sl dash"/>${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="98" class="sl"/>
       <line x1="${bx - 5}" y1="93" x2="${bx + 5}" y2="103" class="sl"/><line x1="${bx + 5}" y1="93" x2="${bx - 5}" y2="103" class="sl"/>
       <line x1="${bx}" y1="132" x2="${closed ? bx : bx + 14}" y2="${closed ? 98 : 102}" class="sl blade"/>
       <line x1="${bx}" y1="132" x2="${bx}" y2="174" class="sl"/>${chev(bx, 177, false)}
-    </g>
-    <text x="${bx + 19}" y="112" class="sm">-Q0</text><text x="${bx + 19}" y="122" class="sm">${closed ? 'CLOSED' : 'OPEN'}</text>
-    <text x="4" y="112" class="sm">${conn ? 'service' : out ? 'removed' : 'test'}</text>
-    <circle cx="${x}" cy="200" r="6.5" class="sl"/><text x="${x - 30}" y="203" class="sm">-T1</text>
+      <text x="${bx + 19}" y="112" class="sm">-Q0</text><text x="${bx + 19}" y="122" class="sm">${closed ? 'CLOSED' : 'OPEN'}</text>`;
+  const feeder = pt === 'mp' ? '' : `${pt === 'ltri' ? '' : chev(x, 186, false)}<line x1="${x}" y1="189" x2="${x}" y2="232" class="sl"/>
+    <circle cx="${x}" cy="200" r="6.5" class="sl"/><text x="${x + 9}" y="197" class="sm">-T1</text>
     <line x1="${x}" y1="214" x2="${x + 36}" y2="214" class="sl"/>
     <line x1="${x + 36}" y1="214" x2="${earthed ? x + 36 : x + 49}" y2="${earthed ? 230 : 227}" class="sl blade"/>
     <line x1="${x + 28}" y1="233" x2="${x + 44}" y2="233" class="sl"/><line x1="${x + 31}" y1="237" x2="${x + 41}" y2="237" class="sl"/><line x1="${x + 34}" y1="241" x2="${x + 38}" y2="241" class="sl"/>
     <text x="${x + 52}" y="222" class="sm">-Q8</text><text x="${x + 52}" y="232" class="sm">${earthed ? 'EARTHED' : 'open'}</text>
-    <path d="M${x - 6},232 L${x + 6},232 L${x},242 Z" class="sl"/><text x="${x - 40}" y="244" class="sm">Cable</text>
+    <path d="M${x - 6},232 L${x + 6},232 L${x},242 Z" class="sl"/><text x="${x + 8}" y="249" class="sm">Cable</text>
+    ${pt === 'wvt' ? `<line x1="${x}" y1="208" x2="${x - 26}" y2="208" class="sl"/><rect x="${x - 46}" y="200" width="22" height="44" rx="2" class="sl dash"/>${fuse(x - 35, 203)}${vt(x - 35, 226)}<text x="${x - 56}" y="196" class="sm">WVT</text>` : ''}`;
+  el.innerHTML = `<svg viewBox="0 0 150 250" role="img" aria-label="Single-line diagram of the ${PTYPES[pt].label}: ${state.truck} position${pt === 'mp' ? '' : `, feeder ${earthed ? 'earthed' : 'not earthed'}`}">
+    <text x="4" y="11" class="st">${{cbp: 'Single-line diagram', dp: 'Disconnecting panel', mp: 'Metering panel', wvt: 'CB + removable VTs', cp600: 'Contactor 3TL8', ltri: 'Switch-fuse L-TRI'}[pt]}</text>
+    <line x1="8" y1="24" x2="142" y2="24" stroke="#c47a4a" stroke-width="4"/><text x="108" y="19" class="sm">Busbar</text>
+    <line x1="${x}" y1="24" x2="${x}" y2="44" class="sl"/>${pt === 'ltri' ? '<line x1="' + x + '" y1="44" x2="' + x + '" y2="50" class="sl"/>' : chev(x, 47, true)}
+    ${part}${posTxt}${feeder}
   </svg>`;
 }
 
@@ -982,7 +1011,9 @@ function renderSpecs() {
     <h3>Maintenance</h3><div class="scroll-x"><table class="grid4"><thead><tr><th>Measure</th><th>When</th><th>What</th></tr></thead><tbody>${MAINT.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
     <h3>Circuit-breaker 3AE</h3>${kv(CB_DATA)}
     <h3>Troubleshooting</h3>${kv(TROUBLE)}
-    <h3>Other panel types</h3>${kv(PANEL_TYPES)}
+    <h3>Other panel types</h3>
+    <p class="small">In 3D (Type selector at the top): disconnecting panel (withdrawable link), metering panel (withdrawable metering part), circuit-breaker panel with removable VTs, contactor panel 600 mm with 3TL8 (truck type, 7.2 kV) and switch-disconnector panel L-TRI 5F. Not built yet: the 435 mm contactor panel with 3TM3 (narrow panel, horizontal double fuses, fold-down ramps, CTs and cables one behind another in the connection compartment), the busbar connection panels and the busbar current metering panel (the documents give their doors and locking, not their inside), and the bus sectionalizer (a CB panel plus a riser panel, no own procedures).</p>
+    ${kv(PANEL_TYPES)}
     <h3>Other NXAIR versions</h3>
     <p class="small">NXAIR 50 kA (172-2014.9) and NXAIR M 24 kV (139-2019.9) use the same general table: M8 30 / M12 70 / M16 110 Nm, control 25 / 60 / 90 Nm. NXAIR M differs in detail: cup-head M12 bolts on some busbar joints, M16x45 with conical spring washer 16 on VT and busbar-earthing-switch connections, and on double-busbar panels insulating plates at 16 Nm (lateral) and 8 Nm with plastic M8 bolts (central). Use the manual of your exact version for those.</p>`;
   for (const el of document.querySelectorAll('[data-peq]')) { const v = state.peq[el.dataset.peq]; if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v); }
@@ -1014,7 +1045,7 @@ function applyMode() {
   world.bkHolder.visible = state.mode === 'breaker';
   world.lvHolder.visible = state.mode === 'lv';
   controls.minDistance = state.mode === 'lv' ? 0.12 : state.mode === 'breaker' ? 0.25 : 0.6; // LV close-ups of keys and terminals
-  for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo(); }
+  for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo() || (id === 'eswSeg' && state.ptype === 'mp') || (id === 'truckSeg' && state.ptype === 'ltri'); }
   $('#t-row').hidden = solo();
   $('#t-gas').hidden = solo();
   $('#sld').hidden = solo();
@@ -1060,6 +1091,12 @@ function setEsw(cmd) {
     renderStep();
     requestAnimationFrame(() => document.querySelector('.drill')?.scrollIntoView({block: 'start'}));
     return;
+  }
+  if (state.ptype === 'mp') return toast('The metering panel has no feeder earthing switch (O §12.1).', 'ok');
+  if (state.ptype === 'ltri' && cmd !== 'howto') {
+    if (state.ltSw > 0.5) return toast('Interlocked: the earthing switch operates only with the switch-fuse OPEN (O §7.3).');
+    if (state.door > 0.5) return toast('Interlocked: close the HV door first (O §7.3).');
+    state.eswT = cmd === 'closed' ? 1 : 0; syncTools(); applyPose(); return;
   }
   const want = cmd === 'closed' ? 1 : 0;
   if (eswBusy) return toast('The earthing switch is being operated.');
@@ -1149,8 +1186,45 @@ const P_DRILL = {
     {t: 'Remove the lever, slide down, padlock.', view: 'lvTop', act() { pd({busLever: 0, busSlide: 0}); }},
   ], done: 'Busbars de-earthed.'},
 };
+const WD = ['cbp', 'dp', 'mp', 'wvt', 'cp600']; // withdrawable / truck types
+for (const k of ['door', 'takeOut', 'putIn', 'shutters', 'earthDev', 'front']) P_DRILL[k].types = WD;
+P_DRILL.busEarth.types = P_DRILL.busDeearth.types = ['cbp', 'dp', 'wvt', 'cp600'];
+const ltBlock = () => (state.door > 0.5 ? {block: 'Interlocked: the HV door must be closed (O §7.3).'} : null);
+Object.assign(P_DRILL, {
+  ltClose: {name: 'Close the switch-fuse', types: ['ltri'], steps: [
+    {t: 'HV door closed, earthing switch OPEN, mechanism latched, no fuse striker tripped.', view: 'door', act() { if (state.ltSw > 0.5) return {block: 'The switch-fuse is already CLOSED.'}; if (state.eswT > 0.5) return {block: 'Interlocked: de-earth first (O §7.3).'}; return ltBlock(); }},
+    {t: 'Push the shared operating slide DOWN: the switch opening is free (the earthing-switch opening stays covered).', view: 'door', act() { pd({ltSlide: -1}); }},
+    {t: 'Insert the operating lever with its pins horizontal fully; turn 90° clockwise to CLOSED; check the blades in the inspection window; push the lever fully down to its end position (latching).', view: 'door', act() { pd({ltSw: 1}); }},
+    {t: 'Remove the lever, slide to the MIDDLE (both openings covered), padlock.', view: 'door', act() { pd({ltSlide: 0}); }},
+  ], done: 'Switch-fuse CLOSED: the stored-energy mechanism is charged for tripping; a fuse striker trips all three poles.'},
+  ltOpen: {name: 'Open the switch-fuse', types: ['ltri'], steps: [
+    {t: 'Push the slide DOWN, insert the lever.', view: 'door', act() { if (state.ltSw < 0.5) return {block: 'The switch-fuse is already OPEN.'}; pd({ltSlide: -1}); }},
+    {t: 'Turn 90° counter-clockwise to OPEN and keep turning to the end position so the toggle fastener latches; check the window.', view: 'door', act() { pd({ltSw: 0}); }},
+    {t: 'Remove the lever, slide to the middle, padlock.', view: 'door', act() { pd({ltSlide: 0}); }},
+  ], done: 'OPEN. The earthing switch and the door are now free.'},
+  ltEarth: {name: 'Earth the feeder', types: ['ltri'], steps: [
+    {t: 'HV door closed, switch-fuse OPEN.', view: 'door', act() { if (state.eswT > 0.5) return {block: 'Already earthed.'}; if (state.ltSw > 0.5) return {block: 'Interlocked: open the switch-fuse first (O §7.3).'}; return ltBlock(); }},
+    {t: 'LIFT the shared slide: the earthing-switch opening is free.', view: 'door', act() { pd({ltSlide: 1}); }},
+    {t: 'Insert the earthing-switch lever (ratchet type) with the CW label visible and the pins aligned; 90° clockwise to CLOSED; check the blades in the window.', view: 'door', act() { state.eswT = 1; }},
+    {t: 'Remove the lever, slide to the middle.', view: 'door', act() { pd({ltSlide: 0}); }},
+  ], done: 'Feeder earthed: indicator vertical I. The switch is interlocked until de-earthed.'},
+  ltDeearth: {name: 'De-earth', types: ['ltri'], steps: [
+    {t: 'HV door closed. Lift the slide.', view: 'door', act() { if (state.eswT < 0.5) return {block: 'Not earthed.'}; const b = ltBlock(); if (b) return b; pd({ltSlide: 1}); }},
+    {t: 'Lever with the CCW label visible, 90° counter-clockwise to OPEN; check the window.', view: 'door', act() { state.eswT = 0; }},
+    {t: 'Remove the lever, slide to the middle.', view: 'door', act() { pd({ltSlide: 0}); }},
+  ], done: 'De-earthed.'},
+  ltFuse: {name: 'Replace the fuses', types: ['ltri'], steps: [
+    {t: 'Switch-fuse OPEN and the feeder earthed with the door closed (drills "Open the switch-fuse", "Earth the feeder").', view: 'door', act() { if (state.ltSw > 0.5 || state.eswT < 0.5) return {block: 'Open the switch-fuse and earth the feeder first (O §18.11).'}; }},
+    {t: 'Double-bit key into its opening, push and turn 90° clockwise, pull the handle up: the door opens. The busbar-side insulating shutter stays closed.', view: 'sdcOpen', act() { pd({door: 1}); }},
+    {t: 'Pull each fuse out of its clamps, upper (striker) end first; insert the new ones with the striker UP (SIBA HHD, e = 442, transformer table: e.g. 10 kV 1000 kVA 80 A). Always replace all three.', view: 'sdcOpen'},
+    {t: 'Close the door: handle up, press it on, handle down, key pushed and turned 90° counter-clockwise, padlock.', view: 'door', act() { pd({door: 0}); }},
+    {t: 'De-earth, then re-latch the toggle: lever into the switch opening, turn it strongly to OPEN to the end stop. Then the switch can be closed.', view: 'door', act() { state.eswT = 0; }},
+  ], done: 'New fuses in, toggle re-latched, feeder de-earthed.'},
+});
 let pdrill = null; // {id, i, note}
-function pdrillHtml(ids) {
+function pdrillHtml(ids0) {
+  const ids = ids0.filter((k) => !P_DRILL[k].types || P_DRILL[k].types.includes(state.ptype));
+  if (!ids.length) return '';
   const id = ids.includes(pdrill?.id) ? pdrill.id : ids[0];
   const d = P_DRILL[id], i = pdrill?.id === id ? pdrill.i : 0;
   return `<div class="drill" id="pDrill">
@@ -1165,7 +1239,7 @@ function pdrillHtml(ids) {
   </div>`;
 }
 function pdrillAct(cmd, id) {
-  const ids = STEPS[state.step].drills || [];
+  const ids = (STEPS[state.step].drills || []).filter((k) => !P_DRILL[k].types || P_DRILL[k].types.includes(state.ptype));
   if (id) { pdrill = {id, i: 0}; renderStep(); goView(P_DRILL[id].steps[0].view); return; }
   pdrill ||= {id: ids[0], i: 0};
   const d = P_DRILL[pdrill.id];
@@ -1784,12 +1858,21 @@ function wire() {
     else if (t.dataset.f) { torqueFilter[t.dataset.f] = t.dataset.v; renderTorques(); }
   });
   $('#ex').addEventListener('input', (e) => { state[mk().e] = +e.target.value / 100; if (solo()) renderLabels(); });
-  for (const [id, key, parse] of [['v-w', 'W', Number], ['v-d', 'D', Number], ['v-bus', 'bus', Number], ['v-ur', 'ur', Number]]) {
+  for (const [id, key, parse] of [['v-type', 'ptype', String], ['v-w', 'W', Number], ['v-d', 'D', Number], ['v-bus', 'bus', Number], ['v-ur', 'ur', Number]]) {
     const el = $('#' + id);
     el.value = String(state[key]);
     el.addEventListener('change', () => {
       state[key] = parse(el.value);
-      store.set('variant', {W: state.W, D: state.D, bus: state.bus, ur: state.ur});
+      // keep the width within what the panel type is built in
+      const allowed = PTYPES[state.ptype].widths;
+      if (!allowed.includes(state.W)) {
+        const w = key === 'W' ? state.W : allowed.includes(800) ? 800 : allowed[0];
+        if (key === 'W') { state.ptype = 'cbp'; toast(`${state.W} mm: that panel type is not built in this width (${PTYPES[$('#v-type').value]?.label}); back to the circuit-breaker panel.`); }
+        else { state.W = w; toast(`${PTYPES[state.ptype].label}: ${allowed.join(' / ')} mm wide; width set to ${w} mm.`, 'ok'); }
+        $('#v-w').value = String(state.W);
+        $('#v-type').value = state.ptype;
+      }
+      store.set('variant', {W: state.W, D: state.D, bus: state.bus, ur: state.ur, ptype: state.ptype});
       variantNote();
       build();
       renderStep();
@@ -1810,6 +1893,7 @@ function wire() {
 }
 
 // -------------------------------------------------------------------------------------------------- boot
+$('#v-type').innerHTML = Object.entries(PTYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('');
 $('#v-w').innerHTML = Object.keys(WIDTHS).map((w) => `<option value="${w}">${w} mm</option>`).join('');
 $('#v-d').innerHTML = DEPTHS.map((d) => `<option value="${d}">${d} mm</option>`).join('');
 $('#v-bus').innerHTML = Object.entries(BUSBAR).map(([k, b]) => `<option value="${k}">${b.label}</option>`).join('');

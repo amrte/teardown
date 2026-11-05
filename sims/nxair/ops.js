@@ -111,7 +111,7 @@ export const OPS_STEPS = [
     warn: 'Key goes in but will not turn: earthing switch CLOSED or HV door open. Crank still inserted: the earthing-switch opening stays blocked and the breaker cannot close.',
   },
   {
-    id: 'switch', phase: 'Operate', title: 'Close, open, charge, discharge', view: 'front', ex: 0, truck: 'service', row: false, focus: ['mech', 'hvdoor'],
+    id: 'switch', phase: 'Operate', title: 'Close, open, charge, discharge', view: 'front', ex: 0, truck: 'service', row: false, focus: ['mech', 'hvdoor'], drills: ['ltClose', 'ltOpen', 'ltFuse'],
     body: [
       'Electrical close: breaker in test or service, OPEN, spring CHARGED, door closed, auxiliary voltage on, local/remote selected, undervoltage release (if any) energised. The motor recharges at once; the opening spring is charged during closing. Indicator 0 → I, counter + 1.',
       'Manual close / open: LOCAL, swing the opening cover aside with the rotary button, insert the push rod, press ON (or OFF) until the switching noise, remove the rod, padlock.',
@@ -121,7 +121,7 @@ export const OPS_STEPS = [
     ],
   },
   {
-    id: 'earthing', phase: 'Operate', title: 'Earth and de-earth the feeder', view: 'door', ex: 0, truck: 'test', esw: 0, row: false, focus: ['esw', 'doorCtl'], drill: 'esw',
+    id: 'earthing', phase: 'Operate', title: 'Earth and de-earth the feeder', view: 'door', ex: 0, truck: 'test', esw: 0, row: false, focus: ['esw', 'doorCtl'], drill: 'esw', drills: ['ltOpen', 'ltEarth', 'ltDeearth'],
     body: [
       'Preconditions: HV door closed, feeder isolated (opposite end too), breaker in TEST position, operating lever at hand, padlock off, electromagnetic interlock released.',
       '1 Lift the slide. 2 Insert the lever slightly with its pins horizontal, 3 push it fully in. 4 Hold it straight and turn 180° clockwise to CLOSED in one movement. 5 Remove the lever, 6 slide down, 7 padlock. Indicator vertical I = earthed.',
