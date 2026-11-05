@@ -128,7 +128,8 @@ const BK_ALLOW = [
   [/^bkShell:/, /^bk(VI|VIin|Rods|Lower|Upper|Shaft):/, 'inside the U of the pole shell, open to the rear (radial check below)'],
   [/^bkVI:/, /^bkVIin:/, 'internals inside the interrupter bottle (radial check below)'],
   [/^bkVIin:(Moving|Fixed) contact stem|^bkVIin:Metal bellows/, /^bk(Lower|Upper|VI|Rods):/, 'stems run coaxially through flanges, guide bushing and couplings'],
-  [/^bkRods:Coupling bolt|^bkRods:Contact-pressure spring/, /^bkLower:Guide bushing/, 'coupling bolt meets the stem at the guide bushing'],
+  [/^bkRods:Guide bolt/, /^bkVIin:(Spring cup|Moving contact stem)/, 'guide bolt slides inside the spring cup'],
+  [/^bkRods:Contact-pressure spring/, /^bkRods:Top coupling|^bkVIin:Spring cup|^bkRods:Guide bolt/, 'spring seated on the coupling and in the cup, around the guide bolt'],
   [/^bkArms:Threaded bolt/, /^bk(Upper|Lower):/, 'threaded bolt screwed 20 mm into the pole terminal'],
   [/^bkArms:/, /^bkTulips:/, 'contact system mounted coaxially on the arm'],
   [/^bkSleeves:/, /^bkArms:/, 'separating shell slid coaxially over the conductor (radial check below)'],
@@ -136,8 +137,13 @@ const BK_ALLOW = [
   [/^bkShaft:(Pole lever|Lever pin)/, /^bkRods:Insulator foot eye/, 'lever fork and pin engage the insulator foot'],
   [/^bkShaft:Main shaft/, /^bkFrame:(Side plate|Mechanism mounting plate)/, 'shaft runs through the side plates and the mechanism plate'],
   [/^bkShaft:(Main shaft|Opening spring leg)/, /^bkOpeningSpring:Opening spring, torsion/, 'torsion springs coaxial on the main shaft (radial check below)'],
-  [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkGear:Gear unit/, 'charging shaft runs through the mechanism plate into the gear unit'],
+  [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkGear:Gear unit|^bkCloseLink:Closing cam/, 'charging shaft runs through the mechanism plate into the gear unit'],
   [/^bkClosingSpring:Charging gear wheel/, /^bkGear:Gear unit/, 'gear wheel inside the gear-unit housing'],
+  [/^bkCloseLink:Closing cam/, /^bkCloseLink:Closing-lever roller/, 'the roller runs on the cam (contact; the lobe is computed so it never cuts in)'],
+  [/^bkCloseLink:Push rod/, /^bkCloseLink:Push-rod pin|^bkShaft:Drive lever/, 'push rod on its pins'],
+  [/^bkCloseLink:Closing lever/, /^bkCloseLink:Closing-lever pivot pin/, 'lever on its pivot pin'],
+  [/^bkOpenLatch:(Opening latch|Pawl)/, /^bkOpenLatch:Opening-latch pivot pin/, 'pawl on its pivot pin'],
+  [/^bkShaft:Main shaft/, /^bkShaft:Main-shaft bearing/, 'shaft in its bearings'],
   [/^bkS1:-S1 coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
   [/^bkX0plug:/, /^bkX0:-X0 (pin|locking bow)/, 'plug pushed over the pins, held by the locking bows'],
   [/^bkKey:Key lock 3AX1437, lock cylinder/, /^bkCover:/, 'lock cylinder through its hole in the cover'],
@@ -190,7 +196,7 @@ if (args.includes('--breaker') || args.includes('--all')) {
     if (dd.sleeveIn <= dd.armR) { console.log(`breaker W${W}: separating shell bore touches the contact arm`); bt++; }
     if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
     const EQ = [{}, {s1: '12', slot2: 'Y4', slot3: 'Y6', lv: 'strip', y8e: true, key: false}, {slot2: 'Y7', slot3: 'Y2', y8e: true, key: true}, {slot2: 'none', slot3: 'Y4', heater: false, s12: false}];
-    for (const [c, s, crank, ei] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3]]) {
+    for (const [c, s, crank, ei] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [0, 0, 200], [0, 0, 245], [0, 0, 275], [0, 0, 300], [0, 0, 330], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3]]) {
       bk.setEquip(EQ[ei || 0]);
       bk.pose({c, s, crank});
       const res = clashes(collect(bk.root)).filter((r) => !allowIn(BK_ALLOW, r.pa, r.pb));

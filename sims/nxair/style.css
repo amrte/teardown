@@ -84,9 +84,9 @@ button, select, input { font: inherit; color: inherit; }
 .stage canvas:active { cursor: grabbing; }
 .labels { position: absolute; inset: 0; pointer-events: none; }
 .tag {
-  position: absolute; transform: translate(-50%, calc(-100% - 10px)); white-space: nowrap;
+  position: absolute; transform: translate(-50%, calc(-100% - 10px)); white-space: normal; max-width: 210px; width: max-content; text-align: center; text-wrap: balance; line-height: 1.25;
   background: var(--surface); border: 1px solid var(--accent); color: var(--ink);
-  font: 600 11.5px/1 var(--font-mono); padding: 4px 6px; border-radius: 2px;
+  font: 600 11.5px/1.25 var(--font-mono); padding: 4px 6px; border-radius: 2px;
   box-shadow: 0 1px 0 var(--line);
 }
 .tag::after {

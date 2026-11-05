@@ -331,7 +331,7 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
     const p = part('bkIndic');
     p.add(B(-95, -55, 145, 175, 118, 148), 'black', 'Operations counter (58), 5 digits, one count per ON + OFF');
     p.add(B(-50, -20, 140, 180, 118, 148), 'black', 'Position indicator drive (56.3), linked to the main shaft');
-    p.add(B(45, 75, 165, 205, 118, 148), 'black', 'Spring state indicator drive (55.1), linked to the charging crank');
+    p.add(B(45, 75, 165, 205, 136, 148), 'black', 'Spring state indicator drive (55.1), linked to the charging crank');
     p.finish();
   }
   // ---------------------------------------------------------------- mechanical interlock plunger (59.2)

@@ -33,7 +33,9 @@ const BK_BASE = [
   {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
   {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
   {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [280, 40, 170], desc: 'Helical extension spring hanging from a bracket at the top right of the mechanism plate. The charging shaft turns the crank, which stretches the spring through a link until the crank is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. ON (56.1 or -Y9) frees the latch, the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor recharges the spring at once, so OFF – ON – OFF is stored. Discharging: supply off, then OFF, ON, OFF by hand.'},
-  {id: 'bkShaft', name: 'Main shaft, pole levers, roller lever', grp: 'Operating mechanism', dir: [0, -90, 220], desc: 'The switching shaft runs across the bottom of the drive and out through both side plates (optional shaft covers, Torx T20, 5 Nm, close off the ends). The cam turns it through the roller lever; one lever per pole reaches back under the pole and pushes its shed insulator (45) up: the contacts close, the contact-pressure springs are loaded, the opening springs on the shaft ends wound. Pole synchronism ≤ 2 ms. Do not touch the poles or the shaft: they move fast, also by remote control.'},
+  {id: 'bkShaft', name: 'Main shaft, drive lever, latch lever, pole levers', grp: 'Operating mechanism', dir: [0, -90, 220], desc: 'The switching shaft runs across the bottom of the drive and out through both side plates (optional shaft covers, Torx T20, 5 Nm, close off the ends). The closing cam turns it through the closing lever, the push rod and the drive lever; the opening latch holds it closed by its latch lever; one lever per pole reaches back under the pole and pushes its shed insulator (45) up: the contacts close, the contact-pressure springs are loaded, the opening springs on the shaft ends wound. Pole synchronism ≤ 2 ms. Do not touch the poles or the shaft: they move fast, also by remote control.'},
+  {id: 'bkCloseLink', name: 'Closing cam, closing lever (bell crank), push rod', grp: 'Operating mechanism', dir: [70, 30, 230], desc: 'The link that turns the main shaft on closing. The closing cam on the charging shaft has one lobe; while the released closing spring turns the shaft from 170° to 360°, the lobe presses the roller of the closing lever (a bell crank pivoted on the mechanism plate) down. The bell crank turns that into a forward push of the push rod, which pushes the drive lever on the main shaft forward: the shaft turns and its pole levers lift the insulators. After the lobe has passed, the main shaft is held closed by the opening latch and the roller stays down, clear of the cam.'},
+  {id: 'bkOpenLatch', name: 'Opening latch (pawl), latch lever, trip bar', grp: 'Operating mechanism', dir: [-60, -40, 230], desc: 'Holds the main shaft in the closed position against the opening springs: the pawl drops behind the nose of the latch lever on the main shaft. OFF (56.2), the armature of -Y1 or, through the trip bar, the strikers of -Y2 … -Y7 lift the pawl; the opening springs and the contact-pressure springs then turn the main shaft back and the contacts open (≤ 30 ms with -Y1). Trip-free: an OFF during closing frees the pawl, so the shaft cannot stay closed.'},
   {id: 'bkOpeningSpring', name: 'Opening springs, torsion, on the main shaft', grp: 'Operating mechanism', dir: [-300, -80, 120], desc: 'Helical torsion springs on the main-shaft ends, one leg fixed to the base, one on the shaft. The closing movement winds them; with the contact-pressure springs they open the breaker when the opening latch is released: opening ≤ 30 ms with -Y1, arcing < 15 ms, break time ≤ 45 ms. Spring forces are not published.'},
   {id: 'bkShell', name: 'Pole shells (46)', grp: 'Pole', dir: [0, 0, -330], desc: 'One epoxy pole shell per phase, open towards the panel (rear), with creepage ribs at its foot. It carries the pole head, the interrupter and the lower connection and takes the switching forces. Clean insulating parts with a damp cloth, warm water and a mild household cleaner only.'},
   {id: 'bkSep', name: 'Separating shells to the drive side (41, optional)', grp: 'Pole', dir: [0, 220, 0], desc: 'Insulating U-shells between each pole and the drive housing, standing above the housing top. Optional.'},
@@ -41,7 +43,7 @@ const BK_BASE = [
   {id: 'bkLower', name: 'Lower connections, pole contact plates (44)', grp: 'Pole', dir: [0, -30, -260], desc: 'Lower connection with its pole contact plate (44), the guide of the moving stem and the flexible conductor that feeds it. Screw-in depth 20 ±1 mm for M12 at ≤ 31.5 kA, ≤ 1600 A (28 ±1 mm for M16 2000–2500 A, 38 ±1 mm at 40 kA). Contact faces: sprayed-copper and sprayed-silver faces wiped with a cloth, never brushed; copper busbars wire-brushed crosswise until bright, a thin film of acid-free Vaseline, bolted at once.'},
   {id: 'bkVI', name: 'Vacuum interrupters (43)', grp: 'Vacuum interrupter', dir: [0, 0, -520], desc: 'Sealed vacuum interrupter per pole, type-approved as an interference emitter under the German Radiation Protection Act (§ 45 StrlSchG). The arc burns in metal vapour and goes out at current zero; arcing < 15 ms. A small change of the contact stroke over its life does not affect function. Frequent switching of overload or short-circuit currents can end its life early. Maintenance-free up to 10 000 cycles (30 000 with Siemens maintenance); replaced as a pole by Siemens.'},
   {id: 'bkVIin', name: 'Interrupter internals (generic)', grp: 'Vacuum interrupter', dir: [0, 0, -720], desc: 'Generic construction, not a Siemens drawing: ceramic insulating body (2 rings), end flanges, centre vapour shield, fixed contact stem and slotted CuCr contact disc at the top, moving contact disc and stem below, stainless bellows that keep the vacuum while the stem moves. Gap and stroke drawn larger than life (Siemens publishes no stroke).'},
-  {id: 'bkRods', name: 'Insulators (45) with contact-pressure springs', grp: 'Pole', dir: [0, -170, -60], desc: 'Shed insulators below each interrupter "transmit the switching movement to the poles": the main-shaft lever pushes the insulator up, its top coupling drives the moving stem through a contact-pressure spring that keeps the closed contacts pressed and takes up contact erosion (over-travel).'},
+  {id: 'bkRods', name: 'Insulators (45) with contact-pressure springs', grp: 'Pole', dir: [0, -170, -60], desc: 'Shed insulators below each interrupter "transmit the switching movement to the poles": the main-shaft lever pushes the insulator up, its top coupling carries the moving stem through the contact-pressure spring: the spring sits on the coupling, the spring cup of the stem sits on the spring, and a guide bolt on the coupling slides in the cup. Until the contacts touch, stem and insulator move together on the preloaded spring; the last millimetres of the stroke (over-travel) compress it, which presses the closed contacts together and takes up contact erosion. Spring forces and the real over-travel are not published; the drawing uses 6 mm.'},
   {id: 'bkArms', name: 'Contact arms (22) on threaded bolts (22.1)', grp: 'Primary contacts', dir: [0, 0, -400], desc: 'Hollow silver-plated copper arms Ø 40 mm (≤ 1250 A), 274 mm from the pole contact plate to the end of the contact system. The threaded bolt is greased with Vaseline in the screw-in section, screwed 20 ±1 mm into the terminal and tightened 40 ±4 Nm (M12, greased); the arm slides over it. Copper end faces roughened, cleaned and greased with Vaseline; silver-plated faces cleaned and greased.'},
   {id: 'bkTulips', name: 'Contact systems (23, 23.1) with arm adapter (22.2)', grp: 'Primary contacts', dir: [0, 0, -600], desc: 'Contact system: a cage of spring-loaded contact fingers held by ring springs. For Ø 40 mm arms the contact arm adapter (22.2) is set in from the back of the contact system: fingers greased with Molykote Longterm 2, adapter adjusted with screw, washers and nut, tightened with an open-ended spanner, then screw, washers and nut removed. The contact system goes onto bolt and arm with the round outer edge towards the arm, 40 ±4 Nm (M12, greased); the other side of the fingers is greased last.'},
   {id: 'bkSleeves', name: 'Separating shells to the panel side (47, optional)', grp: 'Primary contacts', dir: [0, 0, -260], desc: 'Insulating sleeves slid over the main conductors and snapped into the pole shell, to insulate the poles from each other where the connection space is tight; conductors up to Ø 60 mm. Up to 17.5 kV: slide onto the bolts, set against the pole shell and let them engage; check that the snap hooks are fully behind the insulating ribs.'},
@@ -148,7 +150,24 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   const yCS = 290, zCS = 70; // charging shaft
   const xCrank = 150, xCam = 60, xDisc = 116, CR = 40; // spring axis, cam, crank web (beside the spring, not under it) // closing crank, closing cam, crank radius
   const ySpringTop = 495;
-  const ROD_TOP = yLo - 41.5; // top of the insulator coupling, contacts closed
+  // drive train cam → bell crank → push rod → drive lever → main shaft (all in the plane x = xCam)
+  const CAM_BASE = 32, PIVY = yCS - 42, PIVZ = 110, ARM_R = 40, ARM_Q = 58, DL = 124; // cam base radius, bell-crank pivot and arms, drive lever
+  const phiOf = (lift) => Math.asin((9 - (STROKE + OVER) + lift) / LEVER); // main-shaft angle from the insulator lift
+  const PHI_O = phiOf(0), PHI_C = phiOf(STROKE + OVER);
+  const dzOf = (phi) => DL * (Math.sin(phi) - Math.sin(PHI_O)); // drive-lever tip (= push-rod) travel
+  const DEP_MAX = (ARM_R * dzOf(PHI_C)) / ARM_Q; // roller depression needed for a full closing
+  const smooth = (t) => t * t * (3 - 2 * t);
+  // lobe depth over the cam's own angle (deg, from +y towards +z); the bottom of the cam meets the roller at 180° − crank
+  const camDep = (a0) => {
+    const a = ((a0 % 360) + 360) % 360;
+    if (a >= 250 && a <= 310) return DEP_MAX * smooth((310 - a) / 60);
+    if (a >= 240 && a < 250) return DEP_MAX;
+    if (a >= 200 && a < 240) return DEP_MAX * smooth((a - 200) / 40);
+    return 0;
+  };
+  const ROD_TOP = yLo - 41.5; // top of the spring cup on the moving stem, contacts closed (under the guide bushing)
+  const CUP0 = ROD_TOP - 12; // bottom of the spring cup, contacts closed
+  const CAP0 = CUP0 - 16; // top of the insulator coupling, contacts closed: spring 16 mm closed, 16 + OVER open
 
   // textured materials for the operating panel (browser only)
   const MX = {...mats};
@@ -283,7 +302,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
       b.add(C(38, 38, 16, 'x', 0, 0, 0, 36), 'steel', 'Charging gear wheel (inside the gear unit)');
       b.add(C(46, 46, 12, 'x', xDisc, 0, 0, 28), 'steel', 'Closing crank disc');
       b.add(C(7, 7, xCrank + 6 - xDisc, 'x', (xDisc + xCrank + 6) / 2, CR, 0, 12), 'zinc', 'Crank pin');
-      b.add(C(40, 40, 14, 'x', xCam, -12, 0, 28), 'steel', 'Closing cam (eccentric)');
+
     });
     rig.crank.position.set(0, yCS, zCS);
     // the spring mesh is rebuilt at its real length in pose(); no edge lines on it
@@ -298,11 +317,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   // ------------------------------------------------------------ main shaft and levers
   {
     const p = part('bkShaft');
-    p.add(B(xCam - 34, xCam - 18, yMS + 30, yMS + 62, zMS - 8, zMS + 8), 'black', 'Opening latch (released by OFF / -Y1)');
-    p.add(B(-155, -25, 180, 186, 105, 125), 'steel', 'Trip bar: the strikers of -Y2 … -Y7 hit it, it frees the opening latch');
-    p.add(B(-28, -22, 110, 180, 100, 112), 'steel', 'Trip bar link to the opening latch');
-    p.add(B(-22, xCam - 34, 110, 116, 100, 112), 'steel', 'Trip bar link to the opening latch');
-    p.add(B(xCam - 40, xCam - 34, 110, 116, 68, 100), 'steel', 'Trip bar link to the opening latch');
+    for (const sx of [-1, 1]) p.add(C(26, 26, 4.5, 'x', sx * (hh + 2.5), yMS, zMS, 24), 'galvDark', 'Main-shaft bearing (outside the side plate)');
     p.finish();
     rig.shaft = sub('bkShaft', 'Main shaft with pole levers', (b) => {
       b.add(C(18, 18, 2 * hh + 30, 'x', 0, 0, 0), 'steel', 'Main shaft');
@@ -311,8 +326,10 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
         for (const s of [-1, 1]) b.add(B(x + s * 9 - 2.5, x + s * 9 + 2.5, -10, 10, -LEVER - 8, -LEVER + 30), 'steel', 'Pole lever fork');
         b.add(C(4, 4, 24, 'x', x, 0, -LEVER, 10), 'zinc', 'Lever pin');
       }
-      b.add(B(xCam - 7, xCam + 7, 0, 148, -7, 7), 'steel', 'Roller lever');
-      b.add(C(12, 12, 16, 'x', xCam, 160, 0, 16), 'zinc', 'Cam roller');
+      b.add(B(xCam - 6, xCam + 6, 0, DL, -6, 6), 'steel', 'Drive lever: the push rod turns the main shaft through it');
+      b.add(C(4, 4, 26, 'x', xCam, DL, 0, 10), 'zinc', 'Drive lever pin');
+      b.add(B(31, 39, 0, 52, -5, 5), 'steel', 'Latch lever: held closed by the opening latch');
+      b.add(B(31, 39, 44, 54, 0, 12), 'steel', 'Latch lever nose');
       b.add(B(-186, -178, 0, 26, 8, 22), 'steel', 'Auxiliary switch drive crank');
       for (const s of [-1, 1]) {
         b.add(B(s * (hh + 8) - 3, s * (hh + 8) + 3, -10, 40, -8, 8), 'steel', 'Shaft end lever (covered by the optional shaft cover)');
@@ -320,6 +337,52 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
       }
     });
     rig.shaft.position.set(0, yMS, zMS);
+  }
+
+  // ------------------------------------------------------------ closing lever (bell crank) + push rod
+  {
+    const p = part('bkCloseLink');
+    p.add(C(4, 4, 39, 'x', 65.5, PIVY, PIVZ, 10), 'zinc', 'Closing-lever pivot pin');
+    p.add(B(80, 85, PIVY - 10, PIVY + 10, PIVZ - 10, PIVZ + 10), 'galv', 'Closing-lever bracket on the mechanism plate');
+    p.finish();
+    // the closing cam sits on the charging shaft and turns with it (pose sets its angle with the crank)
+    rig.cam = sub('bkCloseLink', 'Closing cam on the charging shaft', (cb) => {
+      // closing cam: base circle with one lobe, extruded along x
+      const pts = [];
+      for (let a = 0; a < 360; a += 3) { const r = CAM_BASE + camDep(a), t = (a * Math.PI) / 180; pts.push(new THREE.Vector2(-r * Math.sin(t), r * Math.cos(t))); }
+      const cam = new THREE.ExtrudeGeometry(new THREE.Shape(pts), {depth: 14, bevelEnabled: false});
+      cam.rotateY(Math.PI / 2);
+      cam.translate(xCam - 7, 0, 0);
+      cb.add(cam, 'steel', 'Closing cam: one lobe presses the closing-lever roller down during closing');
+    });
+    rig.cam.position.set(0, yCS, zCS);
+    rig.bell = sub('bkCloseLink', 'Closing lever (bell crank)', (b) => {
+      for (const sx of [-1, 1]) {
+        const x0 = xCam + sx * 10;
+        b.add(B(x0 - 2, x0 + 2, -6, 6, -ARM_R - 6, 6), 'steel', 'Closing lever: roller arm');
+        b.add(B(x0 - 2, x0 + 2, -ARM_Q - 6, 6, -6, 6), 'steel', 'Closing lever: output arm');
+      }
+      b.add(C(7, 7, 24, 'x', xCam, 0, 0, 16), 'steel', 'Closing lever hub');
+      b.add(C(10, 10, 14, 'x', xCam, 0, -ARM_R, 20), 'zinc', 'Closing-lever roller (runs on the cam)');
+      b.add(C(4, 4, 24, 'x', xCam, -ARM_Q, 0, 10), 'zinc', 'Push-rod pin');
+    });
+    rig.bell.position.set(0, PIVY, PIVZ);
+    rig.pushRod = sub('bkCloseLink', 'Push rod', (b) => b.add(C(5, 5, 1, 'y', 0, 0.5, 0, 12), 'steel', 'Push rod: closing lever → drive lever'));
+  }
+  // ------------------------------------------------------------ opening latch (pawl), trip bar
+  {
+    const p = part('bkOpenLatch');
+    p.add(B(-155, -25, 180, 186, 105, 125), 'steel', 'Trip bar: the strikers of -Y2 … -Y7 hit it, it lifts the opening latch');
+    p.add(B(-28, -22, 110, 180, 100, 112), 'steel', 'Trip bar link to the opening latch');
+    p.add(B(-22, 26, 110, 116, 100, 112), 'steel', 'Trip bar link to the opening latch');
+    p.add(B(20, 26, 110, 116, 56, 100), 'steel', 'Trip bar link to the opening latch');
+    p.add(C(3, 3, 14, 'x', 35, 130, 49, 10), 'zinc', 'Opening-latch pivot pin');
+    p.finish();
+    rig.pawl = sub('bkOpenLatch', 'Opening latch (pawl)', (b) => {
+      b.add(B(31, 39, -18, 4, -6, 2), 'black', 'Opening latch (pawl): drops behind the latch-lever nose, freed by OFF / -Y1 / trip bar');
+      b.add(B(26, 31, -16, -10, -6, 2), 'steel', 'Pawl tail (the trip bar link and the -Y1 armature act here)');
+    });
+    rig.pawl.position.set(0, 130, 49);
   }
 
   // ------------------------------------------------------------ opening springs
@@ -390,9 +453,11 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     const mv = new THREE.Group();
     mv.userData.part = 'bkVIin';
     const mb = new PartBuilder(mv, MX);
-    const stemLen = yGap - 8 - ROD_TOP;
+    // the stem ends in a spring cup that rests on the contact-pressure spring (closed-position coordinates)
+    const stemLen = yGap - 8 - CUP0;
     mb.add(C(30, 30, 8, 'y', 0, -4, 0, 28), 'copper', 'Moving contact disc (CuCr, slotted)');
     mb.add(C(12, 12, stemLen, 'y', 0, -8 - stemLen / 2, 0), 'copper', 'Moving contact stem');
+    mb.add(C(17, 17, ROD_TOP - CUP0, 'y', 0, (ROD_TOP + CUP0) / 2 - yGap, 0, 24), 'steel', 'Spring cup on the moving stem (contact-pressure spring seat)');
     mb.finish();
     mv.position.set(x, yGap, zPole);
     parts.bkVIin.add(mv);
@@ -413,15 +478,20 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     const rb = new PartBuilder(rod, MX);
     const yE = yMS + 9; // lever pin height with the contacts closed
     rb.add(B(-6, 6, yE - 8, yE + 14, -8, 8), 'steel', 'Insulator foot eye (lever pin)');
-    rb.add(C(22, 22, 150 - (yE + 14), 'y', 0, (150 + yE + 14) / 2, 0, 24), 'epoxy', 'Insulator (45)');
-    for (const y of [100, 120, 140]) rb.add(L([[22, 0], [42, 3], [40, 6], [22, 9]], 'y', 0, y - 4.5, 0, 28), 'epoxy', 'Insulator shed');
-    rb.add(C(25, 25, 8, 'y', 0, 154, 0, 24), 'steel', 'Top coupling');
-    rb.add(helix(14, 13, 4, 2.4).translate(0, 158, 0), 'spring', 'Contact-pressure spring');
-    rb.add(C(7, 7, ROD_TOP - 158, 'y', 0, (ROD_TOP + 158) / 2, 0, 12), 'steel', 'Coupling bolt to the moving stem');
+    rb.add(C(22, 22, CAP0 - 8 - (yE + 14), 'y', 0, (CAP0 - 8 + yE + 14) / 2, 0, 24), 'epoxy', 'Insulator (45)');
+    for (const y of [97, 112, 127]) rb.add(L([[22, 0], [42, 3], [40, 6], [22, 9]], 'y', 0, y - 4.5, 0, 28), 'epoxy', 'Insulator shed');
+    rb.add(C(25, 25, 8, 'y', 0, CAP0 - 4, 0, 24), 'steel', 'Top coupling (contact-pressure spring seat)');
+    rb.add(C(6, 6, ROD_TOP - 1 - CAP0, 'y', 0, (ROD_TOP - 1 + CAP0) / 2, 0, 12), 'steel', 'Guide bolt: slides in the spring cup, keeps the spring centred');
     rb.finish();
     rod.position.set(x, 0, zPole);
     parts.bkRods.add(rod);
     rig.rodParts.push(rod);
+    // contact-pressure spring between the insulator's top coupling and the stem's cup; rebuilt at its length in pose()
+    const cps = new THREE.Mesh(helix(CUP0 - CAP0 + OVER, 13, 4, 2.2), MX.spring);
+    cps.userData = {label: 'Contact-pressure spring (preloaded; compressed by the over-travel)', noEdges: true, len: -1};
+    cps.position.set(x, 0, zPole);
+    parts.bkRods.add(cps);
+    (rig.cpSprings ||= []).push(cps);
     // contact arms (22) on threaded bolts (22.1), contact systems (23) with arm adapter (22.2), sleeves (47)
     const ar = armD / 2;
     for (const [y, lab] of [[yUp, 'Upper'], [yLo, 'Lower']]) {
@@ -443,10 +513,22 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   // ------------------------------------------------------------ the rig
   const E = new THREE.Vector3(), Pp = new THREE.Vector3(), d = new THREE.Vector3();
   let springLen = -1;
+  const phiAt = (sv) => { const tr = Math.min(1, sv * 1.15) * STROKE; return phiOf(tr + OVER * Math.max(0, sv * 1.15 - 1) / 0.15); };
   const pose = ({c = 0, s = 0, crank = null, motor = 0, pClose = 0, pOpen = 0}) => {
     // charging crank: 0° discharged (pin up), 170° charged and latched, 360° after the closing stroke
-    const th = ((crank ?? (c > 0.99 ? 170 : c * 170)) * Math.PI) / 180;
+    const cDeg = crank ?? (c > 0.99 ? 170 : c * 170);
+    const th = (cDeg * Math.PI) / 180;
+    // during the closing stroke (crank 170° → 360°) the cam lobe drives the breaker closed
+    if (cDeg > 170 && cDeg <= 360) {
+      const dep = camDep(180 - cDeg);
+      if (dep > 0) {
+        let lo = 0, hi = 1;
+        for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; ((ARM_R * dzOf(phiAt(m))) / ARM_Q < dep ? (lo = m) : (hi = m)); }
+        s = Math.max(s, hi);
+      }
+    }
     rig.crank.rotation.x = th;
+    rig.cam.rotation.x = th;
     const pinY = yCS + CR * Math.cos(th), pinZ = zCS + CR * Math.sin(th);
     const yBot = pinY + 14;
     const len = ySpringTop - yBot;
@@ -469,10 +551,36 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     // main shaft: lever tips rise from 57 (open) to 75 (closed): contact travel + over-travel
     const travel = Math.min(1, s * 1.15) * STROKE;
     const lift = travel + OVER * Math.max(0, s * 1.15 - 1) / 0.15;
-    rig.shaft.rotation.x = Math.asin((yMS + 9 - (STROKE + OVER) + lift - yMS) / LEVER);
+    const phi = phiOf(lift);
+    rig.shaft.rotation.x = phi;
+    // bell crank and push rod follow the main shaft (the push rod is rigid: its ends move by the same dz)
+    const dz = dzOf(phi);
+    const a = -Math.asin(dz / ARM_Q);
+    rig.bell.rotation.x = a;
+    const qy = PIVY - ARM_Q * Math.cos(a), qz = PIVZ - ARM_Q * Math.sin(a);
+    const py = yMS + DL * Math.cos(phi), pz = zMS + DL * Math.sin(phi);
+    E.set(xCam, py, pz);
+    d.set(0, qy - py, qz - pz);
+    rig.pushRod.position.copy(E);
+    rig.pushRod.quaternion.setFromUnitVectors(Y, d.clone().normalize());
+    rig.pushRod.scale.set(1, d.length(), 1);
+    rig.pawl.rotation.x = 0.55 * pOpen;
     for (const mv of rig.moving) mv.position.y = yGap - STROKE + travel;
     for (const bel of rig.bellows) bel.scale.y = 1 + (travel - STROKE) / 48;
-    for (const r of rig.rodParts) r.position.y = -(STROKE + OVER) + lift;
+    const ro = -(STROKE + OVER) + lift, mo = travel - STROKE;
+    for (const r of rig.rodParts) r.position.y = ro;
+    // the spring carries the stem: same length while both move together, shorter by the over-travel once the contacts touch
+    const cl = CUP0 + mo - (CAP0 + ro);
+    for (const sp of rig.cpSprings) {
+      sp.position.y = CAP0 + ro;
+      if (Math.abs(cl - sp.userData.len) > 0.05) {
+        sp.userData.len = cl;
+        sp.geometry.dispose();
+        sp.geometry = helix(cl, 13, 4, 2.2);
+        sp.geometry.computeBoundingBox();
+        sp.userData.prims = [{label: sp.userData.label, box: sp.geometry.boundingBox.clone()}];
+      }
+    }
     rig.plungerClose.position.y = 150 + 14 * pClose;
     rig.plungerOpen.position.z = 92 - 8 * pOpen;
     rig.btnOn.position.z = -6 * pClose;
