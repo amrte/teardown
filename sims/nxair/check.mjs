@@ -30,6 +30,13 @@ const ALLOW = [
   [/^lvPlug(#[^:]*)?:LV plug cable/, /^bkX0plug:-X0 cable gland|^lvPlug:LV plug \(64-pole/, 'cable leaves the -X0 gland on the breaker and is moulded into the plug'],
   [/^bk(Tulips|Arms|Sleeves):/, /^(partition:Vertical partition|shellB:Bushing plate)/, 'arms pass through the bushing holes of the partition / plate (radial check below)'],
   [/^bolt:cbTulip/, /^bush[UL]:/, 'contact-system joint inside the bushing bore in service'],
+  [/^endWall:/, /^busbars:Main busbar|^bolt:(prcUp|prcLow|lv|earthLink)/, 'at the row end the busbars stop at the end panel and the panel-to-panel bolts are not fitted (drawn on every panel)'],
+  [/^earthDev:Earthing tulip|^earthDev:Spindle/, /^bush[UL]:|^shutters:|^partition:Vertical partition|^shellB:Bushing plate/, 'earthing tulip on the fixed contact inside the bushing bore, spindle through the open shutter'],
+  [/Padlock shackle/, /Operating slide/, 'the padlock hangs in the hole of the operating slide'],
+  [/^lv(#[^:]*)?:Operating slide \(busbar/, /^lv:(Actuating opening: busbar|LV door)/, 'the slide covers the actuating opening on the door'],
+  [/^arresters:Connection strap/, /^connBars:Cable connection bar/, 'strap bolted to the connection bar'],
+  [/^busES:Riser|^busES:Bushing in the floor/, /^(shellB:Pressure relief flap|busESbox:Busbar earthing switch box: floor|busbars:Main busbar)/, 'riser bolted on the busbar, through its bushing in the box floor'],
+  [/^busES:Drive/, /^(lv:|busESbox:|prc:PRC front wall)/, 'drive rod through the LV compartment and the duct wall into the box'],
   [/^bk(Tulips|Arms|Sleeves):/, /^bush[UL]:/, 'contact systems, arms and separating shells inside the bushing bore: verified radially below'],
   [/^bkTulips:Contact finger|^bkTulips:Ring spring|^bkTulips:Contact system cage/, /^bush[UL]:Fixed contact/, 'the fingers grip the fixed contact (radial check below)'],
   [/^bush[UL]:/, /^(shellB:Bushing plate|partition:Vertical partition)/, 'bushing passes through its hole in the plate / partition (r spoutRo + 3)'],
@@ -188,20 +195,27 @@ const BK_ALLOW = [
 const mats = makeMaterials([]);
 let total = 0;
 for (const W of widths) {
-  for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) {
-    const panel = buildPanel(mats, {W, D, bus, ur: 17.5});
+  const EQS = [null, {vds: 'capdis', busES: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true}, {vds: 'vois', fan: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true}];
+  for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) for (const eq of EQS) {
+    if (eq && bus !== 2500) continue; // options: once per width and depth
+    const panel = buildPanel(mats, {W, D, bus, ur: 17.5, eq: eq || undefined});
     for (const r of radial(panel)) { console.log(`W${W} D${D}: ${r}`); total++; }
-    for (const [truck, z] of [['service', 0], ['test', TRAVEL]]) for (const esw of [0, 1]) {
+    for (const [truck, z] of [['service', 0], ['test', TRAVEL], ...(eq ? [['out', 1150]] : [])]) for (const esw of [0, 1]) {
       for (const k of ['truck', 'mech', 'breaker']) for (const g of panel.parts[k] || []) g.position.z = z;
-      for (const g of panel.parts.shutters || []) for (const c of g.children) if (c.userData.shut) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (truck === 'service' ? 1 : 0); }
+      const edSide = truck === 'out' ? (esw ? 'lower' : 'upper') : null;
+      for (const g of panel.parts.shutters || []) for (const c of g.children) if (c.userData.shut) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (truck === 'service' || (edSide === 'upper' && c.userData.shut > 0) || (edSide === 'lower' && c.userData.shut < 0) ? 1 : 0); }
       { const L = panel.lvCable, pr = panel.root.position; lvRun = {y: L.y0 - 3 - 8 + pr.y, z0: L.z0 + pr.z, z1: L.z1 + z + 30 + pr.z, zDown: L.z1 + z + 31 + pr.z, y1: L.y1 + 24 + pr.y}; }
+      panel.parts.lvPlug[0].traverse((c) => { if (c.userData.lvCable) c.visible = truck !== 'out'; });
       panel.parts.lvPlug[0].traverse((c) => { if (c.userData.lvCable) { c.geometry = lvCableGeometry(panel.lvCable, z); c.geometry.computeBoundingBox(); c.userData.prims = [{label: 'LV plug cable (64-pole)', box: c.geometry.boundingBox.clone()}]; } });
       for (const g of panel.parts.esw || []) for (const c of g.children) if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + (c.userData.openDelta ?? 1.25) * (1 - esw);
+      for (const g of panel.parts.busES || []) for (const c of g.children) if (c.userData.busBlade) c.rotation.x = esw ? c.userData.closed : c.userData.open;
+      // breaker out: earthing device fitted on the upper (ES open) or lower (ES closed) contacts, that shutter open
+      for (const g of panel.parts.earthDev || []) g.visible = truck === 'out' && g.userData.earthDev === (esw ? 'lower' : 'upper');
       if (truck === 'service' && esw === 1) continue; // interlocked, cannot exist
       panel.root.updateMatrixWorld(true);
       const res = clashes(collect(panel.root).concat(args.includes('--bolts') ? boltBoxes(panel) : []));
       if (res.length) {
-        console.log(`\n== W${W} D${D} ${bus} A · truck ${truck} · ES ${esw ? 'closed' : 'open'}: ${res.length}`);
+        console.log(`\n== W${W} D${D} ${bus} A ${eq ? JSON.stringify(eq) : ''} · truck ${truck} · ES ${esw ? 'closed' : 'open'}: ${res.length}`);
         const seen = new Set();
         for (const r of res.sort((x, y) => y.pen - x.pen)) {
           const k = [r.a, r.b].sort().join(' × ');

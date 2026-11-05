@@ -31,7 +31,8 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', gas: false, door: 0, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', gas: false, door: 0, busEs: 0, busSlide: 0, earthDev: null,
+  peq: {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -116,7 +117,7 @@ function build() {
   const row = new THREE.Group();
   row.scale.setScalar(0.001);
   scene.add(row);
-  const opts = {W: state.W, D: state.D, bus: state.bus, ur: state.ur};
+  const opts = {W: state.W, D: state.D, bus: state.bus, ur: state.ur, eq: state.peq};
   const subject = buildPanel(mats, opts);
   subject.root.position.z = -state.D / 2;
   row.add(subject.root);
@@ -201,6 +202,8 @@ function build() {
       }
     });
     for (const id of ['crane', 'serviceTruck', 'rails']) for (const g of n.parts[id] || []) g.visible = false;
+    for (const g of n.parts.endWall || []) g.visible = g.userData.side === s; // end walls at the ends of the row
+    for (const g of n.parts.earthDev || []) g.visible = false;
     row.add(n.root);
     neighbors.push(n);
   }
@@ -249,7 +252,7 @@ function syncPanelCb() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {door: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
+const anim = {door: 0, busEs: 0, busSlide: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -296,6 +299,13 @@ function applyPose(force) {
       g.position.set(hx - (hx * c + hz * sn), 0, hz - (-hx * sn + hz * c)).addScaledVector(g.userData.dir, anim.ex);
     }
   }
+  for (const g of subject.parts.busES || []) for (const c of g.children) if (c.userData.busBlade) c.rotation.x = c.userData.open + (c.userData.closed - c.userData.open) * anim.busEs;
+  for (const g of subject.parts.lv || []) for (const c of g.children) {
+    if (c.userData.busSlide) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + 70 * anim.busSlide; }
+    if (c.userData.busInd) c.rotation.z = (1 - anim.busEs) * Math.PI / 2;
+  }
+  for (const g of subject.parts.endWall || []) g.visible = !state.row;
+  for (const g of subject.parts.earthDev || []) g.visible = state.earthDev === g.userData.earthDev && anim.truck > 700;
   if (world.bk) for (const g of Object.values(world.bk.parts)) { g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx); if (g.userData.extra) g.position.add(g.userData.extra); }
   if (world.lv) world.lv.pose({ex: anim.lvEx, door: anim.lvDoor});
   for (const p of [subject, ...neighbors]) {
@@ -601,7 +611,7 @@ function frame(now) {
   let moved = false;
   const doorT = state.truck === 'out' ? 1 : state.door;
   if (Math.abs(anim.door - doorT) > 1e-3) { anim.door += (doorT - anim.door) * (reduced ? 1 : 1 - Math.exp(-dt * 3)); moved = true; }
-  for (const [a, b] of [['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
+  for (const [a, b] of [['busEs', 'busEs'], ['busSlide', 'busSlide'], ['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
   if (moved) applyPose();
@@ -882,13 +892,34 @@ function renderSpecs() {
     <h2>Ratings</h2>${kv(RATINGS)}
     <h3>Panel dimensions</h3>${kv(DIMENSIONS)}
     <h3>Your configuration</h3>${kv([
-      ['Panel', `${state.W} x ${state.D} x 2300 mm (W x D x H), circuit-breaker panel, feeder ${w.feeder}`],
+      ['Panel', `${state.W} x ${state.D} x ${world?.subject?.dims.H === 2350 ? 2350 : 2300}${world?.subject?.eq.fan ? ' (2450 with the fan box)' : ''} mm (W x D x H), circuit-breaker panel, feeder ${w.feeder}`],
       ['Transport weight', `≈ ${w.kg} kg (≤ 31.5 kA, without rear duct)`],
       ['Bushing fixed contact', w.contact ? `Ø ${w.contact} mm` : 'see order documents'],
       ['Busbar joint', `${BUSBAR[state.bus].bolt}, ${BUSBAR[state.bus].bars} bar${BUSBAR[state.bus].bars > 1 ? 's' : ''} per phase drawn, bag ${BUSBAR[state.bus].bag}`],
       ['Transverse partition', state.D >= 1400 ? 'Compulsory (depth ≥ 1400 mm)' : 'Optional (depth 1350 mm)'],
       ['Insulating shells', state.ur === 17.5 ? 'Yes, Ur = 17.5 kV' : 'Only with insulated busbar option'],
     ])}
+    <h3>Panel options</h3>
+    <div class="equip">
+      <label>Voltage detection <select data-peq="vds"><option value="lrm">LRM test sockets (feeder + busbar)</option><option value="capdis">CAPDIS-S2+ in the LV door</option><option value="vois">VOIS+ in the LV door</option></select></label>
+      <label class="check"><input type="checkbox" data-peq="busES" ${state.W > 800 ? 'disabled' : ''}> Busbar earthing switch (600 / 800 mm; panel 2350)</label>
+      <label class="check"><input type="checkbox" data-peq="fan" ${state.W < 800 ? 'disabled' : ''}> Forced ventilation (800 / 1000 mm; 2450)</label>
+      <label class="check"><input type="checkbox" data-peq="keys"> Key interlocks</label>
+      <label class="check"><input type="checkbox" data-peq="padlock"> Padlocks</label>
+      <label class="check"><input type="checkbox" data-peq="motor"> Motor-operated racking (control door)</label>
+      <label class="check"><input type="checkbox" data-peq="arresters"> Surge arresters</label>
+      <label class="check"><input type="checkbox" data-peq="endWalls"> End walls at the row ends</label>
+    </div>
+    <ul class="plain small">
+      <li><b>Voltage detection</b> (O §20, IEC 61243-5): LRM = two socket strips at the bottom of the LV door, for the feeder and the busbar, checked with the plug-in indicator LRM-ST 8DX1620 (flashing or lit = not isolated). CAPDIS-S1+ / S2+ (Kries) and VOIS+ are integrated units in the LV door with their own display (A0 = no operational voltage).</li>
+      <li><b>Busbar earthing switch</b> (O §21, catalog p. 14): make-proof, M0 / E1, in a box over the busbar compartment inside the pressure relief duct; operated from a plate in the high LV door (operating point 2094 mm, 110-2300.9) with the operating lever: pins at "10 past 8" and ≈ 115° clockwise to earth, pins vertical and ≈ 115° counter-clockwise to de-earth. No internal interlock: padlock, electromagnetic interlock or keys. Not with forced ventilation.</li>
+      <li><b>Forced ventilation</b> (O §6.3, §10.6, §29.7; I §7.12): fan box on the front of the duct roof behind the LV compartment, ventilation slots in the HV door and a flap on its inside that must be set to its operational position before the door is closed. Fan ebm-papst R2E270-AA01-05 (O) / R3G250-RO06-71 (I), replace before 40 000 h. The catalog needs it for 2500 / 3150 A in 800 mm panels at 40 kA and 4000 A in 1000 mm panels; the installation instructions say 4000 A only.</li>
+      <li><b>Interlocks</b> (O §7.4–7.6, §25): key locks under a hinged cover on the HV door free their key only with the feeder earthing switch CLOSED, OPEN, or with the breaker in test; padlocks hang in the operating slides and on the door handle.</li>
+      <li><b>Motor-operated racking</b> (O §27): a control door on the HV door covers the racking, key, earthing-switch, CLOSE and charging openings; with it open, electrical racking is blocked. Access mode with the double-bit key: M motor, H hand, T interlocked (needed to open the HV door). Racking motor run time &lt; 65 s.</li>
+      <li><b>Surge arresters / limiters</b> (catalog p. 14): beside the sealing ends; disconnect them for the HV test. Type and size are not given: drawn.</li>
+      <li><b>End walls</b>: epoxy powder-coated, 35 mm (110-2300.9); the crane rod goes through them, the hole is closed by a sealing stopper.</li>
+    </ul>
+    <p class="small muted">Sizes of the indicator units, the fan box, the control door, the key-lock cover, the busbar earthing box and the arresters are not in the documents: drawn.</p>
     <h3>Foundation drawing (110-2300.9)</h3><div class="scroll-x"><table class="grid4"><thead><tr>${FOUNDATION[0].map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${FOUNDATION.slice(1).map((r) => `<tr>${r.map((c, i) => (i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`)).join('')}</tr>`).join('')}</tbody></table></div>
     <p class="small muted">All mm. The model's floor shows the 40 kA / 1500 mm cut-outs for the chosen width.</p>
     <h2>Internal arc and pressure relief</h2>
@@ -931,6 +962,7 @@ function renderSpecs() {
     <h3>Other panel types</h3>${kv(PANEL_TYPES)}
     <h3>Other NXAIR versions</h3>
     <p class="small">NXAIR 50 kA (172-2014.9) and NXAIR M 24 kV (139-2019.9) use the same general table: M8 30 / M12 70 / M16 110 Nm, control 25 / 60 / 90 Nm. NXAIR M differs in detail: cup-head M12 bolts on some busbar joints, M16x45 with conical spring washer 16 on VT and busbar-earthing-switch connections, and on double-busbar panels insulating plates at 16 Nm (lateral) and 8 Nm with plastic M8 bolts (central). Use the manual of your exact version for those.</p>`;
+  for (const el of document.querySelectorAll('[data-peq]')) { const v = state.peq[el.dataset.peq]; if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v); }
 }
 function renderSources() {
   $('#pane-sources').innerHTML = `
@@ -1555,6 +1587,15 @@ function wire() {
   $('#views').innerHTML = VIEW_BUTTONS.map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="false">${l}</button>`).join('');
   document.addEventListener('change', (e) => {
     if (e.target.id === 'bkAux' || e.target.id === 'bkMcb') { bkSupply(e.target.checked, e.target.id === 'bkAux' ? 'aux' : 'mcb'); renderBkChart(); renderBreakerReadout(); }
+    const pk = e.target.dataset?.peq;
+    if (pk) {
+      state.peq[pk] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      if (pk === 'busES' && state.peq.busES) state.peq.fan = false;
+      if (pk === 'fan' && state.peq.fan) state.peq.busES = false;
+      build();
+      renderSpecs();
+      return;
+    }
     const k = e.target.dataset?.equip;
     if (k) {
       state.bk.equip[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;

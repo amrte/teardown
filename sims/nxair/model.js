@@ -70,6 +70,11 @@ export function lvCableGeometry(L0, dz) {
 export function buildPanel(mats, opts) {
   const {W, D, bus, ur} = opts;
   const hw = W / 2;
+  // optional equipment (O 110-0134.9 §6.3, §7.4–7.6, §20, §21, §26, §27; catalog HA 25.71 p. 10, 14, 27–29)
+  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ...(opts.eq || {})};
+  EQ.busES = EQ.busES && W <= 800; // busbar earthing switch: 600 / 800 mm panels (110-0250.9 sheet 19)
+  EQ.fan = EQ.fan && W >= 800 && !EQ.busES; // forced ventilation: 800 / 1000 mm; the busbar box is not for ventilated panels
+  const Hd = EQ.busES ? 2350 : 2300; // top of the pressure relief duct: 2350 with the high LV compartment / busbar earthing switch
   // ----- levels (mm). Dimension drawings: front part 738 mm at 1500 deep (40 kA sheet 110-0262.9: 762 + 738; the
   // ≤ 31.5 kA sheet 110-0250.9 shows 688 at 1350 and 1500, in which the 3AE5 with its catalog dimensions would not fit), C top at 1075,
   // LV compartment 630 high x 406 deep from 1370, pressure relief duct to 2300 behind the LV compartment.
@@ -78,7 +83,7 @@ export function buildPanel(mats, opts) {
   const yPRC = 1730; // top of B, bottom of the pressure relief duct
   const zLV = D - 406; // back wall of the low-voltage compartment
   const yLV = 1370; // floor of the low-voltage compartment
-  const LVTOP = yLV + 630;
+  const LVTOP = yLV + (EQ.busES ? 980 : 630); // standard 630, high 980 (operating point of the busbar earthing switch 2094)
   const TD = W === 1000 ? 310 : 275; // terminal distance upper-lower (3AE p. 32)
   const yU = 1170, yL = yU - TD; // contact axes
   const pitch = WIDTHS[W].pitch;
@@ -181,14 +186,14 @@ export function buildPanel(mats, opts) {
 
   // ================================================================ SIDE WALLS
   {
-    const prof = [[0, YB], [D, YB], [D, LVTOP], [zLV, LVTOP], [zLV, H - 120], [zLV - 120, H], [100, H], [0, H - 100]];
+    const prof = [[0, YB], [D, YB], [D, LVTOP], [zLV, LVTOP], [zLV, Hd - 120], [zLV - 120, Hd], [100, Hd], [0, Hd - 100]];
     // opening in the busbar compartment: busbars run through to the neighbour (covered by the transverse partition)
     const busOpening = new THREE.Path([new THREE.Vector2(20, yBC + 25), new THREE.Vector2(zP - 20, yBC + 25), new THREE.Vector2(zP - 20, yPRC - 25), new THREE.Vector2(20, yPRC - 25)]);
     for (const s of [-1, 1]) {
       const p = part('sideL', V(s * 560, 0, 0), {shell: true});
       const x = s * hw;
       p.add(EX(prof, x - (s > 0 ? 0 : 2), x + (s > 0 ? 2 : 0), [busOpening]), 'galv', 'Side wall');
-      p.add(B(Math.min(x, x - s * 25), Math.max(x, x - s * 25), YB, H - 100, 0, 2), 'galv', 'Side wall rear flange');
+      p.add(B(Math.min(x, x - s * 25), Math.max(x, x - s * 25), YB, Hd - 100, 0, 2), 'galv', 'Side wall rear flange');
       p.add(B(Math.min(x, x - s * 20), Math.max(x, x - s * 20), yBC - 20, yBC + 20, 2, zP - 20), 'galvDark', 'Stiffener');
       p.add(B(Math.min(x, x - s * 20), Math.max(x, x - s * 20), yPRC - 20, yPRC + 20, 2, zLV), 'galvDark', 'Stiffener');
       p.add(B(Math.min(x, x - s * 20), Math.max(x, x - s * 20), YB, yPRC - 20, zP - 20, zP + 20), 'galvDark', 'Stiffener');
@@ -197,11 +202,25 @@ export function buildPanel(mats, opts) {
     }
   }
 
+  // ================================================================ END WALLS (option: ends of the row)
+  // Lateral end walls, powder-coated with epoxy resin, 35 mm thick (110-2300.9); the crane rod goes through them.
+  if (EQ.endWalls) {
+    const prof = [[0, YB], [D, YB], [D, LVTOP], [zLV, LVTOP], [zLV, Hd - 120], [zLV - 120, Hd], [100, Hd], [0, Hd - 100]];
+    for (const s of [-1, 1]) {
+      const p = part('endWall', V(s * 400, 0, 0));
+      p.group.userData.side = s;
+      const x = s * hw;
+      p.add(EX(prof, Math.min(x, x + s * 35), Math.max(x, x + s * 35)), 'ral', s < 0 ? 'End wall (left)' : 'End wall (right)');
+      p.add(C(20, 20, 4, 'x', x + s * 36, 2230, D / 2), 'black', 'Sealing stopper (crane-rod hole)');
+      p.finish();
+    }
+  }
+
   // ================================================================ FIXED COMPARTMENT WALLS
   {
     const p = part('shellB', V(0, 0, -280), {shell: true});
     const xi = hw - 20;
-    p.add(B(-(hw - 25), hw - 25, yBC, H - 100, -2, 0), 'galv', 'Busbar compartment rear wall');
+    p.add(B(-(hw - 25), hw - 25, yBC, Hd - 100, -2, 0), 'galv', 'Busbar compartment rear wall');
     p.add(EZ(rect(-xi, yBC, xi, 1360), zP - 2, zP, xs.map((x) => circleHole(x, yU, spoutRo + 3))), 'galv', 'Bushing plate (busbar side)');
     p.add(B(-xi, xi, yBC - 2, yBC, 56, zP - 2), 'galv', 'Floor of busbar compartment');
     // rear pressure relief duct of the connection compartment (catalog HA 25.71: "pressure relief upwards through rear
@@ -220,7 +239,7 @@ export function buildPanel(mats, opts) {
   // ================================================================ PRESSURE RELIEF DUCT
   {
     const p = part('prc', V(0, 760, -60), {shell: true});
-    const y0 = yPRC, y1 = H;
+    const y0 = yPRC, y1 = Hd;
     p.add(B(-hw, hw, y1 - 2, y1, 100, zLV - 120), 'galv', 'PRC roof');
     p.add(EX([[0, y1 - 100], [100, y1], [100, y1 - 2], [2, y1 - 100]], -hw, hw), 'galv', 'PRC rear chamfer');
     p.add(EX([[zLV - 120, y1], [zLV, y1 - 120], [zLV, y1 - 122], [zLV - 120, y1 - 2]], -hw, hw), 'galv', 'PRC front chamfer');
@@ -239,6 +258,27 @@ export function buildPanel(mats, opts) {
     anchor('prcLow', p, lo, {nut: 8});
     anchor('prcUp', p, spread(140, zLV - 160, 8).map((z) => ({p: N(-hw, y1 - 31, z), n: N(1, 0, 0)})), {nut: 8});
     p.finish();
+  }
+
+  // ================================================================ FORCED VENTILATION (option, 800 / 1000 mm)
+  // Fan box on the front of the pressure relief duct roof, directly behind the LV compartment, panel height 2450
+  // (O §6.3, Fig. 28; I §7.12; fan ebm-papst R2E270-AA01-05 per O §29.7 / R3G250-RO06-71 per I p. 102). Sizes drawn.
+  if (EQ.fan) {
+    const f = part('fan', V(0, 300, 0));
+    const fx = Math.min(300, hw - 60), z0 = zLV - 450, z1 = zLV - 130, y0 = Hd, y1 = 2450;
+    f.add(B(-fx, fx, y0, y0 + 2, z0, z1), 'galv', 'Fan box floor (opening into the pressure relief duct)');
+    for (const sx of [-1, 1]) f.add(B(Math.min(sx * fx, sx * (fx - 2)), Math.max(sx * fx, sx * (fx - 2)), y0, y1 - 4, z0, z1), 'galv', 'Fan box side');
+    f.add(B(-fx, fx, y0, y1 - 4, z0, z0 + 2), 'galv', 'Fan box rear');
+    f.add(B(-fx, fx, y0, y1 - 4, z1 - 2, z1), 'galv', 'Fan box front cover (2 × M8x25)');
+    f.add(B(-fx, fx, y1 - 4, y1, z0, z1), 'galvDark', 'Fan box roof plate with the fan (10 × M8x20)');
+    for (const sx of [-1, 1]) f.add(B(sx * fx * 0.55 - 60, sx * fx * 0.55 + 60, y0 + 30, y1 - 30, z1, z1 + 1), 'black', 'Metal grid (vacuum-clean yearly)');
+    const zc = (z0 + z1) / 2, r = Math.min(135, (z1 - z0) / 2 - 15);
+    f.add(L([[r, 0], [r + 6, 0], [r + 6, 70], [r, 70]], 'y', 0, y0 + 20, zc, 32), 'grey', 'Fan housing ring');
+    f.add(C(40, 40, 60, 'y', 0, y1 - 40, zc, 20), 'black', 'Fan motor (ebm-papst, 40 000 h)');
+    for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2; f.add(B(-6, 6, 0, 6, 40, r - 6).rotateY(a).translate(0, y0 + 50, zc), 'steel', 'Fan impeller blade'); }
+    f.add(B(fx - 50, fx - 30, y0 + 30, y0 + 70, z1 - 40, z1 - 10), 'yellow', 'Wind vane (air-flow monitor)');
+    for (const sx of [-1, 1]) f.add(TU([[sx * (fx - 60), y1, zc - 60], [sx * (fx - 60), y1 + 18, zc - 60], [sx * (fx - 60), y1 + 18, zc + 60], [sx * (fx - 60), y1, zc + 60]], 5), 'black', 'Roof plate handle');
+    f.finish();
   }
 
   // ================================================================ BUSBAR COVER (upper part of the A|B wall, removed from A)
@@ -314,6 +354,53 @@ export function buildPanel(mats, opts) {
       p.add(L([[26, 0], [26, 8], [18, 8], [22, h * 0.3], [16, h * 0.4], [22, h * 0.6], [16, h * 0.7], [20, h - 8], [26, h - 8], [26, h]], 'y', xs[k], yBC, (zb + zTerm) / 2), 'resin', 'Support insulator');
     }
     p.finish();
+  }
+
+  // ================================================================ BUSBAR EARTHING SWITCH (option, 600 / 800 mm)
+  // Make-proof earthing switch for the busbar (endurance M0, E1) in a top-mounted box over the busbar compartment,
+  // inside the pressure relief duct, with its own relief flaps (catalog HA 25.71 p. 14; I Fig. 118). Operated from
+  // the LV door (operating point 2094 mm) through a drive rod and gearbox. Inner arrangement is not published: drawn.
+  if (EQ.busES) {
+    const bx = hw - 40, by0 = yPRC + 6, by1 = yPRC + 250, bz0 = 70, bz1 = zP - 110;
+    const zE = (zPh[0] + zPh[2]) / 2, yFC = 1800, ySh = 1900, zSh2 = zE + 120;
+    const box = part('busESbox', V(0, 420, -200), {shell: true});
+    box.add(B(-bx, bx, by0, by0 + 2, bz0, bz1), 'galv', 'Busbar earthing switch box: floor');
+    box.add(B(-bx, bx, by0, by1, bz0, bz0 + 2), 'galv', 'Busbar earthing switch box: rear wall');
+    box.add(B(-bx, bx, by0, by1, bz1 - 2, bz1), 'galv', 'Busbar earthing switch box: front wall');
+    for (const sx of [-1, 1]) box.add(B(Math.min(sx * bx, sx * (bx - 2)), Math.max(sx * bx, sx * (bx - 2)), by0, by1, bz0, bz1), 'galv', 'Busbar earthing switch box: side wall');
+    for (const [z0, z1] of [[bz0 + 10, (bz0 + bz1) / 2 - 6], [(bz0 + bz1) / 2 + 6, bz1 - 10]]) box.add(B(-(bx - 10), bx - 10, by1 - 2, by1, z0, z1), 'galvDark', 'Pressure relief flap (busbar earthing switch box)');
+    box.finish();
+    const q = part('busES', V(0, 420, -200));
+    for (let k = 0; k < 3; k++) {
+      const xr = xs[k] + (k === 2 ? -1 : 1) * pitch * 0.75; // clear of the joint (and its half-shells) of its own phase
+      const yTop = yPh[k] + barH / 2;
+      for (const g of BAR([[xr, yTop, zPh[k]], [xr, yFC - 10, zPh[k]], [xr, yFC - 10, zE]], 40, 10)) q.add(g, 'copper', `Riser L${k + 1} from the busbar to the busbar earthing switch`);
+      q.add(L([[24, 0], [28, 8], [22, 16], [28, 24], [22, 32], [20, 40]], 'y', xr, by0 + 2, zPh[k]), 'resin', 'Bushing in the floor of the busbar earthing switch box');
+      q.add(B(xr - 22, xr + 22, yFC - 5, yFC + 25, zE - 18, zE + 18), 'silver', `Fixed contact L${k + 1} (busbar earthing switch)`);
+    }
+    q.add(C(14, 14, 2 * (bx - 30), 'x', 0, ySh, zSh2), 'steel', 'Busbar earthing switch shaft');
+    for (const sx of [-1, 1]) q.add(RB(sx * (bx - 30) - 10, sx * (bx - 30) + 10, ySh - 40, ySh + 30, zSh2 - 25, zSh2 + 25, 4), 'galvDark', 'Shaft bearing');
+    q.add(RB(-hw + 70, -hw + 130, by1 + 4, by1 + 130, zSh2 - 40, zSh2 + 40, 4), 'black', 'Gearbox of the busbar earthing switch drive');
+    cyl(q, 9, [-hw + 100, ySh + 16, zSh2], [-hw + 100, by1 + 4, zSh2], 'steel', 'Drive shaft into the box');
+    cyl(q, 9, [-hw + 100, 2094, zSh2 + 40], [-hw + 100, 2094, D - 26], 'steel', 'Drive rod from the LV door to the gearbox (through the LV compartment)');
+    q.add(TU([[-hw + 100, 2094, zSh2 + 40], [-hw + 100, 2094, zSh2 + 20], [-hw + 100, by1 + 100, zSh2 + 20]], 9, 10, 8), 'steel', 'Drive rod from the LV door to the gearbox (through the LV compartment)');
+    q.finish();
+    // blades: closed on the fixed contacts, open swung up
+    const L0 = Math.hypot(ySh - (yFC + 25), zSh2 - zE);
+    for (let k = 0; k < 3; k++) {
+      const xr = xs[k] + (k === 2 ? -1 : 1) * pitch * 0.75;
+      const bl = new THREE.Group();
+      bl.position.set(xr, ySh, zSh2);
+      bl.userData.busBlade = true;
+      bl.userData.closed = -Math.asin((ySh - (yFC + 25)) / L0);
+      bl.userData.open = 0.75;
+      const pb = new PartBuilder(bl, mats);
+      for (const o of [-12, 12]) pb.add(B(o - 3, o + 3, -10, 10, -L0, 0), 'copper', 'Earthing blade (busbar earthing switch)');
+      pb.add(C(18, 18, 40, 'x', 0, 0, 0), 'steel', 'Blade hub');
+      pb.finish();
+      bl.rotation.x = bl.userData.open;
+      parts.busES[0].add(bl);
+    }
   }
 
   // ================================================================ BUSHINGS (recessed: the contact system enters the bore)
@@ -400,6 +487,8 @@ export function buildPanel(mats, opts) {
     p.add(B(-hw + 20, -hw + 30, yShelf + 30, yShelf + 300, D - 60, zDoorIn), 'zinc', 'Position switch block');
     p.add(B(-30, 30, yShelf, yShelf + 8, zP + 200, D - 160), 'copper', 'Truck earthing contact rail');
     p.add(RB(-80, 80, yLV - 38, yLV, zLV + 5, zLV + 55, 4), 'black', 'LV socket (fixed part, 64-pole)');
+    p.add(B(-hw + 2, -hw + 14, yShelf + 30, yShelf + 70, zP + 110, zP + 150), 'tinned', 'Fixed earthing point for the earthing device (lower left)');
+    p.add(C(6, 6, 16, 'x', -hw + 18, yShelf + 50, zP + 130), 'zinc', 'Fixed earthing point: stud for the earthing clamp');
     p.finish();
   }
 
@@ -498,6 +587,39 @@ export function buildPanel(mats, opts) {
       cyl(p, 4, [x + 26, ySE0 + 6, cz], [xl, ySE0 + 6, cz], 'earth', 'Cable screen earth lead');
     }
     p.finish();
+  }
+  // earthing device (O §26): clamp on the fixed earthing point, three earthing tulips on the bushing contacts of one
+  // side, copper earthing wires; only shown in the drill (truck out, one shutter open). 25 kA 1 s; Ø 40 / 60 contacts.
+  for (const [side, y] of [['upper', yU], ['lower', yL]]) {
+    const ed = part('earthDev', V(0, 0, 0));
+    ed.group.visible = false;
+    ed.group.userData.earthDev = side;
+    ed.add(RB(-hw + 30, -hw + 70, yShelf + 30, yShelf + 70, zP + 115, zP + 145, 3), 'steel', 'Earthing clamp with screw handle (≈ 20 Nm)');
+    for (const x of xs) {
+      ed.add(L([[contactR + 1, 0], [contactR + 9, 0], [contactR + 9, 46], [contactR + 1, 46]], 'z', x, y, zFC1 - 26, 24), 'tinned', 'Earthing tulip (on the fixed contact)');
+      ed.add(C(6, 6, zP + 30 - (zFC1 + 20), 'z', x, y, (zP + 30 + zFC1 + 20) / 2, 10), 'steel', 'Spindle of the earthing tulip');
+      ed.add(TU([[x, y, zP + 30], [x, y - 30, zP + 105], [-hw + 90, yShelf + 100, zP + 125], [-hw + 60, yShelf + 60, zP + 130]], 5, 24, 8), 'copper', 'Copper earthing wire (inspect: brown or stiff = replace)');
+    }
+    ed.finish();
+  }
+  // surge arresters (option, catalog HA 25.71 p. 10 item 26 / p. 14): beside the sealing ends, top to the cable
+  // connection, base to the earthing busbar. Type and size not given: drawn.
+  if (EQ.arresters) {
+    const ar = part('arresters', V(0, -100, -500));
+    const za = zC - 105;
+    for (const x of xs) {
+      ar.add(C(20, 20, 230, 'y', x, 515, za, 16), 'grey', 'Surge arrester (metal-oxide, silicone housing)');
+      for (const y of spread(420, 610, 6)) ar.add(T(30, 6, 'y', x, y, za), 'grey', 'Surge arrester shed');
+      ar.add(C(14, 14, 16, 'y', x, 638, za, 12), 'zinc', 'Surge arrester HV terminal');
+      for (const g of BAR([[x, 646, za], [x, 694, za], [x, 694, zC - 8]], 30, 6)) ar.add(g, 'copper', 'Connection strap to the cable connection bar');
+      ar.add(C(16, 16, 12, 'y', x, 394, za, 12), 'zinc', 'Surge arrester earth terminal');
+      cyl(ar, 4, [x, 300, za], [x, 386, za], 'earth', 'Earth lead to the earthing busbar');
+      cyl(ar, 4, [x, 300, 80], [x, 300, za], 'earth', 'Earth lead to the earthing busbar');
+      cyl(ar, 4, [x, 213, 80], [x, 300, 80], 'earth', 'Earth lead to the earthing busbar');
+      ar.add(B(x - 30, x + 30, 380, 388, za - 30, za + 30), 'galvDark', 'Surge arrester base bracket');
+    }
+    ar.add(B(-pitch - 40, pitch + 40, 372, 380, za - 30, za + 30), 'galvDark', 'Surge arrester mounting rail');
+    ar.finish();
   }
   {
     const p = part('clamps', V(0, -60, -620));
@@ -640,8 +762,39 @@ export function buildPanel(mats, opts) {
     p.add(B(rx - 72.5, rx + 72.5, ry - 122, ry + 122, D - 163, D - 24), 'grey', 'Protection device housing');
     p.add(B(rx - 70, rx + 7, ry + 32, ry + 120, D - 197, D - 163), 'termGrey', 'Protection device terminals');
     p.add(B(rx - 64, rx + 51, ry - 122, ry + 68, D - 189, D - 163), 'termGrey', 'Protection device terminals');
-    for (let i = 0; i < 3; i++) p.add(C(7, 7, 8, 'z', -50 + i * 50, yLV + 50, D + 4), ['yellow', 'green', 'red'][i], 'LRM test socket');
-    p.add(B(-90, 90, yLV + 30, yLV + 70, D, D + 2), 'black', 'Test socket panel');
+    // voltage detecting system (O §20, IEC 61243-5). LRM: two test-socket strips at the bottom edge of the LV door,
+    // directly above the HV door (O Fig. 48 / 484 / 485), one for the feeder and one for the busbar, each L1 L2 L3 with
+    // captive covers; the plug-in indicator LRM-ST 8DX1620 is carried separately. CAPDIS / VOIS: one integrated unit in
+    // the LV door instead. Sizes and heights are not given: drawn.
+    if (EQ.vds === 'lrm') {
+      for (const [x0, lab] of [[-hw + 40, 'feeder'], [hw - 190, 'busbar']]) {
+        p.add(B(x0, x0 + 150, yLV + 22, yLV + 58, D, D + 2), 'black', `LRM test-socket strip (${lab})`);
+        p.add(B(x0 + 4, x0 + 26, yLV + 28, yLV + 52, D + 2, D + 2.5), 'white', `Label: repeat test of the interface (${lab})`);
+        for (let k = 0; k < 3; k++) {
+          const cx = x0 + 48 + k * 36;
+          p.add(C(6, 6, 6, 'z', cx - 6, yLV + 40, D + 5), 'yellow', `LRM test socket L${k + 1} (${lab}), captive cover`);
+          p.add(C(3.5, 3.5, 5, 'z', cx + 9, yLV + 40, D + 4.5), 'zinc', `LRM earth socket L${k + 1} (${lab})`);
+        }
+      }
+    } else {
+      const capdis = EQ.vds === 'capdis', x0 = -hw + 40, y0 = yLV + 330;
+      const name = capdis ? 'CAPDIS-S2+ voltage monitoring system (relay output)' : 'VOIS+ integrated voltage detecting system';
+      p.add(RB(x0, x0 + 96, y0, y0 + 96, D, D + 26, 4, 1), capdis ? 'slate' : 'yellow', name);
+      p.add(B(x0 + 8, x0 + 52, y0 + 40, y0 + 84, D + 26, D + 27), 'screen', capdis ? 'CAPDIS-S2+ LC display (A0 … A8)' : 'VOIS+ LC display (A0 … A3)');
+      for (const [k, dx, dy] of [[1, 66, 70], [2, 82, 54], [3, 66, 38]]) p.add(C(4, 4, 5, 'z', x0 + dx, y0 + dy, D + 28), 'zinc', `${capdis ? 'CAPDIS' : 'VOIS'} test socket L${k} (phase comparison)`);
+      p.add(C(4, 4, 5, 'z', x0 + 82, y0 + 22, D + 28), 'earth', `${capdis ? 'CAPDIS' : 'VOIS'} earth socket`);
+      if (capdis) p.add(C(7, 7, 5, 'z', x0 + 20, y0 + 20, D + 28), 'grey', 'CAPDIS-S2+ "Test" button');
+      p.add(B(x0 + 2, x0 + 94, y0 + 2, y0 + 94, D + 30, D + 31), 'glass', `${capdis ? 'CAPDIS-S2+' : 'VOIS+'} hinged transparent cover (IP54)`);
+      p.add(B(x0, x0 + 96, y0 - 14, y0 - 2, D, D + 1), 'white', `${capdis ? 'CAPDIS-S2+' : 'VOIS+'} short instructions`);
+    }
+    if (EQ.busES) {
+      // operating plate of the busbar earthing switch, front upper area of the LV door; operating point 2094 mm (SUP)
+      const xo = -hw + 100, yo = 2094;
+      p.add(B(xo - 50, xo + 100, yo - 56, yo + 56, D, D + 1.5), 'white', 'Operating plate: busbar earthing switch');
+      p.add(B(xo - 50, xo + 100, yo + 62, yo + 92, D, D + 1), 'yellow', 'Instruction label: busbar earthing switch (O Fig. 498)');
+      p.add(C(14, 14, 6, 'z', xo, yo, D + 4), 'steel', 'Actuating opening: busbar earthing switch (pins "10 past 8" = close, vertical = open)');
+      if (EQ.keys) for (const x of [xo - 46, xo + 98]) p.add(C(9, 9, 10, 'z', x, yo, D + 6), 'zinc', x < xo ? 'Key lock (1): key free only with the busbar earthing switch OPEN' : 'Key lock (2): key free only with the busbar earthing switch CLOSED');
+    }
     p.add(B(rx + 110, rx + 220, 1880, 1930, D, D + 1), 'white', 'Panel designation label');
     p.add(B(-(hw - 20), hw - 20, yLV + 30, LVTOP - 30, zLV + 2, zLV + 4), 'galv', 'Mounting plate');
     for (const [y, n, mat, lab] of [[1880, 6, 'white', 'MCB (3RV)'], [1715, 4, 'grey', 'Auxiliary relay'], [1525, Math.round((W - 160) / 14), 'grey', 'Terminal block']]) {
@@ -654,6 +807,26 @@ export function buildPanel(mats, opts) {
     p.add(RB(hw - 75, hw - 25, yLV + 20, yLV + 140, zLV + 4, zLV + 70, 4), 'black', 'Bus-wire terminal block');
     anchor('lv', p, spread(yLV + 80, LVTOP - 80, 3).map((y) => ({p: N(-hw, y, zLV + 200), n: N(1, 0, 0)})), {nut: 8});
     p.finish();
+    if (EQ.busES) {
+      const xo = -hw + 100, yo = 2094;
+      const mkLv = (flag, label, build, pos) => {
+        const g = new THREE.Group();
+        const pb = new PartBuilder(g, mats);
+        build(pb);
+        pb.finish();
+        g.userData[flag] = true;
+        g.userData.label = label;
+        g.position.copy(pos);
+        parts.lv[0].add(g);
+        return g;
+      };
+      mkLv('busSlide', 'Operating slide (busbar earthing switch)', (b) => {
+        b.add(RB(-30, 30, -30, 30, 0, 5, 3), 'zinc', 'Operating slide (busbar earthing switch)');
+        if (EQ.padlock) b.add(T(9, 2.2, 'x', 0, -38, 12), 'steel', 'Padlock shackle (busbar earthing switch)');
+        if (EQ.padlock) b.add(RB(-11, 11, -66, -42, 6, 18, 3), 'yellow', 'Padlock (busbar earthing switch)');
+      }, V(xo, yo, D + 2));
+      mkLv('busInd', 'Position indicator busbar earthing switch (vertical = earthed)', (b) => b.add(B(-4, 4, -18, 18, 0, 1), 'white', 'Indicator bar'), V(xo + 50, yo, D + 2));
+    }
   }
 
   // ================================================================ HIGH-VOLTAGE DOOR
@@ -687,6 +860,37 @@ export function buildPanel(mats, opts) {
     p.add(RB(hw - 55, hw - 30, 620, 940, D, D + 40, 6), 'black', 'Door handle');
     p.add(C(14, 14, 20, 'z', hw - 42, 940, D + 10), 'steel', 'Handle pivot');
     p.add(B(-hw + 80, -hw + 260, 1230, 1280, D, D + 1), 'yellow', 'Instruction label');
+    // key interlocks (O §25.1): locks under a hinged cover in the lower area, below the earthing-switch indicator
+    // (600 mm: lower centre; 800 / 1000 mm: lower right). Cover size drawn.
+    if (EQ.keys) {
+      const kx = W === 600 ? 0 : hw - 150;
+      p.add(RB(kx - 60, kx + 60, 300, 410, D, D + 8, 4), 'ralDark', 'Hinged cover of the key interlocks (keys: ES CLOSED / ES OPEN / test position)');
+      p.add(C(10, 10, 8, 'z', kx + 42, 355, D + 12), 'black', 'Rotary button of the key-interlock cover');
+      for (let k = 0; k < 3; k++) p.add(C(7, 7, 2, 'z', kx - 35 + k * 30, 355, D + 9), 'zinc', ['Key lock (3): key free only with the feeder ES CLOSED', 'Key lock (4): key free only with the feeder ES OPEN', 'Key lock (5): key free only in test position'][k]);
+    }
+    if (EQ.padlock) for (const [x, y, lab] of [[hw - 42, 600, 'door handle'], [0, 560, 'racking slide'], [xE, 466, 'earthing-switch slide']]) {
+      p.add(T(9, 2.2, 'x', x, y + 8, D + 12), 'steel', `Padlock shackle (${lab})`);
+      p.add(RB(x - 11, x + 11, y - 22, y + 2, D + 8, D + 20, 3), 'yellow', `Padlock (${lab}, O §7.5)`);
+    }
+    // forced ventilation: ventilation slots at the bottom and top of the HV door, flap on the inside (O §10.6, Fig. 744)
+    if (EQ.fan) {
+      for (const [y0, y1] of [[130, 230], [1290, 1340]]) for (const y of spread(y0, y1, Math.round((y1 - y0) / 16))) p.add(B(-hw + 120, hw - 120, y - 3, y + 3, D - 1, D + 1), 'black', 'Ventilation slots (HV door)');
+      p.add(B(-hw + 120, hw - 120, 1285, 1345, zDoorIn - 8, zDoorIn - 2), 'galvDark', 'Ventilation flap (inside the HV door; set to the operational position before closing the door)');
+      p.add(C(8, 8, 6, 'z', hw - 90, 1315, D + 3), 'green', 'Ventilation-flap position indicator (green = operational)');
+    }
+    // motor-operated racking (O §27): control door on the HV door over the racking, key, earthing-switch, CLOSE and
+    // charging openings, with windows for the indicators and the push-rod opening for OPEN. Size drawn.
+    if (EQ.motor) {
+      const cx0 = -170, cx1 = xE + 50, cy0 = 470, cy1 = yFront + 380;
+      p.add(RB(cx0, cx1, cy0, cy1, D + 9, D + 13, 4), 'ral', 'Control door (motor-operated racking, O §27.2)');
+      p.add(B(-105, 85, yFront + 140, yFront + 192, D + 13, D + 13.5), 'glass', 'Control door window: CB CLOSED / OPEN, closing spring, counter');
+      p.add(C(24, 24, 1, 'z', xE, 610, D + 13.5), 'glass', 'Control door window: feeder earthing switch');
+      p.add(C(10, 10, 2, 'z', -75, yFront + 215, D + 14), 'red', 'Control door: push-rod opening for OPEN');
+      for (const y of [cy0 + 60, cy1 - 60]) p.add(C(5, 5, 40, 'y', cx0 - 2, y, D + 11), 'steel', 'Control door hinge');
+      p.add(RB(cx1 - 34, cx1 - 12, (cy0 + cy1) / 2 - 50, (cy0 + cy1) / 2 + 50, D + 13, D + 25, 4), 'black', 'Control door handle (pull up to open)');
+      p.add(RB(cx1 - 30, cx1 - 16, (cy0 + cy1) / 2 - 80, (cy0 + cy1) / 2 - 58, D + 13, D + 22, 2), 'yellow', 'Padlock appliance of the control door (3AE5)');
+      p.add(B(cx0 + 10, cx0 + 110, cy0 + 10, cy0 + 30, D + 13, D + 13.5), 'white', 'Label: racking M motor / H hand / T interlocked');
+    }
     p.finish();
     const mk = (flag, label, build, pos) => {
       const g = new THREE.Group();
@@ -807,7 +1011,7 @@ export function buildPanel(mats, opts) {
 
   const dirs = {};
   for (const [id, gs] of Object.entries(parts)) dirs[id] = gs[0].userData.dir;
-  return {root, parts, anchors, dirs, shellIds, lvCable, cb, dims: {W, D, H, yBC, yPRC, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: cbd.cageOut, sleeveOut: cbd.sleeveIn + 6, armR, zTulip0, zTulip1, zFC1}};
+  return {root, parts, anchors, dirs, shellIds, lvCable, cb, eq: EQ, dims: {W, D, H: Hd, LVTOP, yBC, yPRC, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: cbd.cageOut, sleeveOut: cbd.sleeveIn + 6, armR, zTulip0, zTulip1, zFC1}};
 }
 
 // ------------------------------------------------------------------------------------------------- bolts
