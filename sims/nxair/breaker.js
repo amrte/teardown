@@ -25,6 +25,8 @@ import {B, C, L, PartBuilder, RB, T, TU, spread} from './geom.js';
 import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, buildDevices} from './bkdevices.js';
 
 export const YB = 107; // breaker base on top of the 107 mm truck
+// closing release (drawn): shaft axis, arm vector of the parallel link to the closing latch, turn on ON / -Y9
+const REL_Y = 226, REL_Z = 142, RL_DY = -8, RL_DZ = -20, REL_TURN = 0.55;
 // the breaker shown in the Breaker tab: SION 3AE5, 12 kV, 1250 A, 31.5 kA, pole centres 210 mm, terminals 275 mm apart
 export const BK_SPEC = {P: 210, TD: 275, armD: 40, fingers: 13};
 
@@ -34,6 +36,7 @@ const BK_BASE = [
   {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
   {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
   {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [280, 40, 170], desc: 'Helical extension spring hanging from a bracket at the top right of the mechanism plate. The charging shaft turns the crank, which stretches the spring through a link until the crank is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. ON (56.1 or -Y9) frees the latch, the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor recharges the spring at once, so OFF – ON – OFF is stored. Discharging: supply off, then OFF, ON, OFF by hand.'},
+  {id: 'bkCloseRelease', name: 'Closing release shaft: ON button and -Y9 to the closing latch', grp: 'Operating mechanism', dir: [0, 40, 200], desc: 'How ON and -Y9 free the closing latch. A thin shaft runs across the front of the drive, just behind the cover, through a bearing in the mechanism plate. Three arms sit on it: on the left the push finger of the ON button (56.1) presses an arm back; above -Y9 the push pin of the solenoid plunger lifts an arm (the plunger is pulled into the coil and pushes the pin out through the top yoke); on the right an arm and a parallel link turn the closing latch, which drops away from the crank pin. Either input turns the shaft by about 30°, the spring then closes the breaker; the shaft springs back when the button or the coil lets go. Drawn: Siemens publishes no detail of the closing release, only that ON and -Y9 both free the closing latch; shaft, arms and link show the principle.'},
   {id: 'bkShaft', name: 'Main shaft, drive lever, latch lever, pole levers', grp: 'Operating mechanism', dir: [0, -90, 220], desc: 'The switching shaft runs across the bottom of the drive and out through both side plates (optional shaft covers, Torx T20, 5 Nm, close off the ends). The closing cam turns it through the closing lever, the push rod and the drive lever; the opening latch holds it closed by its latch lever; one lever per pole reaches back under the pole and pushes its shed insulator (45) up: the contacts close, the contact-pressure springs are loaded, the opening springs on the shaft ends wound. Pole synchronism ≤ 2 ms. Do not touch the poles or the shaft: they move fast, also by remote control.'},
   {id: 'bkCloseLink', name: 'Closing cam, closing lever (bell crank), push rod', grp: 'Operating mechanism', dir: [70, 30, 230], desc: 'The link that turns the main shaft on closing. The closing cam on the charging shaft has one lobe; while the released closing spring turns the shaft from 170° to 360°, the lobe presses the roller of the closing lever (a bell crank pivoted on the mechanism plate) down. The bell crank turns that into a forward push of the push rod, which pushes the drive lever on the main shaft forward: the shaft turns and its pole levers lift the insulators. After the lobe has passed, the main shaft is held closed by the opening latch and the roller stays down, clear of the cam.'},
   {id: 'bkOpenLatch', name: 'Opening latch (pawl), latch lever, trip bar', grp: 'Operating mechanism', dir: [-60, -40, 230], desc: 'Holds the main shaft in the closed position against the opening springs: the pawl drops behind the nose of the latch lever on the main shaft. OFF (56.2), the armature of -Y1 or, through the trip bar, the strikers of -Y2 … -Y7 lift the pawl; the opening springs and the contact-pressure springs then turn the main shaft back and the contacts open (≤ 30 ms with -Y1). Trip-free: an OFF during closing frees the pawl, so the shaft cannot stay closed.'},
@@ -280,13 +283,14 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     p.add(B(43, 77, 168, 202, ZC + 1, ZC + 1.5), 'black', 'Spring state indicator (55.1)');
     p.finish();
     // push buttons (move in when pressed) and indicator flags (change with the state)
-    const btn = (x, mat, sym, lab) => sub('bkCover', lab, (b) => {
+    const btn = (x, mat, sym, lab, extra) => sub('bkCover', lab, (b) => {
       b.add(RB(x - 16, x + 16, 199, 231, ZC + 1, ZC + 9, 3, 1), mat, lab);
       b.add(C(5, 5, ZC + 1 - 144, 'z', x, 215, (ZC + 1 + 144) / 2, 12), 'steel', `${lab}: plunger`);
+      extra?.(b);
       if (tex) b.add(plane(x - 16, x + 16, 199, 231, ZC + 9.1), sym, lab);
     });
     rig.btnOff = btn(-75, 'red', 'bkBtnO', 'Push button OFF (56.2)');
-    rig.btnOn = btn(-35, 'green', 'bkBtnI', 'Push button ON (56.1)');
+    rig.btnOn = btn(-35, 'green', 'bkBtnI', 'Push button ON (56.1)', (b) => b.add(B(-45, -39, 211, 219, 144, 150), 'steel', 'Push button ON (56.1): push finger on the closing release arm'));
     const flag = (x0, x1, y0, y1, m, fallback, lab) => sub('bkCover', lab, (b) => b.add(tex ? plane(x0, x1, y0, y1, ZC + 1.6) : B(x0, x1, y0, y1, ZC + 1.5, ZC + 1.7), tex ? m : fallback, lab));
     rig.flagI = flag(-50, -20, 145, 175, 'bkFlagI', 'white', 'Position indicator: I = closed');
     rig.flagO = flag(-50, -20, 145, 175, 'bkFlagO', 'green', 'Position indicator: O = open');
@@ -305,6 +309,34 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
       b.add(C(3, 3, 22, 'x', 0, 0, 0, 10), 'zinc', 'Closing-latch pivot');
     });
     rig.closeLatch.position.set(133, 234.5, 64);
+    // arms of the parallel link point back and down (clear of the spring eye above)
+    const ARM_A = Math.atan2(RL_DY, -RL_DZ), RL = Math.hypot(RL_DY, RL_DZ);
+    const arm = (parent, x0, x1, lab) => {
+      const g = new THREE.Group();
+      const pb = new PartBuilder(g, MX);
+      pb.add(B(x0, x1, -3, 3, -RL - 3, 0), 'steel', lab);
+      pb.add(C(2.5, 2.5, x1 - x0 + 4, 'x', (x0 + x1) / 2 + 2, 0, -RL, 10), 'zinc', `${lab}: pin`);
+      pb.finish();
+      g.rotation.x = ARM_A;
+      parent.add(g);
+    };
+    arm(rig.closeLatch, 12, 16, 'Closing latch: release arm');
+    // closing release shaft (drawn): ON push finger and -Y9 push pin turn it, its arm and the link turn the latch
+    {
+      const q = part('bkCloseRelease');
+      q.add(B(83, 93, 216, 236, 133, 148), 'galvDark', 'Release-shaft bearing in the mechanism plate');
+      q.add(B(-56, -48, 216, 236, 133, 148), 'galvDark', 'Release-shaft bearing bracket (left)');
+      q.finish();
+      rig.release = sub('bkCloseRelease', 'Closing release shaft', (b) => {
+        b.add(C(4, 4, 200, 'x', 50, 0, 0, 12), 'steel', 'Closing release shaft (drawn: Siemens shows no detail)');
+        b.add(B(-44, -39, -16, 0, -5, 2), 'steel', 'Release arm for the ON button: the push finger presses it back');
+        b.add(B(11, 19, -3, 3, -29, 0), 'steel', 'Release arm for -Y9: the solenoid push pin lifts it');
+        b.add(B(10, 20, -4, -3, -29, -21), 'zinc', 'Release arm for -Y9: pad on the push pin');
+      });
+      rig.release.position.set(0, REL_Y, REL_Z);
+      arm(rig.release, 144, 149, 'Release arm for the closing latch');
+      rig.releaseLink = sub('bkCloseRelease', 'Release link', (b) => b.add(C(2.5, 2.5, 1, 'y', 0, 0.5, 0, 10), 'steel', 'Release link: turns the closing latch together with the release shaft'));
+    }
     rig.crank = sub('bkClosingSpring', 'Charging shaft set: worm wheel, crank, closing cam', (b) => {
       b.add(C(14, 14, xDisc + 6 + 40, 'x', (xDisc + 6 - 40) / 2, 0, 0), 'steel', 'Charging shaft (ends at the crank web, clear of the spring)');
       b.add(C(38, 38, 16, 'x', 0, 0, 0, 36), 'steel', 'Charging gear wheel (inside the gear unit)');
@@ -564,7 +596,18 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
       counterArt(count)(g);
       rig.counterTex.needsUpdate = true;
     }
-    rig.closeLatch.rotation.x = 0.5 * pClose;
+    // closing release: shaft and latch turn together (parallel link), the -Y9 plunger and the ON button drive it
+    {
+      const a = REL_TURN * pClose, cs = Math.cos(a), sn = Math.sin(a);
+      rig.closeLatch.rotation.x = a;
+      rig.release.rotation.x = a;
+      const uy = RL_DY * cs - RL_DZ * sn, uz = RL_DY * sn + RL_DZ * cs;
+      E.set(151.5, REL_Y + uy, REL_Z + uz);
+      d.set(0, 234.5 - REL_Y, 64 - REL_Z);
+      rig.releaseLink.position.copy(E);
+      rig.releaseLink.quaternion.setFromUnitVectors(Y, d.clone().normalize());
+      rig.releaseLink.scale.set(1, d.length(), 1);
+    }
     // charging crank: 0° discharged (pin up), 170° charged and latched, 360° after the closing stroke
     const cDeg = crank ?? (c > 0.99 ? 170 : c * 170);
     const th = (cDeg * Math.PI) / 180;
@@ -631,7 +674,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
         sp.userData.prims = [{label: sp.userData.label, box: sp.geometry.boundingBox.clone()}];
       }
     }
-    rig.plungerClose.position.y = 150 + 14 * pClose;
+    rig.plungerClose.position.y = 150 + 13 * pClose; // pulled into the coil; its push pin lifts the release arm
     rig.plungerOpen.position.z = 92 - 8 * pOpen;
     rig.btnOn.position.z = -6 * pClose;
     // -S1: the drive crank on the main shaft moves the coupling rod, which turns the switching shaft of -S1

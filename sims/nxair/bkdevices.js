@@ -171,7 +171,10 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
     marking(p, 'Y9', 3, 19, 166, 174, 135.2, false, '-Y9 device marking');
     for (const x of [6, 24]) p.add(B(x - 2, x + 2, 205, 211, 110, 114), 'tinned', '-Y9 terminal (-X0:A2 / B2 circuit)');
     p.finish();
-    rig.plungerClose = sub('bkY9', 'Closing solenoid plunger', (b) => b.add(C(6, 6, 20, 'y', 0, 0, 0), 'zinc', '-Y9 plunger: frees the closing latch'));
+    rig.plungerClose = sub('bkY9', 'Closing solenoid plunger', (b) => {
+      b.add(C(6, 6, 20, 'y', 0, 0, 0), 'zinc', '-Y9 plunger: pulled up into the coil when energised');
+      b.add(C(2.5, 2.5, 62, 'y', 0, 41, 0, 10), 'steel', '-Y9 push pin: through the core and the top yoke onto the release arm');
+    });
     rig.plungerClose.position.set(15, 150, 117);
   }
   // ---------------------------------------------------------------- -Y1 1st shunt release (51.1)
@@ -431,9 +434,9 @@ export const DEVICE_INFO = {
     data: [['Type', 'microswitch 3AX4206-0A']], circuit: 'Contacts 21-22 in the -K1 coil circuit (sample diagram).', notes: '',
   },
   bkY9: {
-    tag: '-Y9', title: 'Closing solenoid', pn: '3AX1410-.. (power 3AY1410)', kind: 'Basic', where: 'Bottom centre of the drive (52), under the closing latch.',
+    tag: '-Y9', title: 'Closing solenoid', pn: '3AX1410-.. (power 3AY1410)', kind: 'Basic', where: 'Centre of the drive (52), below the gear unit; it acts on the closing latch at the right through the closing release shaft.',
     summary: 'Unlatches the charged closing spring and closes the breaker electrically. Short-time rated, switched off inside the breaker by -S1; 300–370 W/VA; minimum command 45 ms.',
-    does: 'Electrical closing.', how: 'The plunger frees the closing latch; the closing spring then turns the crank and cam and closes the breaker. The solenoid is not rated for continuous duty: the auxiliary switch -S1 (11-12, open when the breaker is ON) cuts it off inside the breaker. Available for DC or AC.',
+    does: 'Electrical closing.', how: 'When energised the coil pulls its plunger up into the core; the push pin on the plunger comes out through the top yoke and lifts an arm of the closing release shaft. The shaft turns about 30° and, through its arm and a parallel link, swings the closing latch away from the crank pin (the ON button turns the same shaft by hand). The closing spring then turns the crank and cam and closes the breaker. The latch only holds a charged spring: with the spring discharged -Y9 moves the latch but nothing happens. (Release shaft, arms and link are drawn; Siemens only states that -Y9 frees the closing latch.) The solenoid is not rated for continuous duty: the auxiliary switch -S1 (11-12, open when the breaker is ON) cuts it off inside the breaker. Available for DC or AC.',
     data: [['Power', '300–370 W/VA'], ['Supply tolerance', '-15 % … +10 %'], ['Minimum command duration', '45 ms'], ['Closing time', '≤ 60 ms'], ['Protection', 'varistor on versions ≥ 60 V DC']],
     circuit: '-X0:A2 → -S1 11-12 → -K1 21-22, 31-32 → -Y9 → -S12 (if fitted) → -X0:B2.', notes: 'Hold the ON command until the breaker shows and signals ON.',
   },
