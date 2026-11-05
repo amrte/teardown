@@ -3,20 +3,91 @@
 // HG = catalog HG 11.02 · 2020 (SION 3AE5). Page numbers are the printed pages.
 
 export const CB_DOCS = [
-  {k: 'CB', t: 'Operating Instructions vacuum circuit-breaker 3AE1 / SION 3AE5', no: '9229 0001 176 0E', rev: '07.2013 (EN)', url: 'https://cache.industry.siemens.com/dl/files/302/106325302/att_3120/v1/BA_3AE_Vakuum_Leistungsschalter_SION_EN_201409231052218953.pdf'},
+  {k: 'BA5', t: 'Betriebsanleitung SION Vakuum-Leistungsschalter 3AE5 (operating instructions, German edition)', no: '9229 0025 100 0C', rev: '02.2020', url: ''},
+  {k: 'CB', t: 'Operating Instructions vacuum circuit-breaker 3AE1 / SION 3AE5 (older, English)', no: '9229 0001 176 0E', rev: '07.2013 (EN)', url: 'https://cache.industry.siemens.com/dl/files/302/106325302/att_3120/v1/BA_3AE_Vakuum_Leistungsschalter_SION_EN_201409231052218953.pdf'},
   {k: 'HG', t: 'Catalog HG 11.02 SION vacuum circuit-breakers', no: 'HG 11.02', rev: 'Edition 2020', url: 'https://cache.industry.siemens.com/dl/files/074/109778074/att_1021110/v1/HG_11_02_2020_EN_202004281238152516.pdf'},
 ];
 
-// Joints on the breaker itself. Note the different rule: the 3AE manual gives torques for GREASED threads, the
-// NXAIR busbar joints are tightened DRY.
+// Joints on the 3AE5 breaker (BA5 = SION operating instructions 9229 0025 100 0C, 02.2020). The breaker manual gives
+// its torques for GREASED threads; the NXAIR busbar joints are tightened DRY. Where the 3AE5 manual differs from the
+// older combined 3AE manual (earth terminal 105 vs 70 Nm, fixing M10 48 vs 40 Nm, brackets 24 vs 20 Nm) the 3AE5
+// manual is used.
 export const CB_JOINTS = [
-  {id: 'cbArm', group: 'Circuit-breaker 3AE', where: 'Threaded rod of the contact arm into the breaker terminal (upper + lower, 3 poles)', qty: '6', bolt: 'Threaded rod M12 (800–1250 A) or M16 (2000–2500 A), screw-in depth upper 20 ±1 mm, lower 28 ±1 mm (38 ±1 mm at 40 kA)', wash: 'Screw-in section greased with Vaseline', t: 40, c: null, tol: '±4 (M12) · M16: 100 ±10', basis: 'step', ref: 'CB p.52–53 Fig. 97/100', part: 'breaker', size: 'M12', note: 'Greased threads only. This is the breaker manufacturer\'s value; it is NOT the 70 Nm dry value for the panel busbars.'},
-  {id: 'cbTulip', group: 'Circuit-breaker 3AE', where: 'Contact system (tulip) onto the contact arm', qty: '6', bolt: 'M12 or M16 on the threaded rod', wash: 'Round outer edge of the contact system towards the contact arm. Ø 40 mm arms (≤ 1250 A) use the contact arm adapter', t: 40, c: null, tol: '±4 (M12) · M16: 100 ±10', basis: 'step', ref: 'CB p.54–55 Fig. 102–105', part: 'breaker', size: 'M12', note: 'Grease the contact fingers with Molykote Longterm 2 on both sides. Arm end faces: copper roughened, cleaned, Vaseline; silver-plated faces cleaned, Vaseline.'},
-  {id: 'cbEarth', group: 'Circuit-breaker 3AE', where: 'Earth terminal of the breaker (item 70)', qty: '1', bolt: 'Hexagon screw M12 with washer', wash: 'Ring terminal of the earth wire', t: 70, c: null, basis: 'step', ref: 'CB p.47 Fig. 85/86', size: 'M12', note: 'Earth conductor sized for 30 A with ≤ 3 V drop. Not needed when bolted to an earthed frame with serrated washers.'},
-  {id: 'cbFix', group: 'Circuit-breaker 3AE', where: 'Fixed-mounted breaker to its mounting surface / cartridge (from below)', qty: '4', bolt: 'M10, property class 8.8', wash: '—', t: 40, c: null, tol: '±4', basis: 'step', ref: 'CB p.45 Fig. 80/81', size: 'M10', note: 'Greased threads. Factory-assembled on the NXAIR withdrawable part; listed for completeness.'},
-  {id: 'cbBracket', group: 'Circuit-breaker 3AE', where: 'Mounting brackets / guard plate (3AE5)', qty: 'per bracket', bolt: 'from accessories pack', wash: '—', t: 20, c: null, tol: '±2', basis: 'step', ref: 'CB p.46 Fig. 82–84', size: 'M8'},
-  {id: 'cbCover', group: 'Circuit-breaker 3AE', where: '3AE1 cover and side panels', qty: '4 each', bolt: 'Phillips pan-head screws ISO 7045, driver size 3', wash: '—', t: 4, c: null, tol: '±0.4', basis: 'step', ref: 'CB p.41–42', size: '—'},
-  {id: 'cbPG', group: 'Circuit-breaker 3AE', where: 'PG fitting supporting plate (version without LV plug)', qty: 'per plate', bolt: 'Self-tapping screws, Torx 20, single use only', wash: '—', t: 3, c: null, tol: '±0.3', basis: 'step', ref: 'CB p.42', size: '—'},
+  {id: 'cbArm', group: 'Circuit-breaker 3AE5', where: 'Threaded bolt (22.1) of the contact arm into the pole terminal, upper + lower, 3 poles', qty: '6', bolt: 'M12 (12 kV, ≤ 31.5 kA, ≤ 1600 A), screw-in depth 20 ±1 mm in both terminals', wash: 'Screw-in section greased with Vaseline', t: 40, c: null, tol: '±4', basis: 'step', ref: 'BA5 p.53–54 Fig. 79/82', part: 'breaker', size: 'M12', note: 'Greased threads only. M16 versions (2000–2500 A) 100 ±10 Nm, 28 ±1 mm lower. This is the breaker maker\'s value, NOT the 70 Nm dry value of the panel busbars.'},
+  {id: 'cbTulip', group: 'Circuit-breaker 3AE5', where: 'Contact system (23) onto bolt and contact arm', qty: '6', bolt: 'M12 on the threaded bolt', wash: 'Round outer edge towards the arm; for Ø 40 mm arms the contact arm adapter 22.2 first', t: 40, c: null, tol: '±4', basis: 'step', ref: 'BA5 p.55–56 Fig. 85–87', part: 'breaker', size: 'M12', note: 'Fingers greased with Molykote Longterm 2 inside before fitting, the other side after tightening.'},
+  {id: 'cbBus', group: 'Circuit-breaker 3AE5', where: 'Flat busbars on the pole contact plates (fixed-mounted breaker)', qty: '4 per terminal', bolt: 'M12 bolts and nuts, property class 8.8, with spring elements and washers (stainless bolts from the accessory pack recommended)', wash: 'Counter-hold the nut. Optional anti-twist pin ISO 8748 / ISO 8752 4 × X in a Ø 4 H11 hole', t: 40, c: null, tol: '±4 · M16: 100 ±10', basis: 'step', ref: 'BA5 p.53–54 Fig. 81', size: 'M12', note: 'Busbars fit flat and hole-to-hole before tightening. Silver-plated parts never bolted to aluminium bars. Not used in NXAIR (contact arms instead).'},
+  {id: 'cbEarth', group: 'Circuit-breaker 3AE5', where: 'Earth terminal (70) on the top plate of the drive housing', qty: '1', bolt: 'Hexagon screw M12', wash: 'Order under the head: washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth to the housing', t: 105, c: null, basis: 'step', ref: 'BA5 p.48 Fig. 66–69', size: 'M12', note: 'Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200). Not needed when the breaker is bolted to an earthed metal frame with external-tooth lock washers under the screw heads.'},
+  {id: 'cbFix', group: 'Circuit-breaker 3AE5', where: 'Fixed-mounted breaker to its horizontal mounting surface / truck (from below)', qty: '4', bolt: 'M10, property class 8.8, with washers', wash: '—', t: 48, c: null, tol: '±4', basis: 'step', ref: 'BA5 p.44 Fig. 57/58', size: 'M10', note: 'Greased threads. Factory-assembled on the NXAIR withdrawable part; listed for completeness.'},
+  {id: 'cbBracket', group: 'Circuit-breaker 3AE5', where: 'Fixing brackets for mounting on a vertical surface', qty: 'per bracket', bolt: 'M8 from the accessory pack', wash: '—', t: 24, c: null, basis: 'step', ref: 'BA5 p.45 Fig. 60/61', size: 'M8'},
+  {id: 'cbIP', group: 'Circuit-breaker 3AE5', where: 'IP plates (internal-arc protection plates, option) to the drive housing', qty: 'per plate', bolt: 'Hexagon socket M8; angled IP plate on the housing M12', wash: '—', t: 24, c: null, tol: 'M12: 84 ±6', basis: 'step', ref: 'BA5 p.46 Fig. 62–64', size: 'M8'},
+  {id: 'cbCover', group: 'Circuit-breaker 3AE5', where: 'Metal cover 20.2 (the plastic cover 20.1 only snaps on)', qty: '2 upper (loosened only) + 4 lower', bolt: 'Hexagon screws M6', wash: 'Contact washers, teeth towards the cover', t: 12, c: null, basis: 'step', ref: 'BA5 p.41 Fig. 48/49', size: '—', note: 'The text says 12 Nm; Fig. 49 is labelled 4 Nm. The page follows the text; confirm on the order documents.'},
+  {id: 'cbShaft', group: 'Circuit-breaker 3AE5', where: 'Shaft covers (option) on both sides of the breaker', qty: 'per cover', bolt: 'Self-tapping screws Torx T20 with locking elements; expanding rivet first', wash: '—', t: 5, c: null, basis: 'step', ref: 'BA5 p.47 Fig. 65', size: '—'},
+  {id: 'cbPG', group: 'Circuit-breaker 3AE5', where: 'Cable bracket (60) for the plug / terminal strip version without -X0', qty: 'per bracket', bolt: 'Self-tapping screws, Torx 20, single use only', wash: '—', t: 3, c: null, basis: 'step', ref: 'BA5 p.42 Fig. 50', size: '—', note: 'Route the loom towards the back of the pole shells.'},
+  {id: 'cbBush', group: 'Circuit-breaker 3AE5', where: 'Bushings with counter contact on the customer plate or cassette frame (non-NXAIR installations)', qty: '4 per bushing', bolt: 'Mushroom-head square-neck bolts DIN 603 M8x25-8.8, contact washers, hex nuts', wash: 'Plate of non-ferromagnetic steel', t: 25, c: null, tol: '±2', basis: 'step', ref: 'BA5 p.56 Fig. 88', size: 'M8', note: 'Greased threads. Bushing cover from the other side.'},
+];
+
+export const CB_DEPTHS = [
+  ['7.2–17.5 kV, 16–31.5 kA, 800–1600 A', 'M12', '20 ±1 mm', '20 ±1 mm'],
+  ['7.2–17.5 kV, 16–31.5 kA, 2000–2500 A', 'M16', '20 ±1 mm', '28 ±1 mm'],
+  ['7.2–17.5 kV, 40 kA, 1250 A', 'M12', '20 ±1 mm', '38 ±1 mm'],
+  ['7.2–17.5 kV, 40 kA, 2000–4000 A', 'M16', '20 ±1 mm', '38 ±1 mm'],
+  ['24 kV, 16–25 kA, 800–1250 A / 2000–2500 A', 'M12 / M16', '20 ±1 / 28 ±1 mm', '28 ±1 / 44 ±1 mm'],
+];
+
+export const CB_TIMES = [
+  ['Closing time', '≤ 60 ms'],
+  ['Opening time', '≤ 30 ms with -Y1 · ≤ 45 ms with 2nd / 3rd release (-Y2 … -Y7)'],
+  ['Arcing time', '< 15 ms'],
+  ['Break time', '≤ 45 ms with -Y1 · ≤ 60 ms with 2nd / 3rd release'],
+  ['Dead time', '300 ms'],
+  ['Close-open contact time', '≤ 45 ms with -Y1 · ≤ 60 ms with 2nd / 3rd release'],
+  ['Minimum command duration', '-Y9 45 ms · -Y1 40 ms · 2nd / 3rd release 20 ms'],
+  ['Shortest -S6 "tripped" pulse', '> 10 ms with -Y1 · > 6 ms with 2nd / 3rd release'],
+  ['Charging time (motor)', '< 15 s; ≥ 60 s between charging operations'],
+  ['Pole synchronism', '≤ 2 ms'],
+];
+
+export const CB_AUX = [
+  ['Motor -M1 (53)', '3AY1411', 'see table below; supply -15 / +10 %'],
+  ['Closing solenoid -Y9 (52)', '3AX1410 / 3AY1410', '300–370 W/VA, not for continuous duty, cut off by -S1; varistor ≥ 60 V DC'],
+  ['1st shunt release -Y1 (51.1)', '3AX1410 / 3AY1410', '300–370 W/VA, direct-acting armature; DC -30 / +10 %, AC -15 / +10 %'],
+  ['2nd shunt release -Y2 (option)', '3AX1101', '10 W/VA, energy store; varistor ≥ 60 V DC, rectifier ≥ 100 V'],
+  ['C.t.-operated releases -Y4, -Y5 / -Y6 (option)', '3AX1102 / 3AX1104 (0.1 Ws)', 'trip at 90 % of rated current; ≤ 6 VA at 0.5 / 1 A; need matching auxiliary CTs'],
+  ['Undervoltage release -Y7 (option)', '3AX1103', '20 W/VA, only with its series resistor -R1 (1 or 2 resistors); striker locking screw A → B'],
+  ['Electrical closing lock-out -Y8E (option)', '3AX1415 (list: 3AX1405)', 'closing only with control voltage, with -S5'],
+  ['Key lock (option)', '3AX1437', 'blocks hand and electrical closing (-S5)'],
+  ['Auxiliary switch -S1 (31)', '3SV9273 / 3SV9274', '6 NO + 6 NC / 12 NO + 12 NC; 250 V, 10 A cont., making 50 A; breaking 10 A at 230 V AC, 5 A (4 A inductive) at 110 V DC, 2.5 A (2 A) at 220 V DC'],
+  ['Auxiliary contactor -K1 (34)', '3AY1420', 'electrical anti-pumping'],
+  ['Position switches -S21, -S3, -S4, -S6, -S12', '3AX4206-0A', 'motor cut-off, -K1 control, spring charged, tripped signal, mechanical-interlock blocking'],
+  ['LV interface -X0 (32)', '3AX1134', '64-pole plug, crimp 1.5–2.5 mm²; or 20–30-pole plug strip (WAGO 231-110/026-000)'],
+  ['Heater -R01 (option)', '—', '50 W, 230 V AC (110 V AC option), surface ≈ 180 °C'],
+];
+
+export const CB_MOTOR = [
+  ['24 V DC', '140 W', '2 A'], ['30 V DC', '180 W', '—'], ['48 V DC', '110 W', '1 A'], ['60 V DC', '130 W', '1 A'],
+  ['110 V DC', '100 W', '0.5 A'], ['110 V AC', '170 VA', '0.315 A'], ['120 V DC / AC', '110 W / 210 VA', '—'], ['125 V DC', '120 W', '—'],
+  ['220 V DC', '110 W', '0.315 A'], ['230 V AC', '200 VA', '0.25 A'], ['240 V DC / AC', '130 W / 200 VA', '—'],
+];
+
+export const CB_CHECKS = [
+  'Rating plate data match the order; correct supply voltage; ambient ≥ -5 °C (with A40 down to -25 °C)',
+  'Breaker clean (insulating parts: damp cloth, warm water, mild cleaner); bolted joints tight; plug strip seated',
+  'Closing interlocks (key lock, -Y8E, -Y7) released for the tests',
+  'Without supply: charge with the hand crank, ON, then OFF',
+  'With supply: motor starts at once and charges; check the mechanical and electrical spring indication',
+  'Check -S1 and the position switches electrically in both end positions; check -Y9 and every shunt release electrically',
+  '-Y7 fitted: striker locking screw moved from A to B',
+  'Interlocks function as required by IEC 62271-200',
+  'Cover refitted and fixed; only then high voltage',
+];
+
+export const CB_ACCESSORIES = [
+  ['Hand crank for the closing spring', '3AX1530-4B', 'with slip clutch; only the original crank'],
+  ['Hand crank for the cassette "Heavy Duty"', '3AX1430-2C', 'hexagon'],
+  ['Hand crank for the motor cassette "Standard"', '3AX1430-8A', 'square; never with secondary voltage on'],
+  ['Molykote Longterm 2', '3AX1133-2L', 'contact fingers; eye protection (causes serious eye damage)'],
+  ['Vaseline (contact grease SN 10611)', '3AX1133-4A', 'threaded bolts and contact faces; acid-free, flash point 210 °C'],
+  ['Operating / unpacking instructions', '9229 0025 100 / 9229 0027 100', 'support.industry.siemens.com'],
 ];
 
 // fasteners from the operating instructions (all hand / 25 Nm M8)
@@ -132,17 +203,15 @@ export const TROUBLE = [
 ];
 
 export const CB_DATA = [
-  ['Types in NXAIR', '3AE1 (40 kA) and SION 3AE5, withdrawable on a cartridge / truck'],
-  ['Classes', 'C2 · E2 · M2 · S1; 10 000 cycles maintenance-free (M30 option: 30 000 with maintenance)'],
-  ['Operating sequence', 'O – 0.3 s – CO – 3 min – CO (also O – 3 min – CO – 3 min – CO, O – 0.3 s – CO – 15 s – CO)'],
-  ['Times (manual)', 'closing < 75 ms · opening < 65 ms (1st shunt) · arcing < 15 ms · break < 80 ms · pole synchronism ≤ 2 ms'],
-  ['Spring charging', 'motor < 15 s; by hand ≈ 50 turns (NXAIR O §10.15)'],
-  ['Motor', '3AE5 100–200 W/VA · 3AE1 470–960 W/VA'],
-  ['Pole centres / terminal distance', '150 · 160 · 210 · 275 mm / 205 · 275 · 310 mm (≥ 2000 A and 40 kA: 310 mm)'],
-  ['Contact arms / tulips', 'Ø 40 mm with adapter (≤ 1250 A) or Ø 60 mm; 13 or 26 fingers'],
-  ['Racking travel', '180 / 200 / 220 mm (≤ 17.5 kV), 260 mm (24 kV)'],
-  ['Mechanism parts', 'closing spring, opening / contact-pressure springs, motor 3AY1711, gear unit, closing solenoid -Y9, 1st shunt release -Y1, 2nd release -Y2 3AX1101, c.t.-operated release 3AX1102/1104, undervoltage release -Y7 3AX1103, auxiliary switch 3SV9273 (6 NO + 6 NC) / 3SV9274, anti-pumping relay -K1, operations counter, 64-pin LV plug -X0'],
-  ['Kinematics', 'Motor charges the closing spring through the gear unit until it latches (-S21/-S22 cut the motor). CLOSE releases it; while closing it charges the opening and contact-pressure springs through the insulating operating rods. The motor then recharges, so O–C–O is stored. Trip-free, mechanical + electrical anti-pumping.'],
+  ['Shown here', 'SION 3AE5, 12 kV, 1250 A, 31.5 kA, 3 s, pole centres 210 mm, terminals 275 mm apart (example rating plate 3AE5123-2, 80 kg)'],
+  ['Insulation', 'Ud 28 kV (42 kV on request; plate example 42 kV), Up 75 kV (95 kV on request; plate example 95 kV), up to 1000 m; above: Ka = e^((H − 1000)/8150)'],
+  ['Range of the type', '7.2–24 kV, 800–3150 A (4000 A with forced cooling), 16–40 kA; pole centres 150 / 160 / 210 / 275 mm, terminals 205 / 275 / 310 mm'],
+  ['Operating sequence', 'O – 0.3 s – CO – 15 s – CO'],
+  ['Classes', 'E2, C2, M2 (IEC 62271-100); 10 000 cycles maintenance-free, 30 000 with Siemens maintenance'],
+  ['Mounting', 'Upright only (interrupters vertical), indoors; fixed or on a truck / cassette'],
+  ['Cassette "Heavy Duty" / "Standard"', 'travel 220 mm (option 180 / 200 mm) / 200 mm up to 17.5 kV; 260 mm at 24 kV; cassette position switches -S1.5 … -S1.8 test, -S1.0 … -S1.3 service'],
+  ['Environment', 'IEC 60721-3-3 classes 3K4, 3B1, 3M2, 3C2 (3C3 with D20), 3S2; -5 … +55 °C (-25 °C with A40); humidity 95 % (24 h mean), 90 % (month)'],
+  ['Materials', 'steel, copper and aluminium (partly silver-plated), brass, chrome; epoxy, polyester, polyamide, polycarbonate, ABS-PC, silicone, rubber; ceramic; lubricants'],
 ];
 
 export const PANEL_TYPES = [

@@ -8,8 +8,8 @@ import {
 } from './data.js';
 import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
 import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeometry} from './model.js';
-import {BK_PARTS, buildBreaker} from './breaker.js';
-import {CB_JOINTS} from './ops.js';
+import {BK_PARTS, BK_SPEC, buildBreaker} from './breaker.js';
+import {CB_JOINTS, CB_ACCESSORIES, CB_AUX, CB_CHECKS, CB_DEPTHS, CB_MOTOR, CB_TIMES} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
 import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
 import {CHECKS, IO, LV_JOINTS, LV_TOUR, X0, FUNCS, SETTINGS, analogSvg, controlSvg} from './lvpane.js';
@@ -206,11 +206,10 @@ function build() {
 
   // the stand-alone breaker for the teardown tab
   if (world?.bkHolder) { scene.remove(world.bkHolder); disposeTree(world.bkHolder); }
-  const wd = WIDTHS[state.W];
-  const bk = buildBreaker(mats, {P: wd.pitch, TD: state.W === 1000 ? 310 : 275, armD: wd.contact === 40 ? 40 : 60, fingers: wd.contact === 40 ? 13 : 26});
+  const bk = buildBreaker(mats, BK_SPEC); // SION 3AE5 12 kV 1250 A 31.5 kA, independent of the panel width
   const bkHolder = new THREE.Group();
   bkHolder.scale.setScalar(0.001);
-  bk.root.position.z = 90;
+  bk.root.position.z = 75;
   bkHolder.add(bk.root);
   scene.add(bkHolder);
   cloneMats(bk.parts, partMats);
@@ -316,7 +315,7 @@ function applyFocus() {
 function applyGlassLite() { if (state.isolate) applyGlass(); }
 
 // parts drawn see-through in X-ray: the panel enclosure, or on the Breaker tab the mechanism cover, housing and pole shells
-const BK_SHELLS = new Set(['bkCover', 'bkFrame', 'bkShell']);
+const BK_SHELLS = new Set(['bkCover', 'bkFrame', 'bkShell', 'bkSep', 'bkSleeves']);
 const shellSet = () => (state.mode === 'breaker' ? BK_SHELLS : state.mode === 'lv' ? LV_SHELLS : world.subject.shellIds);
 function applyGlass() {
   if (!world) return;
@@ -358,7 +357,7 @@ const BK_VIEWS = {
   side: {p: [-2.1, 0.5, 0.05], t: [0, 0.38, 0]},
   rear: {p: [-1.3, 1.0, -1.7], t: [0, 0.38, -0.1]},
   top: {p: [0.2, 2.4, 0.5], t: [0, 0.3, 0]},
-  vi: {p: [-0.62, 0.43, -0.05], t: [0, 0.39, -0.04]},
+  vi: {p: [-0.78, 0.5, -0.06], t: [0, 0.459, -0.039]},
 };
 // LV compartment (stand-alone, origin at the floor of the compartment, front = door plane at z = 0)
 VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
@@ -802,7 +801,7 @@ function renderSources() {
   $('#pane-sources').innerHTML = `
     <span class="eyebrow">Where every number comes from</span>
     <h2>Sources</h2>
-    <div class="src">${DOCS.map((d) => `<div><b>${esc(d.k)}</b> · ${esc(d.t)}<br><span class="ref">${esc(d.no)} · ${esc(d.rev)}</span><br><a href="${d.url}" target="_blank" rel="noopener">Siemens PDF</a></div>`).join('')}</div>
+    <div class="src">${DOCS.map((d) => `<div><b>${esc(d.k)}</b> · ${esc(d.t)}<br><span class="ref">${esc(d.no)} · ${esc(d.rev)}</span><br>${d.url ? `<a href="${d.url}" target="_blank" rel="noopener">Siemens PDF</a>` : '<span class="ref">copy supplied by the user; download from support.industry.siemens.com</span>'}</div>`).join('')}</div>
     <h3>How to read this page</h3>
     <ul class="plain">
       <li>Counts, sizes, washers and torques are copied from the manuals; the section reference sits on every row.</li>
@@ -937,56 +936,71 @@ function drillAct(cmd) {
 
 // ================================================================================ breaker tab
 const BK_TEAR = [
-  {t: 'Make it safe and take it out', field: true, ex: 0, focus: ['bkTruck'], view: 'iso', text: 'Breaker OPEN, test position, auxiliary voltage off. Discharge the closing spring: OPEN – CLOSE – OPEN with the push rod. Unplug the LV connector, take the breaker out with the service truck (2 locking levers out, pull to the end stop, levers in, unlocking levers up).'},
-  {t: 'Contact systems (tulips) off', field: true, ex: 0.35, focus: ['bkTulips'], view: 'rear', text: 'Unscrew each contact system from its threaded rod (6 per breaker). Reassembly: fingers greased both sides with Molykote Longterm 2, round outer edge towards the arm, 40 ±4 Nm (M12) / 100 ±10 Nm (M16), greased threads.'},
-  {t: 'Contact arms off', field: true, ex: 0.45, focus: ['bkArms'], view: 'rear', text: 'Unscrew the arms and threaded rods from the pole terminals. Reassembly: threaded rod greased with Vaseline, screw-in depth upper 20 ±1 mm, lower 28 ±1 mm (38 ±1 mm at 40 kA), 40 ±4 / 100 ±10 Nm. Copper end faces roughened, cleaned, Vaseline; silver-plated faces cleaned, Vaseline.'},
-  {t: 'Covers off: see the mechanism', field: true, ex: 0.5, focus: ['bkCover', 'bkLV'], view: 'iso', text: '3AE1: cover and side panels each held by 4 Phillips pan-head screws ISO 7045 (driver size 3), 4 ±0.4 Nm. PG-fitting plate: Torx 20 self-tapping, 3 ±0.3 Nm, single use. Only with the closing spring discharged.'},
-  {t: 'Operating mechanism', field: false, ex: 0.75, focus: ['bkMotor', 'bkClosingSpring', 'bkShaft', 'bkOpeningSpring', 'bkReleases', 'bkAux'], view: 'iso', text: 'Shown for understanding. The mechanism is maintenance-free up to 10 000 cycles; adjustment and parts replacement (motor, releases, switches) follow the 3AE instructions and Siemens service.'},
-  {t: 'Poles', field: false, ex: 0.85, focus: ['bkShell', 'bkUpper', 'bkLower', 'bkRods'], view: 'rear', text: 'Pole shell, pole heads, lower connections with flexible conductor, insulating operating rods with contact-pressure springs. Factory-assembled and set; not dismantled in the field.'},
+  {t: 'Make it safe and take it out', field: true, ex: 0, focus: ['bkTruck'], view: 'iso', text: 'Breaker OFF, test position, supply voltage off and locked. Discharge the closing spring: OFF – ON – OFF with the push buttons. Unplug -X0, take the breaker out with the service truck. Lift only at the marked points on the top plate (crane hook symbol) or carry it on the truck; never let it tip – with the arms fitted it can fall onto the contact systems.'},
+  {t: 'Contact systems off', field: true, ex: 0.3, focus: ['bkTulips'], view: 'rear', text: 'Contact system (23) off the threaded bolt (6 per breaker). Refit: fingers greased inside with Molykote Longterm 2 (3AX1133-2L), for Ø 40 mm arms the adapter 22.2 set in from the back, round outer edge towards the arm, 40 ±4 Nm on M12 (greased threads), then grease the other side of the fingers.'},
+  {t: 'Contact arms and separating shells off', field: true, ex: 0.45, focus: ['bkArms', 'bkSleeves'], view: 'rear', text: 'Pull the hollow arms (22) off the bolts, unclip the separating shells (47) if fitted. Bolts (22.1): screw-in section greased with Vaseline (3AX1133-4A), 20 ±1 mm deep in both terminals (12 kV, 31.5 kA, 1250 A, M12), 40 ±4 Nm. Arm end faces: copper roughened, cleaned, Vaseline; silver-plated cleaned, Vaseline.'},
+  {t: 'Cover off: see the mechanism', field: true, ex: 0.5, focus: ['bkCover', 'bkLV'], view: 'iso', text: 'Plastic cover 20.1: pull both snap hooks at once, swing the cover forward, lift it off forward and up. Metal cover 20.2: two upper M6 loosened, four lower M6 with contact washers out, lift off; refit teeth towards the cover, 12 Nm. With the cover off: never trip the breaker by hand while the mechanical interlock is actuated (irreparable damage), keep 1 m away during test operations, block all operations before working inside.'},
+  {t: 'Operating mechanism', field: false, ex: 0.75, focus: ['bkMotor', 'bkClosingSpring', 'bkShaft', 'bkOpeningSpring', 'bkReleases', 'bkAux'], view: 'iso', text: 'Shown for understanding. Spare parts (motor, releases, switches) only by Siemens-trained and certified personnel with a final test on a Siemens-approved tester; otherwise the product liability lapses. Joints and bearings: wipe with a dry lint-free cloth only, never water or cleaner.'},
+  {t: 'Poles', field: false, ex: 0.85, focus: ['bkShell', 'bkUpper', 'bkLower', 'bkRods', 'bkSep'], view: 'rear', text: 'Pole shells open to the panel, pole heads (42) and lower connections (44) with their contact plates, shed insulators (45) that carry the movement up from the main shaft. Factory-assembled and set; not dismantled in the field.'},
   {t: 'Inside the vacuum interrupter', field: false, ex: 0, iso: true, focus: ['bkVI', 'bkVIin', 'bkRods', 'bkUpper', 'bkLower'], view: 'vi', cut: true, text: 'Section through the middle pole. Sealed for life: the interrupter is replaced, never opened. Internals drawn generically: ceramic body, vapour shield, fixed and moving contact discs, bellows.'},
 ];
 let bkSel = null;
 function renderBreaker() {
-  const wd = WIDTHS[state.W];
-  const P = wd.pitch, TD = state.W === 1000 ? 310 : 275, arm = wd.contact === 40 ? 40 : 60, fingers = wd.contact === 40 ? 13 : 26;
+  const {P, TD, armD, fingers} = BK_SPEC;
   const sel = bkSel && bkById[bkSel];
   const groups = [...new Set(BK_PARTS.map((p) => p.grp))];
   const comps = sel ? componentsOfBk(sel.id) : [];
+  const table = (head, rows) => `<div class="scroll-x"><table class="grid4"><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   $('#pane-breaker').innerHTML = `
-    <span class="eyebrow">SION 3AE5 · withdrawable · ${P} mm pole centres · ${TD} mm terminal distance · arms Ø ${arm} · ${fingers}-finger tulips</span>
-    <h2>How the breaker works</h2>
+    <span class="eyebrow">SION 3AE5 · 12 kV · 1250 A · 31.5 kA · ${P} mm pole centres · ${TD} mm terminal distance · arms Ø ${armD} · ${fingers}-finger contact systems</span>
+    <h2>The breaker</h2>
+    <p class="small">Drawn to the SION operating instructions 9229 0025 100 0C and the outline in catalog HG 11.02 (12 kV, ≤ 31.5 kA, a = 210 mm, b = 275 mm): 565 mm wide, 540 mm high, terminals 217.5 and 492.5 mm above the base, 169 mm mechanism box, 371 mm from the terminal faces to the front, contact arms 274 mm. The manual's example rating plate is exactly this breaker: <b>3AE5123-2</b>, Ur 12 kV, Ir 1250 A, Isc 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg, O – 0.3 s – CO – 15 s – CO, E2 C2 M2. This is the version for the NXAIR 800 mm panel; the 600 mm panel takes the 150 mm pole-centre version. Hover any part for its name; the Teardown steps below take it apart.</p>
+    <h2>How it works</h2>
     <ol class="body how">
-      <li><b>Charge.</b> The motor -M1 (or ≈ 50 turns of the hand crank on coupling 57.2) turns the charging shaft through the gear unit. The crank on that shaft stretches the closing spring, a helical extension spring hanging at the right side plate, through a link rod. Just past dead centre the closing latch catches the crank: indicator CHARGED, -S4 signals, -S21/-S22 switch the motor off. Takes &lt; 15 s.</li>
-      <li><b>Close.</b> The closing solenoid -Y9 (or the CLOSE button) frees the closing latch. The spring pulls the crank round; the closing cam on the charging shaft presses the roller lever of the main shaft, which turns and lifts the three insulating rods through the pole levers. The moving contacts meet the fixed contacts in the vacuum; the last few millimetres compress the contact-pressure springs. The same rotation winds the two opening torsion springs on the main-shaft ends, and the opening latch holds the shaft. Closing &lt; 75 ms. The motor recharges the closing spring at once: OPEN – CLOSE – OPEN is now stored.</li>
-      <li><b>Open.</b> The 1st shunt release -Y1 strikes the opening latch with its armature (protection trip, OPEN button; -Y2, -Y4…-Y6 and -Y7 do it through their own small energy stores). The opening springs and the contact-pressure springs turn the main shaft back and pull the contacts apart: opening &lt; 65 ms, break time &lt; 80 ms. Trip-free: an OPEN command during closing returns the contacts to OPEN even with CLOSE held. Electrical anti-pumping by relay -K1.</li>
-      <li><b>Interrupt.</b> The interrupter is fixed to the upper support and guided axially in the lower one; a flexible conductor feeds the moving stem. The arc burns in metal vapour from the contacts and goes out at the next current zero; the vapour condenses on the shield and the gap withstands the returning voltage within microseconds. Arcing &lt; 15 ms.</li>
+      <li><b>Charge.</b> With supply voltage on and the spring discharged, the motor -M1 starts at once and charges the closing spring through the gear unit; -S21 switches it off when the spring has latched (< 15 s, then ≥ 60 s before the next charge). The crank on the charging shaft stretches the helical extension spring through a link until it is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. Without supply: hand crank 3AX1530-4B on the coupling 57.2, clockwise until the indicator changes.</li>
+      <li><b>Close.</b> Push button ON or the closing solenoid -Y9 (command ≥ 45 ms) frees the latch. The spring pulls the crank round; the closing cam on the same shaft pushes the roller lever and turns the main shaft at the bottom of the drive. Its three pole levers push the shed insulators up, the moving contacts meet the fixed contacts, the last millimetres load the contact-pressure springs, the opening springs on the shaft ends are wound and the opening latch holds the shaft. Closing time ≤ 60 ms. The motor recharges at once, so OFF – ON – OFF is stored.</li>
+      <li><b>Open.</b> Push button OFF or the 1st shunt release -Y1 (direct-acting armature on the opening latch, command ≥ 40 ms; -Y2 … -Y7 act through their own energy stores, ≥ 20 ms) frees the latch; the opening and contact-pressure springs turn the shaft back. Opening ≤ 30 ms, arcing < 15 ms, break time ≤ 45 ms with -Y1 (≤ 60 ms with 2nd / 3rd release). -S6 gives a fleeting "breaker tripped" contact. With OFF and ON held together the breaker opens again and stays open (mechanical and electrical anti-pumping, -K1) until ON is given anew.</li>
+      <li><b>Interrupt.</b> The arc burns in metal vapour between the contacts and goes out at current zero; the vapour condenses on the shield and the gap regains its strength within microseconds.</li>
     </ol>
     <div class="cycle">
       <div class="row">
         <button type="button" class="btn" data-bk="charge">Charge spring</button>
-        <button type="button" class="btn ok" data-bk="close">CLOSE</button>
-        <button type="button" class="btn bad" data-bk="open">OPEN</button>
+        <button type="button" class="btn ok" data-bk="close">ON</button>
+        <button type="button" class="btn bad" data-bk="open">OFF</button>
         <button type="button" class="btn primary" data-bk="play">Play O – 0.3 s – CO</button>
       </div>
-      <label class="small check"><input type="checkbox" id="bkAux" ${state.bk.aux ? 'checked' : ''}> Auxiliary voltage on (motor recharges after closing)</label>
+      <label class="small check"><input type="checkbox" id="bkAux" ${state.bk.aux ? 'checked' : ''}> Supply voltage on (motor recharges after closing)</label>
       <div class="readout" id="bkRead"></div>
     </div>
-    <p class="small muted">Slow motion. Readouts show the real times from the 3AE manual. Contact travel is drawn larger than life; Siemens publishes no stroke. Use Cut for a section through the middle pole.</p>
+    <p class="small muted">Slow motion; the readouts give the manual's times. Contact travel is drawn larger than life (Siemens publishes no stroke; it changes slightly over the service life, which does not affect function). Use Cut for a section through the middle pole.</p>
     <h3>Springs</h3>
-    <div class="scroll-x"><table class="grid4"><thead><tr><th>Spring</th><th>Type</th><th>Charged by</th><th>Does</th></tr></thead><tbody>
-      <tr><td>Closing spring (55)</td><td>helical extension, 1 per breaker</td><td>motor / hand crank via charging shaft and crank</td><td>closes the breaker; also charges the opening and contact-pressure springs</td></tr>
-      <tr><td>Opening springs (17)</td><td>helical torsion, on both main-shaft ends</td><td>the closing movement</td><td>open the breaker when the opening latch is released</td></tr>
-      <tr><td>Contact-pressure springs</td><td>helical compression, 1 per pole on the insulating rod</td><td>the last part of the closing stroke (over-travel)</td><td>keep the closed contacts pressed, take up contact erosion, assist opening</td></tr>
-      <tr><td>Release energy stores</td><td>inside -Y2, -Y4…-Y6, -Y7</td><td>reset by the mechanism</td><td>strike the opening latch on a trip</td></tr>
-      <tr><td>Tulip garter springs</td><td>ring springs, 2 per contact system</td><td>assembly</td><td>press the contact fingers onto the bushing contact</td></tr>
-    </tbody></table></div>
-    <p class="small muted">Types read from the 3AE instructions (Fig. 20) and catalog HG 11.02 p. 8; Siemens publishes no spring forces or rates.</p>
+    ${table(['Spring', 'Type', 'Charged by', 'Does'], [
+      ['Closing spring (55)', 'helical extension, 1 per breaker, right of the mechanism plate', 'motor / hand crank via gear unit, charging shaft and crank', 'closes the breaker; also charges the opening and contact-pressure springs'],
+      ['Opening springs', 'helical torsion, on the main-shaft ends', 'the closing movement', 'open the breaker when the opening latch is released'],
+      ['Contact-pressure springs', 'helical compression, 1 per pole under the moving stem', 'the last part of the closing stroke (over-travel)', 'keep the closed contacts pressed, take up erosion, assist opening'],
+      ['Release energy stores', 'inside -Y2, -Y4 … -Y7', 'reset by the mechanism', 'strike the opening latch on a trip'],
+      ['Ring springs of the contact systems', '2 per contact system', 'assembly', 'press the contact fingers onto arm and fixed contact'],
+    ])}
+    <h3>Times</h3>${table(['Quantity', 'Value'], CB_TIMES)}
+    <h3>Operation at the breaker</h3>
+    <ul class="body">
+      <li>Close: hold ON (or the command) until the breaker shows ON. Open: hold OFF until it shows OFF; the spring indicator does not change on opening.</li>
+      <li>Discharge the closing spring: supply off, then OFF, ON, OFF by hand. The breaker is then open and discharged.</li>
+      <li>Key lock 3AX1437 (option): hold OFF and turn the key to vertical; the key comes out with the breaker locked against hand and electrical closing (-S5). Delivered locked: unlock for tests and commissioning.</li>
+      <li>Electrical closing lock-out -Y8E (option): closing only with control voltage present. Undervoltage release -Y7: closing only with -Y7 energised; move its striker locking screw from A to B before commissioning.</li>
+      <li>Mechanical interlock (59.2) for trucks and cassettes: the panel's interrogation part (cross-section ≤ 14 × 3 mm, force 50–450 N) senses the breaker position; with the breaker OFF it is lifted 5–10 mm and blocks closing (-S12 blocks electrically); with the breaker ON it cannot move, so the truck cannot be racked. Closing only in service or disconnected position, racking only when OFF.</li>
+    </ul>
     <h3>Teardown</h3>
     <ol class="tear">${BK_TEAR.map((x, k) => `<li><button type="button" class="tearbtn" data-tear="${k}"><span class="tt">${esc(x.t)}</span><span class="badge ${x.field ? 'step' : 'none'}">${x.field ? 'Field work' : 'Siemens only'}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
     ${sel ? `<div class="pcard" style="margin-top:14px"><span class="eyebrow">${esc(sel.grp)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>${comps.length ? `<h3>Components</h3><ul class="plain small">${comps.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
     <h3>Parts</h3>
     ${groups.map((g) => `<div class="group-h">${esc(g)}</div><div class="plist">${BK_PARTS.filter((p) => p.grp === g).map((p) => `<button type="button" data-bkpart="${p.id}" class="${bkSel === p.id ? 'sel' : ''}"><span class="sw" style="background:var(--copper)"></span>${esc(p.name)}</button>`).join('')}</div>`).join('')}
     <h3>Fasteners on the breaker</h3><div class="joints">${CB_JOINTS.map((j) => jointRow(j)).join('')}</div>
+    <h3>Screw-in depths of bolts / threaded rods from the contact face</h3>${table(['Rating', 'Thread', 'Upper (A)', 'Lower (B)'], CB_DEPTHS)}
+    <h3>Secondary equipment</h3>${table(['Device', 'Part no.', 'Data'], CB_AUX)}
+    <h3>Motor: power and protection</h3>${table(['Supply', 'Power', 'MCB (C char.)'], CB_MOTOR)}
+    <h3>Commissioning checklist</h3><ul class="plain small checks">${CB_CHECKS.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <h3>Accessories and lubricants</h3>${table(['Item', 'Order no.', 'Note'], CB_ACCESSORIES)}
     <h3>Breaker data</h3>${kv(CB_DATA)}`;
   renderBreakerReadout();
 }
@@ -1119,8 +1133,8 @@ let bkCur = null;
 let bkLast = 'Closing spring discharged, breaker open. Press Charge spring.';
 const BK_ACT = {
   charge: {dur: 2.6, real: 15, unit: 's', max: '< 15 s', label: 'Charging the closing spring'},
-  close: {dur: 1.5, real: 75, unit: 'ms', max: '< 75 ms', label: 'Closing', pulse: 'close'},
-  open: {dur: 1.2, real: 65, unit: 'ms', max: '< 65 ms', label: 'Opening', pulse: 'open'},
+  close: {dur: 1.5, real: 60, unit: 'ms', max: '≤ 60 ms', label: 'Closing', pulse: 'close'},
+  open: {dur: 1.2, real: 30, unit: 'ms', max: '≤ 30 ms (-Y1)', label: 'Opening', pulse: 'open'},
   dead: {dur: 0.9, real: 300, unit: 'ms', max: '0.3 s dead time', label: 'Dead time'},
 };
 function bkPredict() {
@@ -1173,8 +1187,8 @@ function bkTick(now, dt) {
   if (u >= 1) {
     state.bk.c = c; state.bk.s = sv;
     if (bkCur.kind === 'close') { state.bk.count++; bkLast = 'Closed. Contacts pressed by the contact-pressure springs; opening spring charged.'; if (state.bk.aux && !bkCur.noAuto && !bkQueue.length) bkQueue.unshift({kind: 'charge'}); }
-    if (bkCur.kind === 'open') bkLast = 'Opened. Arc extinguished at current zero (arcing < 15 ms, break time < 80 ms).';
-    if (bkCur.kind === 'charge') bkLast = 'Closing spring charged and latched; motor switched off by -S21/-S22.';
+    if (bkCur.kind === 'open') bkLast = 'Opened. Arc extinguished at current zero (arcing < 15 ms, break time ≤ 45 ms with -Y1).';
+    if (bkCur.kind === 'charge') bkLast = 'Closing spring charged and latched; motor switched off by -S21. Next charge ≥ 60 s later.';
     bkCur = null;
     renderBreakerReadout();
     return;

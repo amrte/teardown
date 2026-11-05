@@ -1,140 +1,187 @@
-// Stand-alone 3AE5 vacuum circuit-breaker on its withdrawable truck, detailed for the breaker teardown, with a rig
-// that poses every moving part from the charging-crank angle (0° discharged, 170° charged and latched just past dead
-// centre, 360° after closing) and s = main-shaft / contact position (0 open .. 1 closed).
+// Stand-alone SION 3AE5 vacuum circuit-breaker, 12 kV · 1250 A · 31.5 kA, pole-centre distance 210 mm, terminal
+// distance 275 mm (the version for the NXAIR 800 mm panel), on its NXAIR withdrawable truck.
 //
-// Operating principle (HG 11.02 p. 8, 3AE instructions Fig. 20): the closing spring is a helical extension spring
-// hanging at the right side plate; the motor turns the charging shaft through the gear unit, the crank on that shaft
-// stretches the spring via a link until it passes dead centre and the closing latch holds it. CLOSE (-Y9 or push
-// button) frees the latch, the spring pulls the crank round, the closing cam on the charging shaft pushes the roller
-// lever of the main shaft, the main shaft turns, its pole levers push the insulating rods up and the contacts close;
-// the same movement winds the two opening torsion springs on the main-shaft ends and loads the contact-pressure
-// springs, and the opening latch holds the main shaft. OPEN (-Y1 or push button) frees the opening latch and the
-// opening + contact-pressure springs turn the shaft back. Spring types are read from the drawings; Siemens publishes
-// no spring forces or rates. Layout after catalog HG 11.02 p. 8 (pole structure, open mechanism) and the 3AE
-// operating instructions 9229 0001 176 0E Fig. 20 (callout numbers in the labels).
+// Sources: SION operating instructions 9229 0025 100 0C (02.2020): Fig. 11/12 (drive side / pole side 1250 A 31.5 kA),
+// Fig. 15 (operating panel), Fig. 17/18 (opened mechanism, item numbers), Fig. 40 (rating plate 3AE5123-2, 12 kV,
+// 1250 A, 31.5 kA, 80 kg), Fig. 66 (earth terminal on the top plate), Fig. 84–85 (hollow contact arm on a threaded
+// bolt, contact system with arm adapter); catalog HG 11.02 · 2020 p. 59 (outline, 12 kV ≤ 31.5 kA, a = 210, b = 275:
+// width c 565, height 540, lower terminal e 217.5 above the base, mechanism box q 169 deep, terminal face to front l 371,
+// contact arm projection k 274, base g 329); HG 11.02 · 2018 p. 71 (withdrawable truck 679 × 620 × 107 mm, ≈ 20 kg).
 //
-// Breaker axes (mm): x across (pole centres -P, 0, +P), y up from the truck rails, z towards the operator (front
-// plate at z = ZF), poles and contact arms behind (negative z). Real values used: pole centre distance P, terminal
-// distance TD, contact arm Ø, finger count, contact arm projection 274 mm (HG p. 59 'k'). Interrupter internals and
-// the contact travel are generic and drawn larger than life (Siemens publishes no stroke).
+// What is real: outline dimensions, terminal positions, the arrangement and item numbers of the components, part
+// numbers, the open-to-the-rear pole shells with the shed insulators below the interrupters, the drive-side and
+// installation-side separating shells, the hollow arms with contact systems. What is drawn: the internal kinematics
+// (crank, cam, levers), the interrupter internals and the contact travel, which Siemens does not publish; positions
+// inside the mechanism are read from the perspective drawings and are approximate.
+//
+// Rig: crank angle (0° discharged, 170° charged and latched just past dead centre, 360° after closing) and s = main
+// shaft / contact position (0 open .. 1 closed). Closing spring: helical extension spring on the right of the
+// mechanism plate; opening springs: torsion springs on the main-shaft ends.
+//
+// Axes (mm): x across (poles at -P, 0, +P), y up from the truck bottom (breaker base at YB), z towards the operator
+// (mechanism rear plate at 0, front frame at 150, cover face at 169), poles and contact arms behind (z < 0).
 import * as THREE from 'three';
 import {B, C, L, PartBuilder, RB, T, TU, spread} from './geom.js';
 
+export const YB = 107; // breaker base on top of the 107 mm truck
+// the breaker shown in the Breaker tab: SION 3AE5, 12 kV, 1250 A, 31.5 kA, pole centres 210 mm, terminals 275 mm apart
+export const BK_SPEC = {P: 210, TD: 275, armD: 40, fingers: 13};
+
 export const BK_PARTS = [
-  // id, name, group, explode dir (mm), description
-  {id: 'bkTruck', name: 'Withdrawable truck (10)', grp: 'Truck', dir: [0, -260, 0], desc: 'Chassis with 4 wheels running on the panel shelf rails, racking spindle with nut (driven by the racking crank through the door), sliding earthing contact, locking levers that latch the part on the service truck. Racking travel 180 / 200 / 220 mm.'},
-  {id: 'bkCover', name: 'Mechanism cover + control board (20.1)', grp: 'Operating mechanism', dir: [0, 0, 380], desc: 'Front cover with the central control board: CLOSE push button (56.1, green), OPEN push button (56.2, red), CLOSED/OPEN position indicator (56.3), spring state indicator (55.1), operating cycle counter (58), hand-crank opening (57.1), rating plate (21). Pressing CLOSE and OPEN together on a 3AE5 causes irreversible damage.'},
-  {id: 'bkLV', name: 'LV interface: 64-pin plug, terminal strip (32, 33)', grp: 'Operating mechanism', dir: [0, 260, 120], desc: 'Low-voltage plug-connector -X0 (64-pin) on top, connector strip -X1, plugs -X01/-X02 for the withdrawable version. Carries motor supply, releases, auxiliary contacts, position switches and the spring-charged signal to the panel.'},
-  {id: 'bkMotor', name: 'Motor + gear unit (53, 57)', grp: 'Operating mechanism', dir: [-260, 160, 120], desc: 'Motor -M1 (3AY1711, 3AE5 100–200 W/VA) turns the charging shaft through the gear unit (57); charging takes < 15 s. Position switches -S21/-S22 switch the motor off when the closing spring has latched. The hand crank fits the coupling (57.2) behind the cover opening (57.1) for manual charging (NXAIR: ≈ 50 turns); it uncouples when motor voltage returns.'},
-  {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [300, 0, 120], desc: 'Helical extension spring hanging from the top of the right side plate, coils closed at rest. The charging shaft turns the closing crank, which stretches the spring through a link rod until the crank is just past dead centre, where the closing latch holds it (indicator CHARGED, -S4 signals). CLOSE (-Y9 or push button) frees the latch: the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor then recharges it at once, so OPEN – CLOSE – OPEN is stored.'},
-  {id: 'bkShaft', name: 'Main shaft, pole levers, roller lever, opening latch (16)', grp: 'Operating mechanism', dir: [0, -120, 220], desc: 'Transverse main shaft between the side plates with one lever per pole and a roller lever driven by the closing cam. Turning it pushes the three insulating rods up (pole synchronism ≤ 2 ms) and winds the opening springs; the opening latch then holds it in CLOSED. -Y1 (or the OPEN button) frees the latch. Trip-free: an OPEN command during closing returns the contacts to OPEN even with CLOSE held.'},
-  {id: 'bkOpeningSpring', name: 'Opening springs (17), torsion, on the main shaft', grp: 'Operating mechanism', dir: [-300, -80, 120], desc: 'Two helical torsion springs on the ends of the main shaft (as drawn in the 3AE instructions Fig. 20), one leg fixed to the frame, one on the shaft. The closing movement winds them up; together with the three contact-pressure springs they turn the shaft back when the opening latch is released: opening < 65 ms, arcing < 15 ms, break time < 80 ms.'},
-  {id: 'bkReleases', name: 'Closing solenoid + releases (52, 51.1, 51.2)', grp: 'Operating mechanism', dir: [0, 120, 300], desc: 'Closing solenoid -Y9 (3AY1410), 1st shunt release -Y1 (direct-acting armature on the opening latch), optional 2nd release -Y2 (3AX1101), c.t.-operated release -Y4…-Y6 (3AX1102/1104) and undervoltage release -Y7 (3AX1103, transport screw from A to B before commissioning).'},
-  {id: 'bkAux', name: 'Auxiliary switch, position switches, relay (31, 54, 34)', grp: 'Operating mechanism', dir: [260, 160, 200], desc: 'Auxiliary switch -S1 (3SV9273, 6 NO + 6 NC, or 3SV9274, 12 NO + 12 NC) coupled to the main shaft. Position switches -S12 (blocks electrical closing with the mechanical lock), -S21/-S22 (motor cut-off), -S3 (controls -K1), -S4 (spring charged), -S6 (trip signal). Contactor relay -K1: electrical anti-pumping.'},
-  {id: 'bkFrame', name: 'Mechanism mounting plate + housing (9)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Steel housing and mounting plate carrying all mechanism parts, the separating panel to the poles (41) and the earth terminal M12 (70), tightened to 70 Nm.'},
-  {id: 'bkRods', name: 'Insulating operating rods + contact-pressure springs (45)', grp: 'Pole', dir: [0, -160, -120], desc: 'One glass-fibre rod per pole carries the shaft lever movement up into the pole to the moving contact. A contact-pressure spring at the rod end keeps the closed contacts pressed together and compensates contact erosion (over-travel).'},
-  {id: 'bkShell', name: 'Pole shells + insulating shells (46, 3)', grp: 'Pole', dir: [0, 0, -360], desc: 'Epoxy pole shell per phase. It holds the interrupter between the upper and lower connection and takes the switching forces and the contact pressure. The insulating shell opens towards the mechanism; the inter-phase panels (47) separate the poles.'},
-  {id: 'bkUpper', name: 'Upper connections / pole heads (4, 42)', grp: 'Pole', dir: [0, 220, -200], desc: 'Pole head with the pole contact plate and cooling ribs. The fixed contact stem of the interrupter is bolted rigidly here. The upper contact arm screws into its thread (M12 ≤ 1250 A, M16 2000–2500 A), screw-in depth 20 ±1 mm.'},
-  {id: 'bkLower', name: 'Lower connections + flexible conductor (7, 44)', grp: 'Pole', dir: [0, -60, -260], desc: 'Lower terminal on the pole shell. The moving stem of the interrupter is guided axially here and connected through a flexible copper conductor so it can travel. Lower contact arm screw-in depth 28 ±1 mm (38 ±1 mm at 40 kA).'},
-  {id: 'bkVI', name: 'Vacuum interrupters (5, 43)', grp: 'Vacuum interrupter', dir: [0, 0, -560], desc: 'Sealed vacuum bottle per pole. The arc burns in metal vapour between the contacts and goes out at the next current zero; the vapour condenses on the shield and the gap regains its dielectric strength within microseconds. Maintenance-free; replaced as a pole by Siemens, never opened.'},
-  {id: 'bkVIin', name: 'Interrupter internals (generic)', grp: 'Vacuum interrupter', dir: [0, 0, -760], desc: 'Generic construction of a vacuum interrupter, not a Siemens drawing: ceramic insulating body (2 rings), end flanges, central vapour shield, fixed contact stem and contact disc at the top, moving contact disc and stem at the bottom, stainless metal bellows that keep the vacuum while the stem moves, guide bushing. Contact discs are slotted (copper–chromium) to drive the arc. Gap and stroke drawn larger than life.'},
-  {id: 'bkArms', name: 'Contact arms + threaded rods (22, 22.1)', grp: 'Primary contacts', dir: [0, 0, -420], desc: 'Silver-plated copper arms Ø 40 mm (≤ 1250 A, with contact arm adapter 22.2) or Ø 60 mm, 274 mm projection. Threaded rods greased with Vaseline, screwed into the terminals and tightened 40 ±4 Nm (M12) / 100 ±10 Nm (M16), greased threads. End faces: copper roughened, cleaned, Vaseline.'},
-  {id: 'bkTulips', name: 'Contact systems / tulips (23.1)', grp: 'Primary contacts', dir: [0, 0, -640], desc: 'Ring of spring-loaded contact fingers (13 for ≤ 1250 A, 26 above) held by garter springs. They slide over the silver-plated fixed contacts in the panel bushings. Fingers greased both sides with Molykote Longterm 2; round outer edge towards the arm; tightened 40 ±4 / 100 ±10 Nm.'},
+  {id: 'bkTruck', name: 'Withdrawable truck', grp: 'Truck', dir: [0, -260, 0], desc: 'NXAIR withdrawable truck under the breaker: 679 mm wide, 620 mm deep, 107 mm high, ≈ 20 kg (HG 11.02 · 2018 p. 71, pole centres 210 mm). Four wheels on the panel rails, racking spindle driven by the racking crank through the door, sliding earthing contact, two locking levers that latch it in the panel or on the service truck. Racking travel in NXAIR 200 mm.'},
+  {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
+  {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
+  {id: 'bkLV', name: 'LV interface -X0 (32), plugs -X01/-X02 (33.2)', grp: 'Operating mechanism', dir: [0, 240, 60], desc: '64-pole low-voltage plug-connector -X0 3AX1134 on the top plate, crimp contacts for 1.5–2.5 mm² control wires (alternatively a 20- or 30-pole plug strip Q0-X1.1 … X1.3, WAGO 231 spring terminals, with a cable bracket 60 fixed by Torx 20 self-tapping screws, 3 Nm, single use). Plugs -X01 / -X02 for the cassette position switches. Inside: the wiring loom from -X0 to the devices.'},
+  {id: 'bkMotor', name: 'Motor -M1 (53), gear unit (57), hand-crank coupling (57.2)', grp: 'Operating mechanism', dir: [-240, 120, 160], desc: 'Motor 3AY1411 charges the closing spring through the gear unit as soon as supply voltage is applied and the spring is discharged, and is switched off internally by -S21 when the spring has latched. Charging < 15 s; the motor runs in its overload range for this short time and needs ≥ 60 s between charging operations. Power 100–210 W/VA depending on voltage (24 V DC 140 W, 110 V DC 100 W, 230 V AC 200 VA). Motor protection is not supplied: C-characteristic MCB 2 A at 24 V DC, 1 A at 48/60 V DC, 0.5 A at 110 V DC, 0.315 A at 110 V AC / 220 V DC, 0.25 A at 230 V AC. Hand crank 3AX1530-4B with slip clutch through the cover opening, clockwise until the spring indicator changes; it uncouples when motor voltage returns.'},
+  {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [280, 40, 170], desc: 'Helical extension spring hanging from a bracket at the top right of the mechanism plate. The charging shaft turns the crank, which stretches the spring through a link until the crank is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. ON (56.1 or -Y9) frees the latch, the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor recharges the spring at once, so OFF – ON – OFF is stored. Discharging: supply off, then OFF, ON, OFF by hand.'},
+  {id: 'bkShaft', name: 'Main shaft, pole levers, roller lever', grp: 'Operating mechanism', dir: [0, -90, 220], desc: 'The switching shaft runs across the bottom of the drive and out through both side plates (optional shaft covers, Torx T20, 5 Nm, close off the ends). The cam turns it through the roller lever; one lever per pole reaches back under the pole and pushes its shed insulator (45) up: the contacts close, the contact-pressure springs are loaded, the opening springs on the shaft ends wound. Pole synchronism ≤ 2 ms. Do not touch the poles or the shaft: they move fast, also by remote control.'},
+  {id: 'bkOpeningSpring', name: 'Opening springs, torsion, on the main shaft', grp: 'Operating mechanism', dir: [-300, -80, 120], desc: 'Helical torsion springs on the main-shaft ends, one leg fixed to the base, one on the shaft. The closing movement winds them; with the contact-pressure springs they open the breaker when the opening latch is released: opening ≤ 30 ms with -Y1, arcing < 15 ms, break time ≤ 45 ms. Spring forces are not published.'},
+  {id: 'bkReleases', name: 'Closing solenoid -Y9 (52), releases -Y1 (51.1), -Y2 / -Y3 (51.2, 51.3)', grp: 'Operating mechanism', dir: [-120, 0, 280], desc: 'Closing solenoid -Y9 (3AY1410, 300–370 W/VA) frees the closing latch; 1st shunt release -Y1 (3AY1410, 300–370 W/VA) strikes the opening latch with a direct-acting armature. Both are switched off inside the breaker by -S1 and are not rated for continuous duty; ≥ 60 V DC versions carry a varistor. Minimum command time -Y9 45 ms, -Y1 40 ms, 2nd / 3rd release 20 ms. Supply tolerance -15 / +10 % (-Y1 on DC -30 / +10 %). Up to two more releases 3AX11: 2nd shunt release -Y2 3AX1101 (10 W, energy store), c.t.-operated releases -Y4 / -Y5 3AX1102 and -Y6 3AX1104 (0.1 Ws), undervoltage release -Y7 3AX1103 (20 W, only with its series resistor -R1; move the striker locking screw from A to B before commissioning). Optional electrical closing lock-out -Y8E.'},
+  {id: 'bkAux', name: 'Auxiliary switch -S1 (31), -K1 (34), position switches, counter, heater', grp: 'Operating mechanism', dir: [0, 200, 240], desc: 'Auxiliary switch -S1 3SV9273 (6 NO + 6 NC) or 3SV9274 (12 NO + 12 NC), coupled to the main shaft: 250 V AC/DC, 10 A continuous, making 50 A, breaking 10 A at 230 V AC, 5 A (4 A inductive) at 110 V DC, 2.5 A at 220 V DC. Auxiliary contactor -K1 3AY1420: electrical anti-pumping (with OFF and ON both held, the breaker stays open until ON is given again). Position switches 3AX4206-0A: -S21 motor cut-off, -S3 controls -K1, -S4 "closing spring charged" (both open when the spring is charged), -S6 breaker-tripped signal (fleeting contact on a release trip, ≥ 10 ms with -Y1), -S12 blocks electrical closing with the mechanical interlock. Operations counter 58. Anti-condensation heater -R01 50 W 230 V AC (110 V option), surface about 180 °C.'},
+  {id: 'bkShell', name: 'Pole shells (46)', grp: 'Pole', dir: [0, 0, -330], desc: 'One epoxy pole shell per phase, open towards the panel (rear), with creepage ribs at its foot. It carries the pole head, the interrupter and the lower connection and takes the switching forces. Clean insulating parts with a damp cloth, warm water and a mild household cleaner only.'},
+  {id: 'bkSep', name: 'Separating shells to the drive side (41, optional)', grp: 'Pole', dir: [0, 220, 0], desc: 'Insulating U-shells between each pole and the drive housing, standing above the housing top. Optional.'},
+  {id: 'bkUpper', name: 'Pole heads with contact plate (42)', grp: 'Pole', dir: [0, 210, -200], desc: 'Upper connection: pole head with the pole contact plate facing the panel, 4 tapped holes M12 for flat busbars plus the centre thread for the contact-arm bolt. The fixed stem of the interrupter is bolted rigidly here. Screw-in depth 20 ±1 mm (12 kV, ≤ 31.5 kA, ≤ 1600 A, M12).'},
+  {id: 'bkLower', name: 'Lower connections, pole contact plates (44)', grp: 'Pole', dir: [0, -30, -260], desc: 'Lower connection with its pole contact plate (44), the guide of the moving stem and the flexible conductor that feeds it. Screw-in depth 20 ±1 mm for M12 at ≤ 31.5 kA, ≤ 1600 A (28 ±1 mm for M16 2000–2500 A, 38 ±1 mm at 40 kA). Contact faces: sprayed-copper and sprayed-silver faces wiped with a cloth, never brushed; copper busbars wire-brushed crosswise until bright, a thin film of acid-free Vaseline, bolted at once.'},
+  {id: 'bkVI', name: 'Vacuum interrupters (43)', grp: 'Vacuum interrupter', dir: [0, 0, -520], desc: 'Sealed vacuum interrupter per pole, type-approved as an interference emitter under the German Radiation Protection Act (§ 45 StrlSchG). The arc burns in metal vapour and goes out at current zero; arcing < 15 ms. A small change of the contact stroke over its life does not affect function. Frequent switching of overload or short-circuit currents can end its life early. Maintenance-free up to 10 000 cycles (30 000 with Siemens maintenance); replaced as a pole by Siemens.'},
+  {id: 'bkVIin', name: 'Interrupter internals (generic)', grp: 'Vacuum interrupter', dir: [0, 0, -720], desc: 'Generic construction, not a Siemens drawing: ceramic insulating body (2 rings), end flanges, centre vapour shield, fixed contact stem and slotted CuCr contact disc at the top, moving contact disc and stem below, stainless bellows that keep the vacuum while the stem moves. Gap and stroke drawn larger than life (Siemens publishes no stroke).'},
+  {id: 'bkRods', name: 'Insulators (45) with contact-pressure springs', grp: 'Pole', dir: [0, -170, -60], desc: 'Shed insulators below each interrupter "transmit the switching movement to the poles": the main-shaft lever pushes the insulator up, its top coupling drives the moving stem through a contact-pressure spring that keeps the closed contacts pressed and takes up contact erosion (over-travel).'},
+  {id: 'bkArms', name: 'Contact arms (22) on threaded bolts (22.1)', grp: 'Primary contacts', dir: [0, 0, -400], desc: 'Hollow silver-plated copper arms Ø 40 mm (≤ 1250 A), 274 mm from the pole contact plate to the end of the contact system. The threaded bolt is greased with Vaseline in the screw-in section, screwed 20 ±1 mm into the terminal and tightened 40 ±4 Nm (M12, greased); the arm slides over it. Copper end faces roughened, cleaned and greased with Vaseline; silver-plated faces cleaned and greased.'},
+  {id: 'bkTulips', name: 'Contact systems (23, 23.1) with arm adapter (22.2)', grp: 'Primary contacts', dir: [0, 0, -600], desc: 'Contact system: a cage of spring-loaded contact fingers held by ring springs. For Ø 40 mm arms the contact arm adapter (22.2) is set in from the back of the contact system: fingers greased with Molykote Longterm 2, adapter adjusted with screw, washers and nut, tightened with an open-ended spanner, then screw, washers and nut removed. The contact system goes onto bolt and arm with the round outer edge towards the arm, 40 ±4 Nm (M12, greased); the other side of the fingers is greased last.'},
+  {id: 'bkSleeves', name: 'Separating shells to the panel side (47, optional)', grp: 'Primary contacts', dir: [0, 0, -260], desc: 'Insulating sleeves slid over the main conductors and snapped into the pole shell, to insulate the poles from each other where the connection space is tight; conductors up to Ø 60 mm. Up to 17.5 kV: slide onto the bolts, set against the pole shell and let them engage; check that the snap hooks are fully behind the insulating ribs.'},
 ];
 
-export function buildBreaker(mats, {P = 210, TD = 275, armD = 60, fingers = 26} = {}) {
-  const root = new THREE.Group();
-  const parts = {};
-  const rig = {}; // moving objects
-  const half = P + 72; // mechanism half-width (c = 565 for P = 210)
-  const ZF = 300, ZB = 0; // front plate, rear wall of the mechanism box
-  const zPole = -130; // pole axis
-  const yLo = 250, yUp = yLo + TD; // terminal axes
-  const yVI0 = yLo + 40, yVI1 = yUp - 40; // interrupter body
-  const yGap = (yVI0 + yVI1) / 2 - 10; // contact plane
-  const xs = [-P, 0, P];
-  const STROKE = 14; // drawn contact travel (mm), larger than life
-  const h = half - 10;
-  const mx = -h + 140; // motor + gear unit column
-  const zF0 = ZB + 126, zR = ZB + 60; // front-zone start (in front of the mounting plate), shaft plane (rear zone)
-  const yMS = 160, yCS = 360; // main shaft, charging shaft
-  const xCrank = h - 35, xCam = P / 2, CR = 40; // closing crank, closing cam, crank radius
-  const ySpringTop = 620, SPRING0 = 120; // closing spring anchored at the top; closed-coil length
+const HAS_DOM = typeof document !== 'undefined';
+function canvasTex(Wmm, Hmm, ppm, draw) {
+  const c = document.createElement('canvas');
+  c.width = Math.round(Wmm * ppm);
+  c.height = Math.round(Hmm * ppm);
+  const g = c.getContext('2d');
+  g.scale(ppm, ppm);
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  draw(g);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+const FONT = '"IBM Plex Sans Condensed", "Arial Narrow", Arial, sans-serif';
+const txt = (g, s, x, y, size, color = '#1f2427', weight = 600, align = 'center') => { g.font = `${weight} ${size}px ${FONT}`; g.fillStyle = color; g.textAlign = align; g.fillText(s, x, y); };
+const plane = (x0, x1, y0, y1, z) => { const g = new THREE.PlaneGeometry(x1 - x0, y1 - y0); g.translate((x0 + x1) / 2, (y0 + y1) / 2, z); return g; };
+const COVER = {x0: -140, x1: 140, y0: 40, y1: 500};
+// a plane over part of the cover that shows the same part of the cover art (uv from the vertex positions)
+const coverDecal = (x0, x1, y0, y1, z) => {
+  const g = plane(x0, x1, y0, y1, z);
+  const pos = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < pos.count; i++) uv.setXY(i, (pos.getX(i) - COVER.x0) / (COVER.x1 - COVER.x0), (pos.getY(i) - COVER.y0) / (COVER.y1 - COVER.y0));
+  return g;
+};
 
-  const part = (id) => {
+function coverArt(g) {
+  // canvas x = X + 140, y = 500 - Y (cover face, mm)
+  const at = (X, Y) => [X + 140, 500 - Y];
+  let [x, y] = at(-62, 452);
+  txt(g, 'SION', x, y, 15, '#2d3a44', 700);
+  // rating plate (values of the example plate in the operating instructions, Fig. 40)
+  [x, y] = at(20, 478);
+  g.fillStyle = '#f4f4f0'; g.fillRect(x, y, 100, 73);
+  const rows = ['Type 3AE5123-2', 'Ur 12 kV   fr 50/60 Hz', 'Ir 1250 A   Isc 31.5 kA', 'tk 3 s   m 80 kg', 'Ud 42 kV   Up 95 kV', 'O - 0.3 s - CO - 15 s - CO', 'IEC 62271-100: E2, C2, M2'];
+  rows.forEach((r, i) => txt(g, r, x + 3, y + 5 + i * 9.6, 5.6, '#1f2427', i === 0 ? 700 : 500, 'left'));
+  // hand-crank opening with its direction arrow
+  [x, y] = at(0, 360);
+  g.strokeStyle = '#1f2427'; g.lineWidth = 1.6;
+  g.beginPath(); g.arc(x, y, 24, -Math.PI * 0.95, -Math.PI * 0.2); g.stroke();
+  g.beginPath(); g.moveTo(x + 24 * Math.cos(-Math.PI * 0.2) - 5, y + 24 * Math.sin(-Math.PI * 0.2) - 3); g.lineTo(x + 24 * Math.cos(-Math.PI * 0.2), y + 24 * Math.sin(-Math.PI * 0.2)); g.lineTo(x + 24 * Math.cos(-Math.PI * 0.2) - 1, y + 24 * Math.sin(-Math.PI * 0.2) + 6); g.stroke();
+  txt(g, 'hand crank', x, y + 32, 6.5, '#3a454d', 500);
+  // window frame of the control board and the element captions
+  [x, y] = at(-110, 250);
+  g.strokeStyle = '#2b3035'; g.lineWidth = 1.2; g.strokeRect(x, y, 220, 120);
+  for (const [s, X, Y] of [['OFF', -75, 239], ['ON', -35, 239], ['count', -75, 141], ['position', -35, 136], ['spring', 60, 165]]) { [x, y] = at(X, Y); txt(g, s, x, y, 5.6, '#2b3035', 600); }
+}
+function buttonArt(sym) {
+  return (g) => {
+    g.fillStyle = 'rgba(0,0,0,0)';
+    g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.lineWidth = 3;
+    if (sym === 'O') { g.beginPath(); g.arc(16, 16, 8, 0, Math.PI * 2); g.stroke(); } else g.fillRect(14.5, 7, 3, 18);
+  };
+}
+function flagArt(kind) {
+  return (g) => {
+    g.fillStyle = kind === 'I' ? '#d8d8d2' : kind === 'O' ? '#d8d8d2' : kind === 'charged' ? '#f1c232' : '#eeeeea';
+    g.fillRect(0, 0, 30, 30);
+    g.strokeStyle = '#111'; g.fillStyle = '#111'; g.lineWidth = 2.2;
+    if (kind === 'I') g.fillRect(13.5, 5, 3, 20);
+    else if (kind === 'O') { g.beginPath(); g.arc(15, 15, 8, 0, Math.PI * 2); g.stroke(); }
+    else {
+      // spring symbol: compressed zig-zag when charged, open zig-zag when discharged
+      const n = kind === 'charged' ? 7 : 4, x0 = 4, x1 = 26;
+      g.lineWidth = 1.6; g.beginPath(); g.moveTo(x0, 15);
+      for (let i = 0; i <= n; i++) g.lineTo(x0 + ((x1 - x0) * i) / n, i % 2 ? 9 : 21);
+      g.lineTo(x1, 15); g.stroke();
+    }
+  };
+}
+function counterArt(g) {
+  g.fillStyle = '#111'; g.fillRect(0, 0, 40, 20);
+  for (let i = 0; i < 5; i++) { g.fillStyle = '#f4f4f0'; g.fillRect(2 + i * 7.4, 3, 6.4, 14); txt(g, '00042'[i], 5.2 + i * 7.4, 10.4, 10, '#111', 600); }
+}
+
+export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} = {}) {
+  const root = new THREE.Group();
+  const body = new THREE.Group(); // the breaker on its truck
+  body.position.y = YB;
+  root.add(body);
+  const parts = {};
+  const rig = {};
+  const half = P + 72; // overall half-width (HG c = 2a + 145: 565 at a = 210)
+  const hh = half - 12; // drive housing half-width
+  const H = 540; // housing / pole height above the base
+  const ZF = 150, ZC = 169; // front frame of the housing, cover face (HG q = 169)
+  const ZT = ZC - 371; // terminal contact face (HG l = 371)
+  const zPole = ZT + 88; // pole axis
+  const yLo = 217.5, yUp = yLo + TD; // terminal centres above the base (HG e = 217.5)
+  const yVI0 = yLo + 40.5, yVI1 = yUp - 46.5; // interrupter flanges
+  const yGap = (yVI0 + yVI1) / 2;
+  const xs = [-P, 0, P];
+  const STROKE = 14, OVER = 6; // drawn contact travel and over-travel (larger than life)
+  const yMS = 66, zMS = 60, LEVER = zMS - zPole; // main shaft, pole-lever length
+  const yCS = 290, zCS = 70; // charging shaft
+  const xCrank = 150, xCam = 60, xDisc = 104, CR = 40; // closing crank, closing cam, crank radius
+  const ySpringTop = 495;
+  const ROD_TOP = yLo - 41.5; // top of the insulator coupling, contacts closed
+
+  // textured materials for the operating panel (browser only)
+  const MX = {...mats};
+  if (HAS_DOM) {
+    const planes = mats.galv.clippingPlanes;
+    const mk = (map, o = {}) => new THREE.MeshStandardMaterial({map, roughness: 0.6, metalness: 0.02, clippingPlanes: planes, ...o});
+    MX.bkCoverArt = mk(canvasTex(280, 460, 4, coverArt), {alphaTest: 0.3});
+    MX.bkBtnO = mk(canvasTex(32, 32, 8, buttonArt('O')), {alphaTest: 0.3});
+    MX.bkBtnI = mk(canvasTex(32, 32, 8, buttonArt('I')), {alphaTest: 0.3});
+    for (const k of ['I', 'O', 'charged', 'discharged']) MX['bkFlag' + k] = mk(canvasTex(30, 30, 8, flagArt(k)));
+    MX.bkCounter = mk(canvasTex(40, 20, 8, counterArt));
+  }
+  const tex = !!MX.bkCoverArt;
+
+  const part = (id, parent = body) => {
     const g = new THREE.Group();
     g.userData.part = id;
     const meta = BK_PARTS.find((p) => p.id === id);
     g.userData.dir = new THREE.Vector3(...(meta?.dir || [0, 0, 0]));
-    root.add(g);
+    parent.add(g);
     parts[id] = g;
-    return new PartBuilder(g, mats);
+    return new PartBuilder(g, MX);
   };
-  const sub = (pid, label, build, mat) => {
+  const sub = (pid, label, build) => {
     // a moving sub-object with its own pivot, inside part pid
     const g = new THREE.Group();
-    const pb = new PartBuilder(g, mats);
+    const pb = new PartBuilder(g, MX);
     build(pb);
     pb.finish();
     g.userData.label = label;
     parts[pid].add(g);
     return g;
   };
-
-  // ------------------------------------------------------------ truck
-  {
-    const p = part('bkTruck');
-    const w = P === 210 ? 679 / 2 : P === 275 ? 879 / 2 : 529 / 2;
-    p.add(RB(-w, w, 20, 70, -360, ZF, 4), 'galvDark', 'Truck chassis');
-    for (const s of [-1, 1]) {
-      p.add(B(s * w - 10, s * w + 10, 10, 90, -360, ZF), 'steel', 'Side member');
-      for (const z of [-310, ZF - 50]) p.add(C(28, 28, 22, 'x', s * (w + 12), 28, z, 20), 'black', 'Wheel');
-      p.add(RB(s * (w - 70) - 30, s * (w - 70) + 30, 70, 95, ZF - 80, ZF + 10, 4), 'red', 'Locking lever');
-    }
-    p.add(C(11, 11, 560, 'z', 0, 45, ZF - 300), 'steel', 'Racking spindle');
-    p.add(RB(-45, 45, 25, 70, -200, -140, 4), 'black', 'Spindle nut');
-    p.add(B(-25, 25, 0, 20, -300, -150), 'copper', 'Sliding earthing contact');
-    p.add(RB(-60, 60, 50, 92, ZF, ZF + 40, 6), 'steel', 'Pull handle');
-    p.finish();
-  }
-
-  // ------------------------------------------------------------ mechanism housing + mounting plate
-  {
-    const p = part('bkFrame');
-    p.add(B(-half, half, 95, 100, ZB, ZF), 'housing', 'Base of mechanism housing');
-    p.add(B(-half, -half + 3, 100, 640, ZB, ZF - 10), 'housing', 'Side wall');
-    p.add(B(half - 3, half, 100, 640, ZB, ZF - 10), 'housing', 'Side wall');
-    p.add(B(-half, half, 100, 640, ZB, ZB + 4), 'galvDark', 'Separating panel to the poles (41)');
-    p.add(B(-half + 20, half - 20, 110, 620, ZB + 120, ZB + 126), 'galv', 'Mechanism mounting plate (9)');
-    p.add(C(10, 10, 20, 'x', -half - 8, 130, 60), 'zinc', 'Earth terminal M12 (70), 70 Nm');
-    p.add(B(-half, half, 636, 640, ZB, ZF - 10), 'housing', 'Top plate');
-    p.finish();
-  }
-
-  // ------------------------------------------------------------ cover + control board
-  {
-    const p = part('bkCover');
-    p.add(RB(-half - 2, half + 2, 98, 642, ZF - 12, ZF, 6, 2), 'housing', 'Mechanism cover (20.1)');
-    p.add(RB(-150, 150, 160, 420, ZF, ZF + 4, 4), 'grey', 'Central control board');
-    p.add(RB(-135, -85, 250, 295, ZF + 4, ZF + 12, 4), 'green', 'CLOSE push button (56.1)');
-    p.add(RB(-135, -85, 180, 225, ZF + 4, ZF + 12, 4), 'red', 'OPEN push button (56.2)');
-    p.add(B(10, 120, 340, 385, ZF + 4, ZF + 5), 'black', 'Position indicator window (56.3)');
-    p.add(B(10, 120, 280, 320, ZF + 4, ZF + 5), 'black', 'Spring state window (55.1)');
-    p.add(B(10, 120, 220, 255, ZF + 4, ZF + 5), 'black', 'Operating cycle counter (58)');
-    p.add(C(18, 18, 8, 'z', mx, 380, ZF + 6), 'steel', 'Hand-crank opening (57.1)');
-    p.add(B(-130, 130, 470, 600, ZF, ZF + 1), 'white', 'Rating plate (21)');
-    p.add(B(-140, 140, 610, 630, ZF, ZF + 1), 'black', 'SION label');
-    p.finish();
-    // indicator flags that change with the state
-    rig.posFlag = sub('bkCover', 'Position indicator: I = closed, O = open', (b) => b.add(B(20, 110, 345, 380, ZF + 5, ZF + 6), 'white', 'flag'));
-    rig.springFlag = sub('bkCover', 'Spring state indicator', (b) => b.add(B(20, 110, 285, 315, ZF + 5, ZF + 6), 'yellow', 'flag'));
-    rig.posFlagMesh = rig.posFlag.children[0];
-    rig.springFlagMesh = rig.springFlag.children[0];
-  }
-
-  // Mechanism: the mounting plate (9) at z ZB+120..126 separates a rear zone between the side plates (charging shaft,
-  // main shaft, crank, cam, closing spring, opening springs, levers) from the front zone (motor + gear unit,
-  // releases, switches, relay, terminal strip, heater).
   const helix = (len, r, turns, wire) => {
     const pts = [];
     const n = turns * 16;
@@ -143,133 +190,212 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 60, fingers = 26} 
   };
   const Y = new THREE.Vector3(0, 1, 0);
 
+  // ------------------------------------------------------------ truck (root coordinates, y 0 .. YB)
+  {
+    const p = part('bkTruck', root);
+    const w = 679 / 2, z0 = -330, z1 = 290;
+    for (const s of [-1, 1]) {
+      p.add(B(s * w - (s > 0 ? 22 : 0), s * w + (s < 0 ? 22 : 0), 20, YB, z0, z1), 'galvDark', 'Side member');
+      for (const z of [z0 + 50, z1 - 50]) {
+        p.add(C(30, 30, 20, 'x', s * (w + 12), 30, z, 24), 'black', 'Wheel');
+        p.add(C(8, 8, 26, 'x', s * (w + 1), 30, z, 12), 'steel', 'Wheel axle');
+      }
+      p.add(RB(s * 250 - 30, s * 250 + 30, 70, 100, z1 + 6, z1 + 40, 4), 'red', 'Locking lever (latches the truck in the panel / on the service truck)');
+    }
+    for (const z of [-150, 60]) p.add(B(-w + 22, w - 22, YB - 27, YB, z - 18, z + 18), 'galvDark', 'Cross member (breaker fixing, 4 × M10 8.8, 48 ±4 Nm greased)');
+    p.add(B(-w + 22, w - 22, 20, 60, z1 - 30, z1), 'galvDark', 'Front cross member');
+    p.add(B(-w + 22, w - 22, 20, 60, z0, z0 + 30), 'galvDark', 'Rear cross member');
+    p.add(B(-300, 300, 20, YB, z1, z1 + 6), 'galv', 'Front plate');
+    p.add(C(11, 11, z1 - z0 - 40, 'z', 0, 45, (z0 + z1) / 2, 16), 'steel', 'Racking spindle');
+    p.add(C(13, 13, 14, 'z', 0, 45, z1 + 13, 6), 'steel', 'Racking crank coupling');
+    p.add(RB(-45, 45, 24, 66, -200, -140, 4), 'black', 'Spindle nut (held by the panel)');
+    p.add(B(-30, 30, 2, 20, -280, -120), 'copper', 'Sliding earthing contact');
+    p.finish();
+  }
+
+  // ------------------------------------------------------------ housing, base, mechanism plate, earth terminal
+  {
+    const p = part('bkFrame');
+    p.add(B(-half, half, 0, 8, ZT - 8, 120), 'galvDark', 'Base frame (HG g = 329 mm)');
+    p.add(B(-hh, -hh + 3, 8, H, 0, ZF), 'housing', 'Side plate');
+    p.add(B(hh - 3, hh, 8, H, 0, ZF), 'housing', 'Side plate');
+    p.add(B(-hh + 3, hh - 3, 8, H - 3, 0, 3), 'housing', 'Rear plate (slots for the pole levers at the bottom)');
+    p.add(B(-hh + 3, hh - 3, 8, 12, 3, ZF), 'housing', 'Housing floor');
+    p.add(B(-hh, hh, H - 3, H, 0, ZF), 'housing', 'Top plate');
+    p.add(B(-hh, -140, 8, H, ZF - 3, ZF), 'housing', 'Front frame');
+    p.add(B(140, hh, 8, H, ZF - 3, ZF), 'housing', 'Front frame');
+    p.add(B(-140, 140, 8, 40, ZF - 3, ZF), 'housing', 'Front frame');
+    p.add(B(-140, 140, 500, H, ZF - 3, ZF), 'housing', 'Front frame');
+    p.add(B(85, 91, 12, 520, 3, 140), 'galv', 'Mechanism mounting plate (9)');
+    p.add(B(91, 180, 512, 520, 40, 100), 'galv', 'Spring anchor bracket');
+    for (const x of [-205, 205]) p.add(B(x - 22, x + 22, H, H + 0.4, 45, 105), 'black', 'Lifting point (crane hook mark) – crane only at the marked points');
+    // earth terminal (70): screw M12, washer, ring lug, contact washer with its teeth to the housing, 105 Nm
+    p.add(C(11, 11, 1.5, 'y', 150, H + 0.75, 75, 20), 'zinc', 'Contact washer SN 70093 (teeth to the housing)');
+    p.add(C(12, 12, 2.5, 'y', 150, H + 2.75, 75, 20), 'tinned', 'Ring lug of the earth conductor');
+    p.add(B(150, 200, H + 1.5, H + 4, 69, 81), 'tinned', 'Ring lug of the earth conductor');
+    p.add(C(12, 12, 2.5, 'y', 150, H + 5.25, 75, 20), 'zinc', 'Washer');
+    p.add(C(9.8, 9.8, 7.5, 'y', 150, H + 10.25, 75, 6), 'zinc', 'Earth terminal (70): hexagon screw M12, 105 Nm');
+    p.add(TU([[200, H + 2.75, 75], [240, H + 6, 75], [268, H + 6, 75], [279, H - 4, 75]], 5, 16, 8), 'earth', 'Earth conductor (30 A at ≤ 3 V drop)');
+    p.add(C(5, 5, 90, 'y', 279, H - 49, 75, 8), 'earth', 'Earth conductor (30 A at ≤ 3 V drop)');
+    for (const [x, z] of [[-half + 25, ZT + 20], [half - 25, ZT + 20], [-half + 25, 100], [half - 25, 100]]) p.add(C(6, 6, 0.6, 'y', x, 8.3, z, 14), 'black', 'Fixing hole M10 (fixed mounting: 4 × M10 8.8, 48 ±4 Nm greased)');
+    p.finish();
+  }
+
+  // ------------------------------------------------------------ cover and operating panel
+  {
+    const p = part('bkCover');
+    p.add(RB(COVER.x0, COVER.x1, COVER.y0, COVER.y1, ZF, ZC, 8, 2), 'housing', 'Cover (20.1), plastic, snap hooks');
+    if (tex) p.add(plane(COVER.x0, COVER.x1, COVER.y0, COVER.y1, ZC + 0.1), 'bkCoverArt', 'Cover (20.1), plastic, snap hooks');
+    p.add(B(-110, 110, 130, 250, ZC, ZC + 1), 'grey', 'Control board');
+    p.add(B(20, 120, 405, 478, ZC, ZC + 0.5), 'white', 'Rating plate (21): 3AE5123-2, 12 kV, 1250 A, 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg');
+    if (tex) p.add(coverDecal(20, 120, 405, 478, ZC + 0.6), 'bkCoverArt', 'Rating plate (21): 3AE5123-2, 12 kV, 1250 A, 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg');
+    if (tex) p.add(coverDecal(-110, 110, 130, 250, ZC + 1.05), 'bkCoverArt', 'Control board');
+    p.add(C(15, 15, 0.8, 'z', 0, 360, ZC + 0.4, 24), 'black', 'Hand-crank opening (57.1)');
+    p.add(C(8, 8, 3, 'z', -25, 305, ZC + 1.5, 16), 'steel', 'Key lock 3AX1437 (59.3, optional): hold OFF, turn the key to vertical, the key comes out locked');
+    p.add(B(-95, -55, 150, 170, ZC + 1, ZC + 1.5), 'black', 'Operating cycle counter (58)');
+    if (tex) p.add(plane(-95, -55, 150, 170, ZC + 1.6), 'bkCounter', 'Operating cycle counter (58)');
+    p.add(B(-52, -18, 143, 177, ZC + 1, ZC + 1.5), 'black', 'Position indicator ON-OFF (56.3)');
+    p.add(B(43, 77, 168, 202, ZC + 1, ZC + 1.5), 'black', 'Spring state indicator (55.1)');
+    p.finish();
+    // push buttons (move in when pressed) and indicator flags (change with the state)
+    const btn = (x, mat, sym, lab) => sub('bkCover', lab, (b) => {
+      b.add(RB(x - 16, x + 16, 199, 231, ZC + 1, ZC + 9, 3, 1), mat, lab);
+      b.add(C(5, 5, ZC + 1 - 138, 'z', x, 215, (ZC + 1 + 138) / 2, 12), 'steel', `${lab}: plunger`);
+      if (tex) b.add(plane(x - 16, x + 16, 199, 231, ZC + 9.1), sym, lab);
+    });
+    rig.btnOff = btn(-75, 'red', 'bkBtnO', 'Push button OFF (56.2)');
+    rig.btnOn = btn(-35, 'green', 'bkBtnI', 'Push button ON (56.1)');
+    const flag = (x0, x1, y0, y1, m, fallback, lab) => sub('bkCover', lab, (b) => b.add(tex ? plane(x0, x1, y0, y1, ZC + 1.6) : B(x0, x1, y0, y1, ZC + 1.5, ZC + 1.7), tex ? m : fallback, lab));
+    rig.flagI = flag(-50, -20, 145, 175, 'bkFlagI', 'white', 'Position indicator: I = closed');
+    rig.flagO = flag(-50, -20, 145, 175, 'bkFlagO', 'green', 'Position indicator: O = open');
+    rig.flagCh = flag(45, 75, 170, 200, 'bkFlagcharged', 'yellow', 'Spring state: charged');
+    rig.flagDis = flag(45, 75, 170, 200, 'bkFlagdischarged', 'white', 'Spring state: discharged');
+  }
+
   // ------------------------------------------------------------ LV interface
   {
     const p = part('bkLV');
-    p.add(RB(-110, 110, 640, 690, 40, 140, 4), 'black', '64-pin LV plug-connector -X0 (32)');
-    p.add(B(70, Math.min(190, h - 12), 330, 600, zF0, zF0 + 34), 'grey', 'Connector strip -X1 (33.1)');
-    for (const y of spread(340, 590, 14)) p.add(B(75, Math.min(185, h - 17), y - 4, y + 4, zF0 + 34, zF0 + 40), 'white', 'Terminal');
-    p.add(RB(-h + 10, -h + 90, 560, 610, zF0, zF0 + 60, 4), 'grey', 'Plugs -X01 / -X02 (33.2)');
+    p.add(B(-75, 75, H, H + 18, 40, 110), 'grey', 'Low-voltage plug-connector -X0 (32), 64-pole, 3AX1134');
+    p.add(RB(-70, 70, H + 18, H + 52, 45, 105, 5, 2), 'black', 'Plug housing (crimp contacts 1.5–2.5 mm²)');
+    for (const s of [-1, 1]) p.add(TU([[s * 70, H + 12, 55], [s * 82, H + 34, 75], [s * 70, H + 46, 95]], 3, 12, 6), 'steel', 'Locking bow');
+    p.add(C(14, 14, 22, 'z', 0, H + 35, 116, 16), 'black', 'Cable outlet');
+    p.add(TU([[-40, H - 14, 70], [-60, H - 34, 70], [-100, 500, 75], [-110, 484, 80]], 8, 20, 8), 'black', 'Wiring loom from -X0');
+    p.add(B(200, 245, 420, 470, 50, 110), 'grey', 'Plugs -X01 / -X02 for the cassette (33.2)');
+    p.add(B(-60, 20, 485, 520, 128, 138), 'galvDark', 'Position for the plug strip Q0-X1 (33), not fitted');
     p.finish();
   }
 
-  // ------------------------------------------------------------ motor + gear unit (front zone), charging gear (rear)
+  // ------------------------------------------------------------ motor, gear unit, hand-crank coupling
   {
     const p = part('bkMotor');
-    p.add(C(36, 36, 120, 'z', mx, 580, ZB + 210), 'blue', 'Motor -M1 (53)');
-    p.add(C(28, 28, 10, 'z', mx, 580, ZB + 275), 'black', 'Motor end cap');
-    p.add(B(mx - 22, mx + 22, 330, 544, zF0 + 4, zF0 + 44), 'galvDark', 'Gear unit (57)');
-    p.add(C(20, 20, 40, 'z', mx, 380, zF0 + 64), 'steel', 'Hand-crank coupling (57.2)');
-    // gear unit output: a worm along z meshing on top of the charging gear (axes at right angles)
-    const yW = yCS + 54 + 13; // thread tip on the tooth tip
-    p.add(C(8, 8, zF0 + 4 - (zR - 30), 'z', mx, yW, (zF0 + 4 + zR - 30) / 2), 'steel', 'Worm shaft (gear unit output)');
-    {
-      const pts = [];
-      for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2 * 6; pts.push([mx + Math.cos(a) * 10, yW + Math.sin(a) * 10, zR - 24 + (i / 96) * 48]); }
-      p.add(TU(pts, 2.5, 192, 5), 'steel', 'Worm thread');
-    }
+    p.add(C(30, 30, 100, 'x', -95, 360, zCS, 28), 'blue', 'Motor -M1 (53), 3AY1411');
+    p.add(C(24, 24, 6, 'x', -148, 360, zCS, 24), 'black', 'Motor end cap');
+    p.add(C(9, 9, 20, 'x', -35, 360, zCS, 14), 'steel', 'Motor pinion');
+    p.add(B(-25, 25, 245, 395, 25, 118), 'galvDark', 'Gear unit (57)');
+    p.add(C(12, 12, 22, 'z', 0, 360, 129, 6), 'steel', 'Hand-crank coupling (57.2), clockwise to charge');
     p.finish();
-    rig.motorRotor = sub('bkMotor', 'Motor rotor (spins while charging)', (b) => b.add(B(-24, 24, -5, 5, -3, 3), 'zinc', 'rotor mark'));
-    rig.motorRotor.position.set(mx, 580, ZB + 283);
+    rig.motorRotor = sub('bkMotor', 'Motor rotor (spins while charging)', (b) => b.add(B(-1, 1, -20, 20, -4, 4), 'zinc', 'rotor mark'));
+    rig.motorRotor.position.set(-152, 360, zCS);
   }
 
-  // ------------------------------------------------------------ charging shaft, crank, cam, closing spring (rear zone)
+  // ------------------------------------------------------------ charging shaft, crank, cam, closing spring
   {
     const p = part('bkClosingSpring');
-    p.add(C(14, 14, 2 * half - 40, 'x', 0, yCS, zR), 'steel', 'Charging shaft');
-    p.add(B(xCrank - 40, xCrank + 40, ySpringTop, ySpringTop + 15, zR - 30, zR + 30), 'steel', 'Spring anchor (top)');
-    p.add(T(10, 3, 'x', xCrank, ySpringTop - 4, zR), 'steel', 'Spring hook (top)');
-    p.add(B(xCrank + 14, xCrank + 30, yCS + 30, yCS + 70, zR - 10, zR + 10), 'black', 'Closing latch (holds the crank past dead centre)');
+    p.add(T(9, 3, 'x', xCrank, ySpringTop + 5, zCS), 'steel', 'Spring hook (top)');
+    p.add(B(xCrank - 4, xCrank + 4, ySpringTop + 14, 512, zCS - 4, zCS + 4), 'steel', 'Spring hanger');
+    p.add(B(168, 184, 300, 330, 95, 110), 'black', 'Closing latch (holds the crank past dead centre, released by ON / -Y9)');
     p.finish();
-    // the rotating set on the charging shaft: charging gear (driven by the gear unit), crank with pin, closing cam
-    rig.crank = sub('bkClosingSpring', 'Charging shaft set: gear, crank, closing cam', (b) => {
-      b.add(C(48, 48, 16, 'x', mx, 0, 0, 36), 'steel', 'Charging gear wheel (57)');
-      for (let i = 0; i < 24; i++) {
-        const a = (i / 24) * Math.PI * 2;
-        b.add(B(mx - 8, mx + 8, Math.cos(a) * 51 - 3, Math.cos(a) * 51 + 3, Math.sin(a) * 51 - 3, Math.sin(a) * 51 + 3), 'steel', 'Gear tooth');
-      }
-      b.add(C(CR + 6, CR + 6, 12, 'x', xCrank - 14, 0, 0, 28), 'steel', 'Closing crank disc');
-      b.add(C(7, 7, 28, 'x', xCrank, CR, 0, 12), 'zinc', 'Crank pin');
-      b.add(C(45, 45, 14, 'x', xCam, -12, 0, 28), 'steel', 'Closing cam (eccentric)');
+    rig.crank = sub('bkClosingSpring', 'Charging shaft set: worm wheel, crank, closing cam', (b) => {
+      b.add(C(14, 14, 230, 'x', 75, 0, 0), 'steel', 'Charging shaft');
+      b.add(C(38, 38, 16, 'x', 0, 0, 0, 36), 'steel', 'Charging gear wheel (inside the gear unit)');
+      b.add(C(46, 46, 12, 'x', xDisc, 0, 0, 28), 'steel', 'Closing crank disc');
+      b.add(C(7, 7, xCrank + 6 - xDisc, 'x', (xDisc + xCrank + 6) / 2, CR, 0, 12), 'zinc', 'Crank pin');
+      b.add(C(40, 40, 14, 'x', xCam, -12, 0, 28), 'steel', 'Closing cam (eccentric)');
     });
-    rig.crank.position.set(0, yCS, zR);
-    // extension spring: closed coils at rest, stretched by the crank via the link
-    rig.closeSpring = sub('bkClosingSpring', 'Closing spring (55), helical extension spring', (b) => b.add(helix(SPRING0, 26, 12, 5), 'spring', 'Closing spring (55)'));
-    rig.closeSpring.position.set(xCrank, ySpringTop - SPRING0, zR);
+    rig.crank.position.set(0, yCS, zCS);
+    // the spring mesh is rebuilt at its real length in pose(); no edge lines on it
+    const spring = new THREE.Mesh(helix(150, 22, 14, 4.5), MX.spring);
+    spring.userData = {label: 'Closing spring (55), helical extension spring', noEdges: true};
+    rig.closeSpring = spring;
+    parts.bkClosingSpring.add(spring);
     rig.springEye = sub('bkClosingSpring', 'Spring eye', (b) => b.add(T(10, 3, 'x', 0, -6, 0), 'steel', 'Spring eye (bottom)'));
-    rig.springEye.position.set(xCrank, ySpringTop - SPRING0, zR);
     rig.link = sub('bkClosingSpring', 'Link rod spring → crank pin', (b) => b.add(C(5, 5, 1, 'y', 0, 0.5, 0, 10), 'steel', 'Link rod'));
   }
 
-  // ------------------------------------------------------------ main shaft, levers, opening latch (rear zone)
+  // ------------------------------------------------------------ main shaft and levers
   {
     const p = part('bkShaft');
-    p.add(B(xCam + 22, xCam + 40, yMS + 22, yMS + 62, zR - 10, zR + 10), 'black', 'Opening latch (released by -Y1)');
+    p.add(B(xCam - 34, xCam - 18, yMS + 30, yMS + 62, zMS - 8, zMS + 8), 'black', 'Opening latch (released by OFF / -Y1)');
     p.finish();
-    rig.shaft = sub('bkShaft', 'Main shaft with pole levers (16)', (b) => {
-      b.add(C(18, 18, 2 * half - 40, 'x', 0, 0, 0), 'steel', 'Main shaft');
-      for (const x of xs) b.add(B(x - 10, x + 10, -10, 10, zPole + 55 - zR, 0), 'steel', 'Pole lever');
-      const top = yCS - 12 - 45 - 12 - yMS; // roller sits on the cam
-      b.add(B(xCam - 8, xCam + 8, 0, top, -8, 8), 'steel', 'Roller lever');
-      b.add(C(12, 12, 20, 'x', xCam, top, 0, 16), 'zinc', 'Cam roller');
-      for (const sx of [-1, 1]) b.add(B(sx * (half - 60) - 3, sx * (half - 60) + 3, 36, 64, -3, 3), 'spring', 'Opening spring leg (moving)');
+    rig.shaft = sub('bkShaft', 'Main shaft with pole levers', (b) => {
+      b.add(C(18, 18, 2 * hh + 30, 'x', 0, 0, 0), 'steel', 'Main shaft');
+      for (const x of xs) {
+        b.add(B(x - 8, x + 8, -6, 6, -LEVER + 30, 0), 'steel', 'Pole lever');
+        for (const s of [-1, 1]) b.add(B(x + s * 9 - 2.5, x + s * 9 + 2.5, -10, 10, -LEVER - 8, -LEVER + 30), 'steel', 'Pole lever fork');
+        b.add(C(4, 4, 24, 'x', x, 0, -LEVER, 10), 'zinc', 'Lever pin');
+      }
+      b.add(B(xCam - 7, xCam + 7, 0, 148, -7, 7), 'steel', 'Roller lever');
+      b.add(C(12, 12, 16, 'x', xCam, 160, 0, 16), 'zinc', 'Cam roller');
+      b.add(B(-186, -178, 0, 26, 8, 22), 'steel', 'Auxiliary switch drive crank');
+      for (const s of [-1, 1]) {
+        b.add(B(s * (hh + 8) - 3, s * (hh + 8) + 3, -10, 40, -8, 8), 'steel', 'Shaft end lever (covered by the optional shaft cover)');
+        b.add(B(s * (hh - 30) - 3, s * (hh - 30) + 3, 30, 52, -3, 3), 'spring', 'Opening spring leg (moving)');
+      }
     });
-    rig.shaft.position.set(0, yMS, zR);
+    rig.shaft.position.set(0, yMS, zMS);
   }
 
-  // ------------------------------------------------------------ opening springs: torsion springs on the main-shaft ends
+  // ------------------------------------------------------------ opening springs
   {
     const p = part('bkOpeningSpring');
     for (const sx of [-1, 1]) {
-      const x0 = sx > 0 ? half - 60 : -(half - 20);
-      p.add(helix(40, 30, 6, 4).rotateZ(-Math.PI / 2).translate(x0, yMS, zR), 'spring', 'Opening spring (17), torsion');
-      p.add(B(sx * (half - 21) - 3, sx * (half - 21) + 3, 105, yMS - 36, zR - 3, zR + 3), 'spring', 'Opening spring leg (fixed)');
+      const x0 = sx > 0 ? hh - 50 : -(hh - 10);
+      p.add(helix(40, 30, 6, 4).rotateZ(-Math.PI / 2).translate(x0, yMS, zMS), 'spring', 'Opening spring, torsion');
+      p.add(B(sx * (hh - 15) - 3, sx * (hh - 15) + 3, 13, yMS - 34, zMS - 3, zMS + 3), 'spring', 'Opening spring leg (fixed)');
     }
     p.finish();
   }
 
-  // ------------------------------------------------------------ releases (front zone; plungers pulse)
+  // ------------------------------------------------------------ releases (front zone, z ≤ 135; plungers pulse)
   {
     const p = part('bkReleases');
-    p.add(RB(-30, 50, 230, 300, ZB + 140, ZB + 220, 4), 'black', 'Closing solenoid -Y9 (52)');
-    p.add(RB(-30, 50, 320, 380, ZB + 140, ZB + 220, 4), 'black', '1st shunt release -Y1 (51.1)');
-    p.add(RB(-30, 50, 400, 460, ZB + 140, ZB + 220, 4), 'grey', '2nd release -Y2 (51.2)');
+    p.add(B(-150, -100, 195, 300, 95, 135), 'grey', '3rd release (51.3, optional), e.g. -Y4 / -Y7');
+    p.add(B(-140, -110, 300, 312, 102, 128), 'black', 'Terminal block of the 3rd release');
+    p.add(B(-95, -45, 195, 300, 95, 135), 'grey', '2nd release (51.2, optional): -Y2 3AX1101');
+    p.add(B(-85, -55, 300, 312, 102, 128), 'black', 'Terminal block of the 2nd release');
+    p.add(C(16, 16, 35, 'z', -20, 225, 117.5, 24), 'black', '1st shunt release -Y1 (51.1), 3AY1410');
+    p.add(B(-5, 35, 160, 205, 100, 135), 'black', 'Closing solenoid -Y9 (52), 3AY1410');
     p.finish();
-    rig.plungerClose = sub('bkReleases', 'Closing solenoid plunger', (b) => b.add(C(8, 8, 40, 'y', 0, 0, 0), 'zinc', 'plunger'));
-    rig.plungerClose.position.set(10, 210, ZB + 180);
-    rig.plungerOpen = sub('bkReleases', 'Shunt release armature', (b) => b.add(C(8, 8, 18, 'x', 0, 0, 0), 'zinc', 'armature'));
-    rig.plungerOpen.position.set(59, 350, ZB + 180);
+    rig.plungerClose = sub('bkReleases', 'Closing solenoid plunger', (b) => b.add(C(6, 6, 20, 'y', 0, 0, 0), 'zinc', 'plunger'));
+    rig.plungerClose.position.set(15, 150, 117);
+    rig.plungerOpen = sub('bkReleases', 'Shunt release armature', (b) => b.add(C(6, 6, 16, 'z', 0, 0, 0), 'zinc', 'armature'));
+    rig.plungerOpen.position.set(-20, 225, 92);
   }
 
-  // ------------------------------------------------------------ aux switch, position switches, relay, heater, counter
+  // ------------------------------------------------------------ aux switch, -K1, position switches, counter, heater
   {
     const p = part('bkAux');
-    p.add(RB(-h + 10, -h + 90, 300, 520, ZB + 140, ZB + 240, 4), 'grey', 'Auxiliary switch -S1 (31)');
-    for (const y of spread(320, 500, 6)) p.add(B(-h + 90, -h + 96, y - 6, y + 6, ZB + 160, ZB + 220), 'zinc', 'Aux switch terminals');
-    p.add(C(6, 6, 100, 'y', -h + 50, 250, ZB + 190), 'steel', 'Aux switch coupling rod');
-    const names = ['Position switch -S21/-S22 (motor)', 'Position switch -S3 (K1)', 'Position switch -S4 (spring charged)', 'Position switch -S12'];
-    for (let i = 0; i < 4; i++) p.add(RB(70 + i * 28, 90 + i * 28, 230, 290, ZB + 200, ZB + 240, 2), 'black', names[i]);
-    p.add(RB(-30, 50, 560, 620, ZB + 140, ZB + 200, 4), 'grey', 'Contactor relay -K1, anti-pumping (34)');
-    p.add(RB(-30, 60, 150, 200, ZF - 60, ZF - 20, 3), 'black', 'Operating cycle counter mechanism (58)');
-    p.add(RB(-h + 10, -h + 110, 110, 160, ZB + 140, ZB + 200, 4), 'black', 'Heater -R01 (59.4), 50 W');
+    p.add(B(-175, -35, 420, 470, 40, 120), 'grey', 'Auxiliary switch -S1 (31), 3SV9273 6 NO + 6 NC');
+    for (let i = 0; i < 6; i++) p.add(B(-170 + i * 22, -152 + i * 22, 424, 466, 120, 128), 'black', 'Auxiliary switch contact element (NO + NC)');
+    p.add(C(6, 6, 15, 'x', -182.5, 445, 80, 6), 'steel', 'Auxiliary switch operating shaft');
+    p.add(C(4, 4, 345, 'y', -182, 92 + 345 / 2, 15 + zMS, 10), 'steel', 'Auxiliary switch coupling rod');
+    p.add(B(-25, 20, 410, 480, 50, 120), 'grey', 'Auxiliary contactor -K1 (34), 3AY1420: anti-pumping');
+    p.add(B(-25, 20, 470, 480, 120, 126), 'black', 'Terminal strip of -K1');
+    const sw = [['Position switch -S21 (54.2): motor cut-off', 95], ['Position switch -S3 (54.3): controls -K1', 107], ['Position switch -S4 (54.4): "closing spring charged"', 119]];
+    for (const [lab, x] of sw) p.add(B(x, x + 10, 120, 160, 100, 130), 'black', lab);
+    p.add(B(60, 78, 120, 150, 100, 130), 'black', 'Position switch -S12 (54.1): no electrical closing with the mechanical interlock');
+    p.add(B(-12, 4, 120, 150, 100, 130), 'black', 'Position switch -S6 (54.6): breaker-tripped signal');
+    p.add(B(-95, -55, 145, 175, 118, 148), 'black', 'Operating cycle counter mechanism (58)');
+    p.add(B(-50, -20, 140, 180, 118, 148), 'black', 'Position indicator drive (56.3)');
+    p.add(B(45, 75, 165, 205, 118, 148), 'black', 'Spring state indicator drive (55.1)');
+    p.add(B(-70, 70, 14, 40, 95, 140), 'black', 'Anti-condensation heater -R01 (59.4), 50 W, ≈ 180 °C surface');
+    for (const x of spread(-60, 60, 9)) p.add(B(x - 1, x + 1, 40, 46, 100, 135), 'galv', 'Heater fins');
     p.finish();
   }
 
   // ------------------------------------------------------------ poles
-  // pole shell: U open towards the mechanism, wraps the interrupter; heads and lower connections sit above / below it
-  const yShell0 = yLo + 40, yShell1 = yUp - 41;
-  const uShape = (x, g) => {
-    const o = [[-70, 0], [-70, -60], [-50, -115], [0, -135], [50, -115], [70, -60], [70, 0]].map(([a, b]) => [a + Math.sign(a) * g, b - (b < 0 ? g : 0)]);
-    const i = [[62, 0], [62, -58], [44, -108], [0, -127], [-44, -108], [-62, -58], [-62, 0]];
-    return new THREE.Shape(o.concat(i).map(([dx, dz]) => new THREE.Vector2(x + dx, -(zPole + 60 + dz))));
-  };
-  const uExtrude = (x, y0, y1, g) => {
-    const geo = new THREE.ExtrudeGeometry(uShape(x, g), {depth: y1 - y0, bevelEnabled: false});
-    geo.rotateX(-Math.PI / 2);
-    geo.translate(0, y0, 0);
-    return geo;
-  };
-  const poleShell = part('bkShell');
+  const shell = part('bkShell');
+  const sep = part('bkSep');
   const upper = part('bkUpper');
   const lower = part('bkLower');
   const vi = part('bkVI');
@@ -277,41 +403,52 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 60, fingers = 26} 
   const rods = part('bkRods');
   const arms = part('bkArms');
   const tulips = part('bkTulips');
+  const sleeves = part('bkSleeves');
   rig.moving = [];
   rig.rodParts = [];
+  rig.bellows = [];
+  const zS0 = zPole - 75, zS1 = zPole + 76; // shell rear edges, front face
+  const gap = P - 144; // room between neighbouring shells for the foot ribs
+  const pad = (pb, x, y, label) => {
+    for (const [dx, dy] of [[-22, -22], [22, -22], [-22, 22], [22, 22]]) pb.add(C(6.5, 6.5, 0.6, 'z', x + dx, y + dy, ZT - 0.3, 14), 'black', `${label}: tapped hole M12 for flat busbars (40 ±4 Nm greased)`);
+  };
   for (const x of xs) {
-    poleShell.add(uExtrude(x, yShell0, yShell1, 0), 'epoxy', 'Pole shell (46)');
-    for (const y of spread(yShell0 + 20, yShell1 - 28, 4)) poleShell.add(uExtrude(x, y, y + 8, 4), 'epoxy', 'Pole shell rib');
-    poleShell.add(B(x - 72, x + 72, yLo - 50, yUp + 80, zPole + 60, zPole + 64), 'epoxy', 'Insulating shell to the mechanism (3)');
-    // insulator with sheds below the pole (8); the operating rod runs through its bore
-    lower.add(L([[40, 0], [55, 10], [36, 25], [55, 40], [36, 55], [55, 70], [36, 85], [42, 100]], 'y', x, 100, zPole), 'epoxy', 'Insulator (8)');
-    // upper connection / pole head
-    upper.add(RB(x - 62, x + 62, yUp - 25, yUp + 80, zPole - 62, zPole + 40, 8, 2), 'tinned', 'Pole head with cooling ribs (42.2)');
-    for (const dy of [30, 50, 70]) upper.add(B(x - 64, x + 64, yUp + dy - 4, yUp + dy + 4, zPole - 66, zPole + 20), 'tinned', 'Cooling ribs');
-    upper.add(B(x - 45, x + 45, yUp - 30, yUp + 45, zPole - 72, zPole - 62), 'silver', 'Pole contact plate, upper terminal (44)');
-    // lower connection with guide + flexible conductor
-    lower.add(RB(x - 60, x + 60, yLo - 50, yLo + 30, zPole - 62, zPole + 40, 8, 2), 'tinned', 'Lower connection (7)');
-    lower.add(B(x - 45, x + 45, yLo - 30, yLo + 30, zPole - 72, zPole - 62), 'silver', 'Pole contact plate, lower terminal (44)');
-    for (let i = 0; i < 5; i++) lower.add(TU([[x - 20 + i * 10, yLo + 30, zPole + 8], [x - 20 + i * 10, yLo + 38, zPole + 22], [x - 20 + i * 10, yLo + 30, zPole + 34]], 2.2, 12, 5), 'copper', 'Flexible conductor (laminated)');
-    lower.add(C(26, 26, 10, 'y', x, yLo + 35, zPole), 'steel', 'Guide bushing of the moving stem');
-    // vacuum interrupter outer body
+    // pole shell (46): side walls full height, front wall above the lever opening, open to the rear
+    shell.add(B(x - 72, x - 66, 8, H, zS0, zS1), 'epoxy', 'Pole shell (46)');
+    shell.add(B(x + 66, x + 72, 8, H, zS0, zS1), 'epoxy', 'Pole shell (46)');
+    shell.add(B(x - 66, x + 66, 100, H, zS1 - 6, zS1), 'epoxy', 'Pole shell (46)');
+    if (gap > 20) for (const y of spread(22, 118, 5)) for (const s of [-1, 1]) shell.add(B(Math.min(x + s * 72, x + s * 82), Math.max(x + s * 72, x + s * 82), y, y + 6, zS0 + 18, zS1 - 18), 'epoxy', 'Creepage ribs at the foot of the pole shell');
+    // separating shell to the drive side (41)
+    sep.add(B(x - 70, x + 70, 300, 600, -9, -4), 'plastic', 'Separating shell to the drive side (41)');
+    for (const s of [-1, 1]) sep.add(B(Math.min(x + s * 70, x + s * 65), Math.max(x + s * 70, x + s * 65), 300, 600, zS1 + 2, -9), 'plastic', 'Separating shell to the drive side (41)');
+    // pole head (42) with the upper pole contact plate
+    upper.add(RB(x - 52, x + 52, yVI1 + 9, H - 5, ZT, zPole + 40, 6, 2), 'tinned', 'Pole head with pole contact plate (42)');
+    upper.add(C(16, 16, 9, 'y', x, yVI1 + 4.5, zPole, 20), 'copper', 'Fixed stem clamp');
+    pad(upper, x, yUp, 'Upper terminal');
+    // lower connection with its pole contact plate (44), flexible conductor, stem guide
+    lower.add(RB(x - 52, x + 52, ROD_TOP + 4, yVI0 - 3, ZT, zPole + 40, 6, 2), 'tinned', 'Lower connection with pole contact plate (44)');
+    pad(lower, x, yLo, 'Lower terminal');
+    lower.add(B(x + 52, x + 56, ROD_TOP + 10, yVI0 - 8, zPole - 30, zPole + 30), 'copper', 'Flexible conductor (laminated copper) to the moving stem');
+    lower.add(C(14, 14, 4, 'y', x, ROD_TOP + 2, zPole, 20), 'steel', 'Guide bushing of the moving stem');
+    // vacuum interrupter (43)
     vi.add(L([[48, 0], [52, 6], [52, 12], [46, 12]], 'y', x, yVI1 - 12, zPole), 'steel', 'Upper end flange');
-    vi.add(L([[48, 0], [52, 6], [52, 12], [46, 12]], 'y', x, yVI0, zPole), 'steel', 'Lower end flange');
-    vi.add(L([[46, 0], [47, 4], [46, (yVI1 - yVI0) / 2 - 18], [46, (yVI1 - yVI0) / 2 - 12]], 'y', x, yVI0 + 12, zPole), 'white', 'Ceramic insulating body (lower ring)');
-    vi.add(L([[46, 0], [47, 4], [46, (yVI1 - yVI0) / 2 - 18], [46, (yVI1 - yVI0) / 2 - 12]], 'y', x, yGap + 4, zPole), 'white', 'Ceramic insulating body (upper ring)');
-    vi.add(T(47, 3, 'y', x, yGap, zPole), 'steel', 'Centre flange (shield support)');
-    vi.add(C(16, 16, yUp - 25 - (yVI1 - 12) + 12, 'y', x, (yUp - 25 + yVI1 - 12) / 2, zPole), 'copper', 'Fixed stem to the upper connection');
-    // internals: shield, fixed contact
-    viIn.add(L([[40, 0], [42, 6], [42, 70], [38, 80], [38, 82], [40, 82]], 'y', x, yGap - 41, zPole), 'copper', 'Vapour (arc) shield');
+    vi.add(L([[46, 0], [52, 0], [52, 6], [48, 12]], 'y', x, yVI0, zPole), 'steel', 'Lower end flange');
+    const ceramic = yGap - 2 - (yVI0 + 6);
+    vi.add(L([[49, 0], [50, 4], [50, ceramic - 4], [49, ceramic]], 'y', x, yVI0 + 6, zPole), 'white', 'Ceramic insulating body (lower ring)');
+    vi.add(L([[49, 0], [50, 4], [50, ceramic - 4], [49, ceramic]], 'y', x, yGap + 2, zPole), 'white', 'Ceramic insulating body (upper ring)');
+    vi.add(T(50.5, 2, 'y', x, yGap, zPole), 'steel', 'Centre flange (shield support)');
+    // internals
+    viIn.add(L([[40, 0], [42, 6], [42, 60], [38, 70], [38, 72], [40, 72]], 'y', x, yGap - 36, zPole), 'copper', 'Vapour (arc) shield');
     viIn.add(C(30, 30, 8, 'y', x, yGap + 5, zPole, 28), 'copper', 'Fixed contact disc (CuCr, slotted)');
     viIn.add(B(x - 1.5, x + 1.5, yGap + 1, yGap + 10, zPole - 31, zPole + 31), 'black', 'Contact slot');
     viIn.add(B(x - 31, x + 31, yGap + 1, yGap + 10, zPole - 1.5, zPole + 1.5), 'black', 'Contact slot');
-    viIn.add(C(12, 12, yVI1 - 12 - (yGap + 9), 'y', x, (yVI1 - 12 + yGap + 9) / 2, zPole), 'copper', 'Fixed contact stem');
+    viIn.add(C(12, 12, yVI1 - (yGap + 9), 'y', x, (yVI1 + yGap + 9) / 2, zPole), 'copper', 'Fixed contact stem');
     const mv = new THREE.Group();
     mv.userData.part = 'bkVIin';
-    const mb = new PartBuilder(mv, mats);
+    const mb = new PartBuilder(mv, MX);
+    const stemLen = yGap - 8 - ROD_TOP;
     mb.add(C(30, 30, 8, 'y', 0, -4, 0, 28), 'copper', 'Moving contact disc (CuCr, slotted)');
-    mb.add(C(12, 12, 120, 'y', 0, -68, 0), 'copper', 'Moving contact stem');
+    mb.add(C(12, 12, stemLen, 'y', 0, -8 - stemLen / 2, 0), 'copper', 'Moving contact stem');
     mb.finish();
     mv.position.set(x, yGap, zPole);
     parts.bkVIin.add(mv);
@@ -320,77 +457,87 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 60, fingers = 26} 
     for (let i = 0; i <= 16; i++) prof.push([i % 2 ? 26 : 19, i * 3]);
     const bel = new THREE.Group();
     bel.userData.part = 'bkVIin';
-    const bb = new PartBuilder(bel, mats);
+    const bb = new PartBuilder(bel, MX);
     bb.add(L(prof, 'y', 0, 0, 0, 20), 'silver', 'Metal bellows (keeps the vacuum while the stem moves)');
     bb.finish();
     bel.position.set(x, yVI0 + 12, zPole);
     parts.bkVIin.add(bel);
-    rig.bellows = (rig.bellows || []).concat(bel);
+    rig.bellows.push(bel);
+    // shed insulator (45): moves with the lever; contact-pressure spring under its top coupling
     const rod = new THREE.Group();
     rod.userData.part = 'bkRods';
-    const rb = new PartBuilder(rod, mats);
-    // rod from the lever pin (at the lever height) up to the moving stem (its top meets the stem end)
-    const rodTop = yGap - STROKE - 128 - (130 - STROKE);
-    rb.add(C(14, 14, rodTop - 52, 'y', 0, (rodTop + 52) / 2, 0), 'yellow', 'Insulating operating rod (45), glass-fibre');
-    rb.add(helix(40, 19, 4, 3).translate(0, 56, 0), 'spring', 'Contact-pressure spring');
-    rb.add(B(-14, 14, 36, 52, -14, 14), 'steel', 'Rod end / lever pin');
+    const rb = new PartBuilder(rod, MX);
+    const yE = yMS + 9; // lever pin height with the contacts closed
+    rb.add(B(-6, 6, yE - 8, yE + 14, -8, 8), 'steel', 'Insulator foot eye (lever pin)');
+    rb.add(C(22, 22, 150 - (yE + 14), 'y', 0, (150 + yE + 14) / 2, 0, 24), 'epoxy', 'Insulator (45)');
+    for (const y of [100, 120, 140]) rb.add(L([[22, 0], [42, 3], [40, 6], [22, 9]], 'y', 0, y - 4.5, 0, 28), 'epoxy', 'Insulator shed');
+    rb.add(C(25, 25, 8, 'y', 0, 154, 0, 24), 'steel', 'Top coupling');
+    rb.add(helix(14, 13, 4, 2.4).translate(0, 158, 0), 'spring', 'Contact-pressure spring');
+    rb.add(C(7, 7, ROD_TOP - 158, 'y', 0, (ROD_TOP + 158) / 2, 0, 12), 'steel', 'Coupling bolt to the moving stem');
     rb.finish();
-    rod.position.set(x, 130, zPole);
+    rod.position.set(x, 0, zPole);
     parts.bkRods.add(rod);
     rig.rodParts.push(rod);
+    // contact arms (22) on threaded bolts (22.1), contact systems (23) with arm adapter (22.2), sleeves (47)
+    const ar = armD / 2;
     for (const [y, lab] of [[yUp, 'Upper'], [yLo, 'Lower']]) {
-      const z0 = zPole - 72, z1 = z0 - 274;
-      arms.add(C(armD / 2, armD / 2, z0 - z1 - 60, 'z', x, y, (z0 + z1 + 60) / 2, 24), 'silver', `${lab} contact arm (22), Ø ${armD}`);
-      arms.add(C(armD / 2 + 8, armD / 2 + 8, 14, 'z', x, y, z0 - 7, 24), 'silver', 'Contact arm flange');
-      arms.add(C(6, 6, 30, 'z', x, y, z0 + 8), 'zinc', 'Threaded rod (22.1)');
-      const rr = armD / 2 + 4;
-      const fw = fingers === 26 ? 3.5 : 5.5;
+      arms.add(C(6, 6, 265, 'z', x, y, ZT + 20 - 265 / 2, 12), 'zinc', 'Threaded bolt (22.1), M12, 20 ±1 mm deep, 40 ±4 Nm greased');
+      arms.add(L([[ar - 7, 0], [ar, 0], [ar, 235], [ar - 7, 235]], 'z', x, y, ZT - 235, 28), 'silver', `${lab} contact arm (22), hollow, Ø ${armD}`);
+      tulips.add(L([[34, 0], [38, 0], [38, 80], [34, 80]], 'z', x, y, ZT - 274, 32), 'tinned', 'Contact system cage (23)');
+      tulips.add(L([[ar + 0.5, 0], [34, 0], [34, 10], [ar + 0.5, 10]], 'z', x, y, ZT - 204, 28), 'steel', 'Contact arm adapter (22.2)');
       for (let f = 0; f < fingers; f++) {
-        const a = (f / fingers) * Math.PI * 2;
-        tulips.add(RB(x + Math.cos(a) * rr - fw, x + Math.cos(a) * rr + fw, y + Math.sin(a) * rr - fw, y + Math.sin(a) * rr + fw, z1 - 20, z1 + 58, 1.5, 1), 'silver', 'Contact finger');
+        const a = (f / fingers) * Math.PI * 2, rr = ar + 3.5;
+        tulips.add(RB(x + Math.cos(a) * rr - 3.4, x + Math.cos(a) * rr + 3.4, y + Math.sin(a) * rr - 3.4, y + Math.sin(a) * rr + 3.4, ZT - 272, ZT - 214, 1.4, 1), 'silver', 'Contact finger (23.1)');
       }
-      tulips.add(T(rr + fw + 2.5, 2.5, 'z', x, y, z1 + 5), 'spring', 'Garter spring');
-      tulips.add(T(rr + fw + 2.5, 2.5, 'z', x, y, z1 + 40), 'spring', 'Garter spring');
+      for (const z of [ZT - 262, ZT - 226]) tulips.add(T(ar + 9.5, 2.2, 'z', x, y, z), 'spring', 'Ring spring');
+      tulips.add(C(10, 10, 10, 'z', x, y, ZT - 245, 6), 'zinc', 'Nut on the threaded bolt');
+      sleeves.add(L([[30, 0], [36, 0], [36, 182], [30, 182]], 'z', x, y, ZT - 185, 32), 'plastic', `Separating shell to the panel side (47), ${lab.toLowerCase()} conductor`);
     }
   }
-  poleShell.finish();
-  upper.finish();
-  lower.finish();
-  vi.finish();
-  viIn.finish();
-  rods.finish();
-  arms.finish();
-  tulips.finish();
+  for (const pb of [shell, sep, upper, lower, vi, viIn, rods, arms, tulips, sleeves]) pb.finish();
 
   // ------------------------------------------------------------ the rig
-  const OVER = 6; // contact-pressure spring compression
   const E = new THREE.Vector3(), Pp = new THREE.Vector3(), d = new THREE.Vector3();
+  let springLen = -1;
   const pose = ({c = 0, s = 0, crank = null, motor = 0, pClose = 0, pOpen = 0}) => {
     // charging crank: 0° discharged (pin up), 170° charged and latched, 360° after the closing stroke
     const th = ((crank ?? (c > 0.99 ? 170 : c * 170)) * Math.PI) / 180;
     rig.crank.rotation.x = th;
-    const L = SPRING0 + CR * (1 - Math.cos(th)); // spring stretches as the pin goes down
-    rig.closeSpring.position.y = ySpringTop - L;
-    rig.closeSpring.scale.set(1, L / SPRING0, 1);
-    rig.springEye.position.y = ySpringTop - L;
-    E.set(xCrank, ySpringTop - L - 12, zR);
-    Pp.set(xCrank, yCS + CR * Math.cos(th), zR + CR * Math.sin(th));
+    const pinY = yCS + CR * Math.cos(th), pinZ = zCS + CR * Math.sin(th);
+    const yBot = pinY + 14;
+    const len = ySpringTop - yBot;
+    if (Math.abs(len - springLen) > 0.5) {
+      springLen = len;
+      rig.closeSpring.geometry.dispose();
+      rig.closeSpring.geometry = helix(len, 22, 14, 4.5);
+      rig.closeSpring.geometry.computeBoundingBox();
+      rig.closeSpring.userData.prims = [{label: 'Closing spring (55), helical extension spring', box: rig.closeSpring.geometry.boundingBox.clone()}];
+    }
+    rig.closeSpring.position.set(xCrank, yBot, zCS);
+    rig.springEye.position.set(xCrank, yBot, zCS);
+    E.set(xCrank, yBot - 12, zCS);
+    Pp.set(xCrank, pinY, pinZ);
     d.subVectors(Pp, E);
     rig.link.position.copy(E);
-    rig.link.quaternion.setFromUnitVectors(Y, d.clone().normalize());
-    rig.link.scale.set(1, d.length(), 1);
-    rig.motorRotor.rotation.z = motor;
-    // main shaft: closing turns it; the opening springs on its ends wind up with it
-    rig.shaft.rotation.x = 0.15 * s; // pole-lever tips rise ≈ 20 mm: contact travel + over-travel
-    const travel = Math.min(1, s * 1.15) * STROKE; // contacts touch before the shaft ends: over-travel loads the pressure springs
+    if (d.length() > 0.5) rig.link.quaternion.setFromUnitVectors(Y, d.clone().normalize());
+    rig.link.scale.set(1, Math.max(0.5, d.length()), 1);
+    rig.motorRotor.rotation.x = motor;
+    // main shaft: lever tips rise from 57 (open) to 75 (closed): contact travel + over-travel
+    const travel = Math.min(1, s * 1.15) * STROKE;
+    const lift = travel + OVER * Math.max(0, s * 1.15 - 1) / 0.15;
+    rig.shaft.rotation.x = Math.asin((yMS + 9 - (STROKE + OVER) + lift - yMS) / LEVER);
     for (const mv of rig.moving) mv.position.y = yGap - STROKE + travel;
     for (const bel of rig.bellows) bel.scale.y = 1 + (travel - STROKE) / 48;
-    for (const r of rig.rodParts) r.position.y = 130 - STROKE + travel + OVER * Math.max(0, s * 1.15 - 1) / 0.15;
-    rig.plungerClose.position.y = 210 + 18 * pClose;
-    rig.plungerOpen.position.x = 59 + 14 * pOpen;
-    rig.posFlagMesh.material = s > 0.5 ? mats.black : mats.green;
-    rig.springFlagMesh.material = c > 0.98 ? mats.yellow : mats.white;
+    for (const r of rig.rodParts) r.position.y = -(STROKE + OVER) + lift;
+    rig.plungerClose.position.y = 150 + 14 * pClose;
+    rig.plungerOpen.position.z = 92 - 8 * pOpen;
+    rig.btnOn.position.z = -6 * pClose;
+    rig.btnOff.position.z = -6 * pOpen;
+    rig.flagI.visible = s > 0.5;
+    rig.flagO.visible = s <= 0.5;
+    rig.flagCh.visible = c > 0.98;
+    rig.flagDis.visible = c <= 0.98;
   };
   pose({});
-  return {root, parts, pose, dims: {P, TD, armD, fingers, STROKE, ZF, zPole, yUp, yLo, viR: 52, shellIn: 62, viRear: zPole - 52, shellRear: zPole - 67, torsionIn: 30 - 4.5, mainShaftR: 18}};
+  return {root, parts, pose, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
 }

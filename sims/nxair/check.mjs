@@ -7,7 +7,7 @@
 //   node sims/nxair/check.mjs [--width 800] [--all]
 import * as THREE from 'three';
 import {buildPanel, lvCableGeometry, makeMaterials, SIZES, TRAVEL} from './model.js';
-import {buildBreaker} from './breaker.js';
+import {BK_SPEC, buildBreaker} from './breaker.js';
 import {LV_PARTS, buildLV} from './lv.js';
 import {PartBuilder} from './geom.js';
 PartBuilder.keepGeo = true;
@@ -118,17 +118,20 @@ function radial(panel) {
 }
 // breaker: assemblies that are mounted into each other in the real breaker
 const BK_ALLOW = [
-  [/^bkShell:/, /^bk(VI|VIin|Rods):|^bkLower:Guide/, 'inside the U of the pole shell (radial check below)'],
+  [/^bkShell:/, /^bk(VI|VIin|Rods|Lower|Upper|Shaft):/, 'inside the U of the pole shell, open to the rear (radial check below)'],
   [/^bkVI:/, /^bkVIin:/, 'internals inside the interrupter bottle (radial check below)'],
-  [/^bkVIin:(Moving|Fixed) contact stem|^bkVIin:Metal bellows/, /^bk(Lower|Upper|VI|Rods):/, 'stems run coaxially through flanges, guide bushing and terminals'],
-  [/^bkRods:/, /^bkLower:/, 'operating rod runs in the bore of the insulator and lower connection'],
-  [/^bkArms:Threaded rod/, /^bk(Upper|Lower):/, 'threaded rod screwed into the pole terminal'],
+  [/^bkVIin:(Moving|Fixed) contact stem|^bkVIin:Metal bellows/, /^bk(Lower|Upper|VI|Rods):/, 'stems run coaxially through flanges, guide bushing and couplings'],
+  [/^bkRods:Coupling bolt|^bkRods:Contact-pressure spring/, /^bkLower:Guide bushing/, 'coupling bolt meets the stem at the guide bushing'],
+  [/^bkArms:Threaded bolt/, /^bk(Upper|Lower):/, 'threaded bolt screwed 20 mm into the pole terminal'],
   [/^bkArms:/, /^bkTulips:/, 'contact system mounted coaxially on the arm'],
-  [/^bkShaft:Pole lever/, /^bkFrame:Separating panel|^bkLower:Insulator/, 'lever passes through its slot in the separating panel and the insulator'],
-  [/^bkShaft:Pole lever/, /^bkRods:Rod end/, 'lever pin engages the rod end'],
-  [/^bkUpper:/, /^bkVI:Fixed stem/, 'fixed stem bolted into the pole head'],
-  [/^bkShaft:Main shaft/, /^bkOpeningSpring:Opening spring \(17\)/, 'torsion springs coaxial on the main shaft (radial check below)'],
-  [/^bkMotor:Worm shaft/, /^bkFrame:Mechanism mounting plate/, 'worm shaft passes through the mounting plate'],
+  [/^bkSleeves:/, /^bkArms:/, 'separating shell slid coaxially over the conductor (radial check below)'],
+  [/^bkShaft:Pole lever/, /^bkFrame:Rear plate/, 'lever passes through its slot in the rear plate'],
+  [/^bkShaft:(Pole lever|Lever pin)/, /^bkRods:Insulator foot eye/, 'lever fork and pin engage the insulator foot'],
+  [/^bkShaft:Main shaft/, /^bkFrame:(Side plate|Mechanism mounting plate)/, 'shaft runs through the side plates and the mechanism plate'],
+  [/^bkShaft:(Main shaft|Opening spring leg)/, /^bkOpeningSpring:Opening spring, torsion/, 'torsion springs coaxial on the main shaft (radial check below)'],
+  [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkMotor:Gear unit/, 'charging shaft runs through the mechanism plate into the gear unit'],
+  [/^bkClosingSpring:Charging gear wheel/, /^bkMotor:Gear unit/, 'gear wheel inside the gear-unit housing'],
+  [/^bkAux:Auxiliary switch coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
 ];
 const mats = makeMaterials([]);
 let total = 0;
@@ -165,15 +168,15 @@ if (total) process.exitCode = 1;
 // ------------------------------------------------------------------------------------------------ breaker tab
 if (args.includes('--breaker') || args.includes('--all')) {
   let bt = 0;
-  for (const W of [600, 800, 1000]) {
-    const wd = WIDTHS[W];
-    const bk = buildBreaker(mats, {P: wd.pitch, TD: W === 1000 ? 310 : 275, armD: wd.contact === 40 ? 40 : 60, fingers: wd.contact === 40 ? 13 : 26});
+  for (const W of ['3AE5 12 kV 1250 A 31.5 kA']) {
+    const bk = buildBreaker(mats, BK_SPEC);
     const dd = bk.dims;
     if (dd.viR >= dd.shellIn) { console.log(`breaker W${W}: interrupter (${dd.viR}) touches the pole shell (${dd.shellIn})`); bt++; }
-    if (dd.viRear <= dd.shellRear) { console.log(`breaker W${W}: interrupter pokes through the shell rear`); bt++; }
+    if (dd.viFront >= dd.shellFrontIn) { console.log(`breaker W${W}: interrupter touches the front wall of the pole shell`); bt++; }
+    if (dd.sleeveIn <= dd.armR) { console.log(`breaker W${W}: separating shell bore touches the contact arm`); bt++; }
     if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
-    for (const [c, s] of [[0, 0], [1, 0], [0, 1], [1, 1]]) {
-      bk.pose({c, s});
+    for (const [c, s, crank] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360]]) {
+      bk.pose({c, s, crank});
       const res = clashes(collect(bk.root)).filter((r) => !BK_ALLOW.some(([x, y]) => (x.test(r.a) && y.test(r.b)) || (x.test(r.b) && y.test(r.a))));
       if (res.length) {
         console.log(`\n== breaker W${W} spring ${c} contacts ${s}: ${res.length}`);

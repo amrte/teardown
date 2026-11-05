@@ -62,7 +62,7 @@ node sims/nxair/build.mjs            # teardown-out/dist/nxair.html, offline, ~8
 node sims/nxair/check.mjs --all --bolts   # clearance check: no part or bolt penetrates another
 ```
 
-`check.mjs` builds every variant (3 widths x 3 depths x 3 busbar ratings, breaker in service and test, earthing switch open and closed, the stand-alone breaker with spring and contacts in all states, and the LV compartment in every width with the door closed and open) and reports any two parts that interpenetrate by more than 2 mm. Real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits) are listed with a reason; coaxial fits are verified radially.
+`check.mjs` builds every variant (3 widths x 3 depths x 3 busbar ratings, breaker in service and test, earthing switch open and closed, the stand-alone SION 3AE5 breaker (12 kV, 1250 A, 31.5 kA) with spring and contacts in seven states, and the LV compartment in every width with the door closed and open) and reports any two parts that interpenetrate by more than 2 mm. Real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits) are listed with a reason; coaxial fits are verified radially.
 
 ## Credits
 
