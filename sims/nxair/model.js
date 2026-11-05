@@ -88,14 +88,19 @@ export function buildPanel(mats, opts) {
   const hasFeeder = PT !== 'mp' && !isLT; // lower bushings, CTs, cable connection, feeder earthing switch of the withdrawable types
   const isWVT = PT === 'wvt';
   const isCP = PT === 'cp600'; // contactor panel 600 mm, 3TL8, 7.2 kV, truck type only (O §6.5, §14)
-  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ct: true, vt: true, relay: '7SJ82', ...(opts.eq || {})};
+  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ct: true, vt: true, relay: '7SJ82', arc: 'none', arcPress: false, siq: false, ...(opts.eq || {})};
   if (isLT) EQ.ct = true; // L-TRI: the conductor runs through the CTs on the floor
   if (!hasFeeder) { EQ.arresters = false; EQ.busES = false; }
   if (isLT) { EQ.fan = false; EQ.motor = false; EQ.keys = false; } // L-TRI: not at 40 kA, no racking // catalog fn 2: no busbar ES / VT with a withdrawable metering part
   EQ.motor = EQ.motor && isCB;
   EQ.busES = EQ.busES && W <= 800; // busbar earthing switch: 600 / 800 mm panels (110-0250.9 sheet 19)
   EQ.fan = EQ.fan && W >= 800 && !EQ.busES; // forced ventilation: 800 / 1000 mm; the busbar box is not for ventilated panels
-  const Hd = EQ.busES ? 2350 : 2300; // top of the pressure relief duct: 2350 with the high LV compartment / busbar earthing switch
+  // SIQuench: fixed in the busbar compartment of 600 / 800 mm panels, not in units with busbar components (VTs,
+  // busbar earthing switch, ventilation box) (SIQuench brochure 2026, "SIQuench integrated in NXAIR")
+  EQ.siq = EQ.siq && W <= 800 && !EQ.busES && !EQ.fan && PT !== 'mp';
+  if (!['none', 'aq', 'sip'].includes(EQ.arc)) EQ.arc = 'none';
+  if (EQ.arc === 'sip' && (!EQ.relay || EQ.relay === 'none')) EQ.arc = 'none'; // the ARC-CD-3FO sits in the SIPROTEC
+  const Hd = EQ.busES || EQ.siq ? 2350 : 2300; // top of the pressure relief duct: 2350 with the high LV compartment / busbar earthing switch
   // ----- levels (mm). Dimension drawings: front part 738 mm at 1500 deep (40 kA sheet 110-0262.9: 762 + 738; the
   // ≤ 31.5 kA sheet 110-0250.9 shows 688 at 1350 and 1500, in which the 3AE5 with its catalog dimensions would not fit), C top at 1075,
   // LV compartment 630 high x 406 deep from 1370, pressure relief duct to 2300 behind the LV compartment.
@@ -423,6 +428,43 @@ export function buildPanel(mats, opts) {
       bl.rotation.x = bl.userData.open;
       parts.busES[0].add(bl);
     }
+  }
+
+
+  // ================================================================ SIQUENCH ARC QUENCHING DEVICE (option, 600 / 800 mm)
+  // SIQuench Core 3AM4 (3-pole fast earthing device) fixed-mounted at the busbar in a top box over the busbar
+  // compartment (catalog HA 25.71 p. 24-25, "in top box at the busbar"; p. 14 busbar components in the additional
+  // compartment, panel 2350 mm). On light + overcurrent it makes a controlled 3-phase short circuit to earth: arc out
+  // < 5 ms from ignition, then the incoming circuit-breaker clears. Pole centre distance 170 or 210 mm (brochure
+  // product table); pole size, box and the riser route are drawn.
+  if (EQ.siq) {
+    const PCD = W === 600 ? 170 : 210;
+    const bx = hw - 40, by0 = yPRC + 6, by1 = yPRC + 380, bz0 = 70, bz1 = zP - 110;
+    const zE = (zPh[0] + zPh[2]) / 2, yPl = by1 - 50, yHV = yPl - 230, yR = by0 + 60;
+    const box = part('siqBox', V(0, 420, -200), {shell: true});
+    box.add(B(-bx, bx, by0, by0 + 2, bz0, bz1), 'galv', 'SIQuench box: floor');
+    box.add(B(-bx, bx, by0, by1, bz0, bz0 + 2), 'galv', 'SIQuench box: rear wall');
+    box.add(B(-bx, bx, by0, by1, bz1 - 2, bz1), 'galv', 'SIQuench box: front wall');
+    for (const sx of [-1, 1]) box.add(B(Math.min(sx * bx, sx * (bx - 2)), Math.max(sx * bx, sx * (bx - 2)), by0, by1, bz0, bz1), 'galv', 'SIQuench box: side wall');
+    for (const [z0, z1] of [[bz0 + 10, (bz0 + bz1) / 2 - 6], [(bz0 + bz1) / 2 + 6, bz1 - 10]]) box.add(B(-(bx - 10), bx - 10, by1 - 2, by1, z0, z1), 'galvDark', 'Pressure relief flap (SIQuench box)');
+    box.finish();
+    const q = part('siquench', V(0, 420, -200));
+    const art = `3AM41${ur === 17.5 ? 3 : 2}${PCD === 170 ? 2 : 3}`;
+    q.add(B(-(bx - 12), bx - 12, yPl, yPl + 10, zE - 95, zE + 95), 'galvDark', `SIQuench Core ${art}: earthing plate (short-circuit connection of the 3 poles)`);
+    for (const sx of [-1, 1]) q.add(B(Math.min(sx * (bx - 2), sx * (bx - 14)), Math.max(sx * (bx - 2), sx * (bx - 14)), yPl - 30, yPl + 10, zE - 95, zE + 95), 'galv', 'SIQuench support bracket (to the box side wall)');
+    // pole k serves phase PH[k]: each riser stands clear of the busbar joint of its own phase
+    const PH = [1, 2, 0];
+    for (let k = 0; k < 3; k++) {
+      const x = (k - 1) * PCD, ph = PH[k], q1 = `Q${k + 1}`;
+      q.add(C(64, 64, 12, 'y', x, yPl - 6, zE, 32), 'galvDark', `Pole ${q1} flange`);
+      q.add(C(58, 58, 200, 'y', x, yPl - 112, zE, 32), 'resin', `SIQuench pole ${q1} (L${ph + 1}): vacuum quenching unit with stored-energy disc-spring drive, epoxy housing (size drawn)`);
+      for (let r = 0; r < 4; r++) q.add(C(62, 62, 8, 'y', x, yPl - 50 - r * 40, zE, 32), 'resin', `SIQuench pole ${q1}: housing rib`);
+      q.add(C(26, 26, 18, 'y', x, yHV + 9, zE, 20), 'copper', `SIQuench pole ${q1}: high-voltage connection`);
+      const yTop = yPh[ph] + barH / 2;
+      for (const g of BAR([[x, yTop, zPh[ph]], [x, yR, zPh[ph]], [x, yR, zE], [x, yHV, zE]], 40, 10)) q.add(g, 'copper', `Riser L${ph + 1} from the busbar to SIQuench pole ${q1}`);
+      q.add(L([[24, 0], [28, 8], [22, 16], [28, 24], [22, 32], [20, 40]], 'y', x, by0 + 2, zPh[ph]), 'resin', 'Bushing in the floor of the SIQuench box');
+    }
+    q.finish();
   }
 
   // ================================================================ BUSHINGS (recessed: the contact system enters the bore)
@@ -1012,6 +1054,86 @@ export function buildPanel(mats, opts) {
       g.visible = false;
       parts.lv[0].add(g);
     }
+  }
+
+
+  // ================================================================ ARC DETECTION (options)
+  // NXAIR, factory-assembled and tested (I 110-0084.9 §7.14, Fig. 148-151): optical system with control units in the
+  // LV compartment (Arcteq AQ-110 / AQ-101 in Fig. 148) and 1 optical sensor per covered compartment (up to 4);
+  // overpressure system with overpressure monitors in the LV compartment, 1 sensor per compartment and 1 tube each.
+  // Optical alternative: the SIPROTEC 5 module ARC-CD-3FO with Ø 53 mm point sensors on 1 mm plastic fibre
+  // (SIPROTEC 5 HW manual §5.4, Fig. 5-14 / 5-15). AQ-01 sensor 90 x 27.5 x 32.5 mm (AQ-100 manual, table 11.3-43).
+  // Positions follow SIPROTEC Fig. 5-15 (one each in the switching-device, busbar and connection compartment); the
+  // exact places, the cable and tube routes and the monitor type are not published: drawn.
+  const ARC_CMP = [];
+  if (EQ.arc !== 'none' || EQ.arcPress) {
+    // [compartment, point on the wall surface, normal axis, normal sign (into the compartment), in-plane long axis,
+    //  offset of the pressure port from the optical sensor]
+    ARC_CMP.push(['switching-device compartment', [hw - 95, 1576, zLV], 'z', -1, 'x', [-110, 0, 0]]);
+    ARC_CMP.push(['busbar compartment', [hw - 95, 1656, 54], 'z', 1, 'x', [-110, 0, 0]]);
+    if (hasFeeder || isLT) ARC_CMP.push(['connection compartment', [-hw + 95, yBC - 2, zP - 124], 'y', -1, 'x', [0, 0, -70]]);
+    if (EQ.siq) ARC_CMP.push(['SIQuench box', [hw - 95, yPRC + 170, 72], 'z', 1, 'x', [-120, 0, 0]]);
+  }
+  // box from a wall point c: extent u along the long axis, v along the third axis, n proud along the normal
+  const wallBox = (c, nAx, nSg, uAx, u, v, n0, n1) => {
+    const lo = [0, 0, 0], hi = [0, 0, 0], I = {x: 0, y: 1, z: 2};
+    const vAx = ['x', 'y', 'z'].find((a) => a !== nAx && a !== uAx);
+    for (const [ax, a0, a1] of [[uAx, -u / 2, u / 2], [vAx, -v / 2, v / 2], [nAx, nSg > 0 ? n0 : -n1, nSg > 0 ? n1 : -n0]]) { lo[I[ax]] = c[I[ax]] + a0; hi[I[ax]] = c[I[ax]] + a1; }
+    return B(lo[0], hi[0], lo[1], hi[1], lo[2], hi[2]);
+  };
+  if (EQ.arc !== 'none') {
+    const p = part('arcSens', V(0, 0, 0));
+    ARC_CMP.forEach(([cmp, c, nAx, nSg, uAx], k) => {
+      if (EQ.arc === 'aq') {
+        p.add(wallBox(c, nAx, nSg, uAx, 90, 32.5, 0, 27.5), 'black', `Optical arc sensor S${k + 1} (${cmp}), Arcteq AQ-01 light point sensor, 90 × 27.5 × 32.5 mm, 2 × M3`);
+        p.add(wallBox(c, nAx, nSg, uAx, 24, 18, 27.5, 29), 'blue', `Light window of sensor S${k + 1} (180°, 8 000 lx)`);
+        p.add(wallBox(c.map((q, i) => q + ({x: 0, y: 1, z: 2}[uAx] === i ? 60 : 0)), nAx, nSg, uAx, 30, 8, 0, 8), 'cable', `Sensor cable S${k + 1} (shielded twisted pair 0.75 mm², to the AQ unit in the LV compartment; route drawn short)`);
+      } else {
+        const ax = nAx, n = nSg, I = {x: 0, y: 1, z: 2}, cc = [...c]; cc[I[ax]] += n * 3.5;
+        p.add(C(26.5, 26.5, 7, ax, cc[0], cc[1], cc[2], 28), 'black', `Optical point sensor S${k + 1} (${cmp}) for the SIPROTEC 5 ARC-CD-3FO, head Ø 53 × 7 mm, expansion rivet 4×7 in a Ø 4.1 hole`);
+        const cw = [...c]; cw[I[ax]] += n * 7.25;
+        p.add(C(9, 9, 0.5, ax, cw[0], cw[1], cw[2], 20), 'glass', `Optically active zone of S${k + 1} (±60°, from 10 kLux)`);
+        p.add(wallBox(c.map((q, i) => q + (I[uAx] === i ? 42 : 0)), nAx, nSg, uAx, 34, 10, 0, 3), 'black', `Supply line of S${k + 1} (1 mm plastic fibre to the ARC-CD-3FO in the SIPROTEC; route drawn short)`);
+      }
+    });
+    p.finish();
+  }
+  if (EQ.arcPress) {
+    const p = part('arcPress', V(0, 160, 0));
+    ARC_CMP.forEach(([cmp, c, nAx, nSg, uAx, off], k) => {
+      // the port sits beside the optical sensor: bulkhead fitting through the wall, blue push-in collet, tube
+      // towards the middle of the wall (Fig. 151: fittings on the compartment wall, tubes inside the compartment)
+      const I = {x: 0, y: 1, z: 2}, cp = c.map((q, i) => q + off[i]);
+      const ax = nAx, n = nSg, at = (d) => { const r = [...cp]; r[I[ax]] += n * d; return r; };
+      p.add(C(11, 11, 14, ax, ...at(7), 6), 'silver', `Overpressure sensor P${k + 1} (${cmp}): brass bulkhead fitting`);
+      p.add(C(7, 7, 6, ax, ...at(17), 16), 'blue', `Push-in collet P${k + 1}`);
+      cyl(p, 4, at(20), at(45), 'black', `Tube P${k + 1} to the overpressure monitor in the LV compartment (route drawn short)`);
+    });
+    // overpressure monitors standing on the LV floor (Fig. 150 shows them on a bracket; positions drawn)
+    for (let k = 0; k < ARC_CMP.length; k++) {
+      const x = -hw + 75 + k * 72, z = zLV + 210;
+      p.add(B(x - 32, x + 32, yLV + 2, yLV + 6, z - 32, z + 32), 'galv', 'Bracket of the overpressure monitors');
+      p.add(C(28, 28, 70, 'y', x, yLV + 6 + 35, z, 24), 'black', `Overpressure monitor ${k + 1} (${ARC_CMP[k][0]}): pressure switch, contact to the protection device / arc unit (type and threshold not given)`);
+      p.add(C(7, 7, 10, 'y', x, yLV + 6 + 75, z, 16), 'silver', 'Cable gland of the overpressure monitor');
+      cyl(p, 4, [x + 20, yLV + 6, z], [x + 20, yLV + 30, z], 'black', `Tube from overpressure sensor P${k + 1} (through the LV floor)`);
+    }
+    p.finish();
+  }
+  // LV compartment, right side wall: arc units and the SIQuench controller (sizes drawn)
+  if (EQ.arc === 'aq' || EQ.siq) {
+    const p = part('arcUnit', V(320, 0, 0));
+    const xw = hw - 2;
+    if (EQ.arc === 'aq') {
+      p.add(B(xw - 90, xw, 1640, 1800, zLV + 120, zLV + 220), 'slate', 'Arc protection unit Arcteq AQ-110 (5 sensor channels S1–S5, current inputs IL1–IL3 / Io, trip relays T1–T4, high-speed outputs HSO1 / HSO2)');
+      p.add(B(xw - 92, xw - 90, 1650, 1790, zLV + 125, zLV + 215), 'blue', 'AQ-110 front: POWER / ERROR, T1–T4, S1–S5, IL1–IL3, Io, HSO1 / HSO2 LEDs and SET button');
+      p.add(B(xw - 90, xw, 1640, 1797, zLV + 232, zLV + 287), 'slate', 'Arc protection unit Arcteq AQ-101 (5 sensor channels, height 157 mm)');
+      p.add(B(xw - 92, xw - 90, 1650, 1787, zLV + 236, zLV + 283), 'blue', 'AQ-101 front: POWER / ERROR, T1–T4, S1–S5 LEDs and SET button');
+    }
+    if (EQ.siq) {
+      p.add(B(xw - 70, xw, 1400, 1590, zLV + 130, zLV + 290), 'grey', 'SIQuench controller 3AX6211-1A (light and overcurrent trigger, continuous self-monitoring; size drawn)');
+      for (const [k, m] of [[0, 'red'], [1, 'yellow'], [2, 'green']]) p.add(B(xw - 72, xw - 70, 1560, 1572, zLV + 160 + k * 30, zLV + 172 + k * 30), m, ['SIQuench controller LED ERROR', 'SIQuench controller LED DIAGNOSIS', 'SIQuench controller LED READY'][k]);
+    }
+    p.finish();
   }
 
   // ================================================================ HIGH-VOLTAGE DOOR

@@ -51,7 +51,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp', isc: 31.5, relief: 'lateralL', lsel: 0, rowSolid: store.get('rowSolid', false),
   mode: 'panel', gas: false, ltSw: 1, ltSlide: 0, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
-  peq: {vds: 'lrm', relay: '7SJ82', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
+  peq: {vds: 'lrm', relay: '7SJ82', arc: 'none', arcPress: false, siq: false, busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -75,7 +75,7 @@ function pushToLineup() {
   if (!p) return;
   if (p.type !== state.ptype) { p.type = state.ptype; if (!CURRENTS[p.type].includes(p.In)) p.In = CURRENTS[p.type].find((x) => x === null || x >= 630) ?? CURRENTS[p.type][0]; }
   p.W = state.W;
-  for (const k of ['vds', 'relay', 'busES', 'fan', 'keys', 'padlock', 'motor', 'arresters', 'ct', 'vt']) if (k in state.peq) p.hw[k] = state.peq[k];
+  for (const k of ['vds', 'relay', 'arc', 'arcPress', 'siq', 'busES', 'fan', 'keys', 'padlock', 'motor', 'arresters', 'ct', 'vt']) if (k in state.peq) p.hw[k] = state.peq[k];
   saveLineup();
 }
 const saveLineup = () => store.set('lineup', state.lineup);
@@ -491,6 +491,8 @@ VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
 VIEWS.sdcOpen = {p: [1.05, 1.25, 2.35], t: [0, 0.85, 0.15]};
 VIEWS.shutters = {p: [0.75, 1.15, 1.95], t: [0, 1.0, 0.0]};
 VIEWS.lvTop = {p: [0.2, 2.2, 1.75], t: [-0.28, 2.06, 0.75]};
+VIEWS.arcLv = {p: [-0.75, 1.95, 1.55], t: [0.22, 1.62, 0.42]}; // LV compartment, right side wall: arc units, SIQuench controller
+VIEWS.siq = {p: [-1.7, 3.0, 0.9], t: [0, 1.95, -0.35]}; // SIQuench box over the busbar compartment
 VIEWS.lrm = {p: [-0.1, 1.45, 1.55], t: [-0.2, 1.41, 0.75]};
 VIEWS.connFront = {p: [0.9, 1.0, 1.9], t: [0, 0.7, -0.15]};
 VIEWS.gas = {p: [-4.4, 3.5, 3.9], t: [-0.55, 1.45, -0.1]};
@@ -1011,7 +1013,7 @@ function lineupChanged({rebuild = true} = {}) {
   for (const p of state.lineup) {
     const ws = widthsFor(p, row);
     if (ws.length && !ws.includes(p.W)) p.W = ws[0];
-    if (fanNeeded(p, row)) { p.hw.fan = true; p.hw.busES = false; }
+    if (fanNeeded(p, row)) { p.hw.fan = true; p.hw.busES = false; p.hw.siq = false; }
   }
   state.lsel = Math.min(state.lsel, state.lineup.length - 1);
   saveLineup();
@@ -1056,9 +1058,10 @@ function renderLineup() {
         <label>Rated current <select data-lp="${i}" data-lk="In">${CURRENTS[p.type].map((c) => opt(c ?? '', p.In ?? '', c ? `${c} A` : '—')).join('')}</select></label>
         <label>Width <select data-lp="${i}" data-lk="W">${[...new Set([...ws, p.W])].map((w) => opt(w, p.W, `${w} mm${ws.includes(w) ? '' : ' (not allowed)'}`)).join('')}</select></label>
         <label>Protection device <select data-lp="${i}" data-lk="hw.relay">${RELAY_OPTS.map(([v, l]) => opt(v, p.hw.relay, v === 'none' ? 'None' : 'SIPROTEC 5 ' + l)).join('')}</select></label>
+        <label>Arc detection <select data-lp="${i}" data-lk="hw.arc">${opt('none', p.hw.arc, 'None')}${opt('aq', p.hw.arc, 'Optical: AQ-110 / AQ-101 + sensors')}${opt('sip', p.hw.arc, 'Optical: SIPROTEC ARC-CD-3FO + sensors')}</select></label>
         <label>Voltage detection <select data-lp="${i}" data-lk="hw.vds">${opt('lrm', p.hw.vds, 'LRM sockets')}${opt('capdis', p.hw.vds, 'CAPDIS-S2+')}${opt('vois', p.hw.vds, 'VOIS+')}</select></label>
         ${chk(i, 'ct', 'CTs', feeder && p.type !== 'ltri')}${chk(i, 'vt', 'Fixed VTs', feeder && p.type !== 'wvt' && p.type !== 'ltri')}${chk(i, 'busES', 'Busbar earthing switch', p.W <= 800 && p.type !== 'mp')}${chk(i, 'fan', 'Forced ventilation', p.W >= 800 && p.type !== 'ltri')}
-        ${chk(i, 'keys', 'Key interlocks', feeder && p.type !== 'ltri')}${chk(i, 'padlock', 'Padlocks')}${chk(i, 'motor', 'Motor racking', p.type === 'cbp' || p.type === 'wvt')}${chk(i, 'arresters', 'Surge arresters / limiters', feeder && p.type !== 'ltri')}
+        ${chk(i, 'keys', 'Key interlocks', feeder && p.type !== 'ltri')}${chk(i, 'padlock', 'Padlocks')}${chk(i, 'motor', 'Motor racking', p.type === 'cbp' || p.type === 'wvt')}${chk(i, 'arresters', 'Surge arresters / limiters', feeder && p.type !== 'ltri')}${chk(i, 'arcPress', 'Overpressure monitors')}${chk(i, 'siq', 'SIQuench (busbar)', p.W <= 800 && p.type !== 'mp')}
       </div>
       <p class="small muted">${esc(APPS[p.app]?.why || '')} · height ${panelHeight(p, row)} mm</p>
       ${mine.map((m) => `<p class="lmsg ${m.level}">${esc(m.text)}</p>`).join('')}
@@ -1164,7 +1167,7 @@ function lineupChange(e) {
   else if (k === 'type') { p.type = t.value; if (!CURRENTS[p.type].includes(p.In)) p.In = CURRENTS[p.type].filter((x) => x === null || x <= state.bus).pop() ?? CURRENTS[p.type][0]; p.W = widthsFor(p, row)[0] || p.W; }
   else if (k === 'In') p.In = t.value === '' ? null : Number(t.value);
   else if (k === 'W') p.W = Number(t.value);
-  else if (k.startsWith('hw.')) { const h = k.slice(3); p.hw[h] = t.type === 'checkbox' ? t.checked : t.value; if (h === 'busES' && t.checked) p.hw.fan = false; if (h === 'fan' && t.checked) p.hw.busES = false; }
+  else if (k.startsWith('hw.')) { const h = k.slice(3); p.hw[h] = t.type === 'checkbox' ? t.checked : t.value; if (t.checked && h === 'busES') { p.hw.fan = false; p.hw.siq = false; } if (t.checked && h === 'fan') { p.hw.busES = false; p.hw.siq = false; } if (t.checked && h === 'siq') { p.hw.busES = false; p.hw.fan = false; } }
   lineupChanged();
   return true;
 }
@@ -1188,6 +1191,9 @@ function renderSpecs() {
     <h3>Panel options</h3>
     <div class="equip">
       <label>Protection device (LV door) <select data-peq="relay">${RELAY_OPTS.map(([v, l]) => `<option value="${v}">${v === 'none' ? 'None' : 'SIPROTEC 5 ' + l}</option>`).join('')}</select></label>
+      <label>Arc detection <select data-peq="arc"><option value="none">None</option><option value="aq">Optical: Arcteq AQ-110 / AQ-101 + AQ-01 sensors</option><option value="sip">Optical: SIPROTEC 5 ARC-CD-3FO + point sensors</option></select></label>
+      <label class="check"><input type="checkbox" data-peq="arcPress"> Overpressure monitors (1 per compartment)</label>
+      <label class="check"><input type="checkbox" data-peq="siq" ${state.W > 800 ? 'disabled' : ''}> SIQuench arc quenching device (600 / 800 mm; panel 2350)</label>
       <label>Voltage detection <select data-peq="vds"><option value="lrm">LRM test sockets (feeder + busbar)</option><option value="capdis">CAPDIS-S2+ in the LV door</option><option value="vois">VOIS+ in the LV door</option></select></label>
       <label class="check"><input type="checkbox" data-peq="busES" ${state.W > 800 ? 'disabled' : ''}> Busbar earthing switch (600 / 800 mm; panel 2350)</label>
       <label class="check"><input type="checkbox" data-peq="fan" ${state.W < 800 ? 'disabled' : ''}> Forced ventilation (800 / 1000 mm; 2450)</label>
@@ -1205,6 +1211,8 @@ function renderSpecs() {
       <li><b>Motor-operated racking</b> (O §27): a control door on the HV door covers the racking, key, earthing-switch, CLOSE and charging openings; with it open, electrical racking is blocked. Access mode with the double-bit key: M motor, H hand, T interlocked (needed to open the HV door). Racking motor run time &lt; 65 s.</li>
       <li><b>Surge arresters / limiters</b> (catalog p. 14): beside the sealing ends; disconnect them for the HV test. Type and size are not given: drawn.</li>
       <li><b>End walls</b>: epoxy powder-coated, 35 mm (110-2300.9); the crane rod goes through them, the hole is closed by a sealing stopper.</li>
+      <li><b>Arc detection</b> (I §7.14): factory-assembled and tested, no installation work on it. Optical: control units in the LV compartment (Arcteq AQ-110 / AQ-101 in Fig. 148) and 1 optical sensor per covered compartment, up to 4; or the SIPROTEC 5 plug-in module ARC-CD-3FO with up to 3 point / line sensors. Overpressure: monitors in the LV compartment, 1 sensor (pressure port) per compartment, 1 tube each. Sensor places and routes are drawn.</li>
+      <li><b>SIQuench</b> (catalog p. 24–25, SIQuench brochure): SIQuench Core 3AM4 fixed in a top box at the busbar, 600 / 800 mm panels, not with busbar VTs, busbar earthing switch or fan; controller 3AX6211-1A in the LV compartment. Pole size and box drawn.</li>
     </ul>
     <p class="small muted">Sizes of the indicator units, the fan box, the control door, the key-lock cover, the busbar earthing box and the arresters are not in the documents: drawn.</p>
     <h3>Foundation drawing (110-2300.9)</h3><div class="scroll-x"><table class="grid4"><thead><tr>${FOUNDATION[0].map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${FOUNDATION.slice(1).map((r) => `<tr>${r.map((c, i) => (i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`)).join('')}</tr>`).join('')}</tbody></table></div>
@@ -1225,8 +1233,17 @@ function renderSpecs() {
       <li><b>Busbar compartment B:</b> through the relief flaps on its roof into the duct.</li>
       <li><b>Connection compartment C:</b> upwards through the rear pressure relief duct (flaps at its foot and top), past the busbar compartment, into the duct.</li>
       <li><b>Pressure relief duct D:</b> collects the gas of all compartments of the row and leads it sideways or to the rear into the evacuation duct, out of the building through a 537 × 249 mm wall opening 2000 mm above the floor, or into a top-mounted absorber (room height then 2800 – 3500 mm).</li>
-      <li>Relief flaps must lie flush (installation report 2.6); nothing may be stored on the duct. SIQuench (option) detects the arc optically and earths it in under 5 ms.</li>
+      <li>Relief flaps must lie flush (installation report 2.6); nothing may be stored on the duct.</li>
     </ul>
+    <h3>Detecting and stopping the arc (options)</h3>
+    <p class="small">The passive design holds an arc for 1 s. Active options cut it short, so far less energy, pressure and damage: the thermal phase (cable, copper, steel catching fire) starts after roughly 100 ms (SIQuench brochure).</p>
+    ${kv([
+      ['Optical, NXAIR system', 'Control units in the LV compartment (Arcteq AQ-110 with current inputs IL1–IL3 / Io for light + current, and AQ-101), 1 optical sensor per covered compartment, up to 4 (I §7.14, Fig. 148 / 149). AQ-01 sensor 90 × 27.5 × 32.5 mm, 180°, 8 000 lx, pick-up < 1 ms; AQ-02 adds a fixed 0.2 bar overpressure threshold (AQ-100 manual)'],
+      ['Optical, SIPROTEC 5', 'Plug-in module ARC-CD-3FO in the protection device: 3 point or line sensors on 1 mm plastic fibre. Point sensor Ø 53 × 7 mm, ±60°, from 10 kLux, expansion rivet 4×7 in a Ø 4.1–4.2 mm hole in 1.5–2.5 mm sheet; replace a sensor that has seen an arc (HW manual §5.4). Arc cleared < 100 ms including the breaker (HA 25.73 p. 31)'],
+      ['Overpressure', 'Overpressure monitors in the LV compartment, 1 sensor per covered compartment (up to 4), 1 tube each (I §7.14, Fig. 150 / 151). Commissioning: "Control and functioning of panel pressure switches tested?" (checklist 11.3), with the test equipment for pressure switch from the accessories. Type and threshold not given'],
+      ['SIQuench', 'Active arc quenching (catalog p. 24–25, brochure): on light + overcurrent it earths all 3 phases through a controlled mechanical short circuit; detection and signalling ≈ 0.6–1.5 ms, earthing ≈ 3 ms, arc out < 5 ms from ignition, long before the pressure peak; the incoming breaker then clears. 5 operations at full Ik, 30 without load, maintenance-free 20 years (controller 10). In NXAIR fixed in the busbar compartment of 600 / 800 mm panels, not with busbar VTs / busbar earthing switch / fan; up to 17.5 kV, 50 kA, 4000 A'],
+      ['Installation', 'Optical and overpressure systems are factory-assembled and tested: no installation work, do not modify or remove (I §7.14)'],
+    ])}
     <button type="button" class="btn" data-gas="toggle">${state.gas ? 'Hide' : 'Show'} the gas routes in 3D</button>
     <p class="small muted">The flaps and the routes are drawn from the catalog description and the dimension drawings; the depth of the rear duct is not dimensioned there.</p>
     <h3>Room</h3>${kv(ROOM)}
@@ -1421,7 +1438,41 @@ const P_DRILL = {
     {t: 'Turn counter-clockwise to the stop, ≈ 115°: indicator CLOSED → intermediate → OPEN.', view: 'lvTop', act() { pd({busEs: 0}); }},
     {t: 'Remove the lever, slide down, padlock.', view: 'lvTop', act() { pd({busLever: 0, busSlide: 0}); }},
   ], done: 'Busbars de-earthed.'},
+  // arc detection and SIQuench (I §7.14 + checklist 11.3; SIQuench brochure / catalog p. 24; SIPROTEC 5 HW §5.4)
+  arcFault: {name: 'Internal arc: detect and quench', steps: [
+    {t: 'Panel with optical arc detection (and SIQuench where it fits), in service. An arc ignites in the connection compartment, e.g. at a failed cable sealing end.', view: 'cable', act() {
+      const n = arcFit(true);
+      state.focus = ['arcSens', 'cables']; state.glass = true; applyGlass(); applyFocus();
+      return {note: (n ? n + ' ' : '') + 'Time 0: arc ignition. Without active protection the arc burns until the protection and the breaker clear it; the panel is type-tested to hold it for 1 s (IAC A FLR).'};
+    }},
+    {t: 'Its light reaches the optical sensor of the connection compartment within the first millisecond (AQ-01: pick-up < 1 ms; SIPROTEC point sensor from 10 kLux).', view: 'cable', act() { state.focus = ['arcSens']; applyFocus(); }},
+    {t: 'The arc unit sees light and overcurrent together (AQ-110: sensor channel + IL1–IL3) and fires its high-speed outputs: trip to the circuit-breaker and the trigger to the SIQuench controller, ≈ 0.6–1.5 ms after ignition.', view: 'arcLv', act() { state.focus = ['arcUnit']; applyFocus(); }},
+    {t: 'SIQuench closes its three poles onto the earthing plate, ≈ 3 ms: a controlled 3-phase short circuit to earth takes the current, the arc goes out < 5 ms after ignition, long before the pressure peak.', view: 'siq', act() {
+      state.focus = ['siquench', 'siqBox']; applyFocus();
+      if (!state.peq.siq) return {note: 'No SIQuench in this panel: the arc keeps burning until the circuit-breaker opens, < 100 ms including the breaker with optical detection (HA 25.73 p. 31), instead of < 5 ms.'};
+    }},
+    {t: 'Overpressure monitors (if fitted) pick up as the compartment pressure rises: their contact is a second criterion or back-up for the trip.', view: 'arcLv', act() { state.focus = ['arcPress']; applyFocus(); if (!state.peq.arcPress) return {note: 'No overpressure monitors fitted in this panel (Specs → Panel options).'}; }},
+    {t: 'The incoming circuit-breaker trips and clears the dead short circuit. The relief flaps stayed shut or barely opened: with SIQuench the damage stays insignificant (brochure).', view: 'iso', act() { state.focus = ['breaker', 'prc']; applyFocus(); }},
+    {t: 'Afterwards: the arc unit shows which sensor channel saw the arc. Replace the sensor that detected it (SIPROTEC 5 HW manual §5.4); SIQuench is reusable 5 times at full short-time current: count the operation and recharge it per its manual; inspect the compartment before re-energising.', view: 'arcLv', act() { state.focus = ['arcSens', 'arcUnit', 'siquench']; applyFocus(); }},
+  ], done: 'Arc quenched: detection ≈ 1 ms, earthing ≈ 3 ms, arc out < 5 ms with SIQuench; < 100 ms with optical detection and the breaker alone; up to 1 s for the passive design (the type test).'},
+  arcCommission: {name: 'Commission the arc protection', steps: [
+    {t: 'The optical and overpressure systems are assembled and tested at the factory: no installation work on them, do not modify or remove them (I §7.14). Check they are complete and undamaged: 1 sensor per covered compartment, cables and tubes intact.', view: 'cable', act() { const n = arcFit(false); state.focus = ['arcSens', 'arcPress']; state.glass = true; applyGlass(); applyFocus(); if (n) return {note: n}; }},
+    {t: 'Arc units powered: POWER on, ERROR off; the sensor channels in use are enabled and supervised, unused ones disabled (as for any arc unit; settings per its manual).', view: 'arcLv', act() { state.focus = ['arcUnit']; applyFocus(); }},
+    {t: 'Checklist 11.3: control and functioning of the panel pressure switches tested, with the "test equipment for pressure switch" from the switchgear accessories: each monitor must signal to the protection device.', view: 'arcLv', act() { state.focus = ['arcPress']; applyFocus(); if (!state.peq.arcPress) return {note: 'No overpressure monitors in this panel: item 11.3 is n/a.'}; }},
+    {t: 'Test the trip path with the trip outputs blocked or the breaker in test position: sensor → arc unit → breaker trip and SIQuench trigger (procedure per the arc unit and SIQuench manuals).', view: 'arcLv', act() { state.focus = ['arcUnit', 'arcSens']; applyFocus(); }},
+    {t: 'SIQuench: controller READY, self-monitoring without fault. Up to 30 operations without load are allowed for testing and commissioning (brochure); keep the count.', view: 'siq', act() { state.focus = ['siquench', 'arcUnit']; applyFocus(); if (!state.peq.siq) return {note: 'No SIQuench in this panel.'}; }},
+  ], done: 'Arc protection commissioned. Record the results in the commissioning report (checklist 11.3).'},
 };
+// arc drills: make sure the panel has the options the drill shows; returns a note when it changed them
+function arcFit(withSiq) {
+  const msg = [];
+  if (state.peq.arc === 'none') { state.peq.arc = state.peq.relay && state.peq.relay !== 'none' && state.lineup[state.lsel]?.hw.arc === 'sip' ? 'sip' : 'aq'; msg.push('optical arc detection'); }
+  const siqOk = state.W <= 800 && state.ptype !== 'mp' && !state.peq.busES && !state.peq.fan;
+  if (withSiq && siqOk && !state.peq.siq) { state.peq.siq = true; msg.push('SIQuench'); }
+  if (!msg.length) return '';
+  pushToLineup(); build(); renderLineup(); renderSpecs();
+  return `Fitted for this drill: ${msg.join(' and ')} (Specs → Panel options, Configurator).`;
+}
 const WD = ['cbp', 'dp', 'mp', 'wvt', 'cp600']; // withdrawable / truck types
 for (const k of ['door', 'takeOut', 'putIn', 'shutters', 'earthDev', 'front']) P_DRILL[k].types = WD;
 P_DRILL.busEarth.types = P_DRILL.busDeearth.types = ['cbp', 'dp', 'wvt', 'cp600'];
@@ -2042,8 +2093,9 @@ function wire() {
     const pk = e.target.dataset?.peq;
     if (pk) {
       state.peq[pk] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
-      if (pk === 'busES' && state.peq.busES) state.peq.fan = false;
-      if (pk === 'fan' && state.peq.fan) state.peq.busES = false;
+      if (pk === 'busES' && state.peq.busES) { state.peq.fan = false; state.peq.siq = false; }
+      if (pk === 'siq' && state.peq.siq) { state.peq.fan = false; state.peq.busES = false; }
+      if (pk === 'fan' && state.peq.fan) { state.peq.busES = false; state.peq.siq = false; }
       pushToLineup();
       build();
       renderLineup();

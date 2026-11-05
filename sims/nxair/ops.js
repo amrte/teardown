@@ -179,6 +179,17 @@ export const OPS_STEPS = [
     ],
   },
   {
+    id: 'arcProt', phase: 'Operate', title: 'Arc detection and SIQuench', view: 'iso', ex: 0, truck: 'service', row: false, focus: ['arcSens', 'arcPress', 'arcUnit', 'siquench', 'siqBox'], drills: ['arcFault', 'arcCommission'],
+    body: [
+      'Passive protection is in every panel: IAC A FLR ≤ 40 kA 1 s, relief flaps per compartment, pressure relief duct. The options below detect the arc and stop it early.',
+      'Optical (factory-fitted, I §7.14): control units in the LV compartment (Arcteq AQ-110 / AQ-101, Fig. 148), 1 optical sensor per covered compartment, up to 4 (Fig. 149). Or the SIPROTEC 5 module ARC-CD-3FO with up to 3 point / line sensors on 1 mm plastic fibre.',
+      'Overpressure (factory-fitted, I §7.14): monitors in the LV compartment, 1 sensor (pressure port) per compartment and 1 tube each (Fig. 150 / 151). Commissioning checklist 11.3: panel pressure switches tested.',
+      'SIQuench (catalog p. 24–25): earths all three phases on light + overcurrent, arc out < 5 ms from ignition; then the incoming breaker clears. In NXAIR fixed at the busbar of 600 / 800 mm panels without busbar VTs, busbar earthing switch or fan.',
+      'No installation work on the factory-assembled systems; do not modify or remove them. Sensor places, cable / tube routes, monitor type and box sizes in the model are drawn.',
+    ],
+    warn: 'A sensor that has seen an arc must be replaced (SIPROTEC 5 HW manual §5.4). SIQuench: 5 operations at full short-time current, then per its manual.',
+  },
+  {
     id: 'contacts', phase: 'Service', title: 'Breaker contact arms and tulips', view: 'side', ex: 0, truck: 'out', row: false, focus: ['breaker'], joints: ['cbArm', 'cbTulip'], cut: true,
     body: [
       'Pole centre distance 150 / 160 / 210 / 275 mm; terminal distance (upper to lower) 205 / 275 / 310 mm. Contact arms Ø 40 mm (≤ 1250 A, with contact arm adapter) or Ø 60 mm. Tulip: 13 fingers (≤ 1250 A) or 26 fingers.',

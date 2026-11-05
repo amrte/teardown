@@ -38,7 +38,7 @@ export const fanNeeded = (p, row) => (p.In === 4000) || (iscKey(row.isc) === 40 
 
 export function newPanel(app, row) {
   const a = APPS[app];
-  const p = {app, type: a.type, In: a.In, W: 800, hw: {vds: 'lrm', relay: '7SJ82', ct: true, vt: true, busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, ...a.hw}};
+  const p = {app, type: a.type, In: a.In, W: 800, hw: {vds: 'lrm', relay: '7SJ82', ct: true, vt: true, busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, arc: 'none', arcPress: false, siq: false, ...a.hw}};
   if (p.In && row && row.busbar && p.In > row.busbar && p.type !== 'cp600' && p.type !== 'ltri') p.In = CURRENTS[p.type].filter((x) => x <= row.busbar).pop() || p.In;
   p.W = widthsFor(p, row || {isc: 31.5})[0] || 800;
   return p;
@@ -56,6 +56,7 @@ export const RELAY_OPTS = [
 export function normPanel(p) {
   p.hw ||= {};
   p.hw.relay ??= APPS[p.app]?.hw.relay ?? '7SJ82';
+  p.hw.arc ??= 'none'; p.hw.arcPress ??= false; p.hw.siq ??= false;
   return p;
 }
 export const DEFAULT_ROW = {isc: 31.5, relief: 'lateralL', busbar: 2500};
@@ -92,12 +93,33 @@ export function validate(lineup, row) {
     if (p.hw.busES && p.W > 800) add('error', i, 'The busbar earthing switch is built in 600 / 800 mm panels (110-2300.9).');
     if (p.hw.busES && p.hw.fan) add('error', i, 'The busbar earthing switch box is not possible in a ventilated panel (catalog p. 14).');
     if (p.hw.busES && p.type === 'mp') add('error', i, 'With a withdrawable metering part no earthing switch or VT on the busbar (catalog p. 28 fn 2).');
+    // arc detection and SIQuench (NXAIR I §7.14; SIQuench brochure 2026; SIPROTEC 5 HW manual §5.4, catalog)
+    const arc = p.hw.arc || 'none';
+    if (arc === 'sip' && (!p.hw.relay || p.hw.relay === 'none')) add('error', i, 'The ARC-CD-3FO is a plug-in module of a SIPROTEC 5 device: choose a protection device, or the AQ arc units.');
+    if (arc === 'sip' && p.hw.relay === '7SJ82') add('info', i, 'The 7SJ82 takes 2 optional plug-in modules (catalog); the ARC-CD-3FO presumably uses one of these positions, leaving one for communication.');
+    if (arc !== 'none' && !['cbp', 'wvt', 'cp600'].includes(p.type)) add('info', i, 'Arc detection here has no circuit-breaker of its own to trip: its trip goes to the incoming / upstream breaker.');
+    if (p.hw.arcPress && arc === 'none' && (!p.hw.relay || p.hw.relay === 'none')) add('warn', i, 'Overpressure monitors give a contact only: wire it to a protection device or arc unit that trips the breaker.');
+    if (p.hw.siq) {
+      if (p.W > 800) add('error', i, 'SIQuench is fixed-mounted in the busbar compartment of 600 / 800 mm panels only (SIQuench brochure).');
+      if (p.hw.busES || p.hw.fan || p.type === 'mp') add('error', i, 'SIQuench is not for panels with busbar components (VTs, busbar earthing switch, ventilation box) (SIQuench brochure).');
+      if (p.W === 600 && iscKey(row.isc) === 40) add('error', i, 'In a 600 mm panel only the 170 mm pole-centre SIQuench Core is drawn (3AM41x2, 31.5 kA); for 40 kA use the 210 mm core (3AM41x3-2) in an 800 mm panel.');
+      if (arc === 'sip') add('info', i, 'The SIQuench brochure shows a separate arc flash relay driving the SIQuench controller; triggering it from a SIPROTEC 5 is not stated there.');
+    }
     if (p.type === 'mp') add('info', i, 'Metering panel: at ≤ 31.5 kA the drawings give 1350 mm only; drawn at the depth of the row.');
     const end = (i === 0 && row.relief === 'lateralL') || (i === n - 1 && row.relief === 'lateralR');
+    if (end && p.hw.siq) add('warn', i, 'The SIQuench box sits in the pressure relief duct like the busbar earthing switch box, which is not allowed in the end panel where the evacuation duct leaves (I §5.6): check with Siemens.');
     if (end && p.hw.busES) add('error', i, 'The end panel where the evacuation duct leaves must not have a busbar earthing switch, busbar VTs or a supply from above (I §5.6).');
   });
   if (n && !lineup.some((p) => p.app === 'incoming' || p.app === 'incomingWVT')) add('info', null, 'No incoming feeder in the row: the busbar is supplied from elsewhere (e.g. a bus sectionalizer or another row).');
   if (lineup.filter((p) => p.app === 'metering').length > 1) add('info', null, 'More than one busbar metering panel on one busbar section.');
+  const nSiq = lineup.filter((p) => p.hw.siq).length;
+  if (nSiq > 1) add('info', null, `${nSiq} SIQuench in the row: the brochure's example uses one for one incoming feeder with a single protection zone; one per busbar section is usually enough (check the concept).`);
+  if (nSiq) {
+    add('info', null, 'After SIQuench has operated, the incoming circuit-breaker clears the fault; SIQuench is reusable 5 times at full short-time current (then per its manual).');
+    const blind = lineup.map((p, i) => (!p.hw.arc || p.hw.arc === 'none' ? `+${i + 1}` : null)).filter(Boolean);
+    if (blind.length === n) add('error', null, 'SIQuench is triggered by an arc flash relay on light and overcurrent: fit optical arc detection (AQ units or SIPROTEC ARC-CD-3FO) in the panels it protects.');
+    else if (blind.length) add('warn', null, `SIQuench earths the whole busbar section, but ${blind.join(', ')} ${blind.length > 1 ? 'have' : 'has'} no arc sensors: an arc there is not detected optically.`);
+  }
   if (row.relief === 'absorber' && row.ur === 12 && row.isc <= 25) add('info', null, 'With absorbers at 12 kV, ≤ 25 kA the panel height stays 2300 / 2350 mm (catalog p. 30 fn 3: absorber for 12 kV > 25 kA or 17.5 kV).');
   return out;
 }
@@ -110,7 +132,7 @@ export function rowDepth(lineup, row) {
 }
 export function panelHeight(p, row) {
   if (row.relief === 'absorber' && (row.ur === 17.5 || row.isc > 25)) return 2500;
-  return p.hw.fan ? 2450 : p.hw.busES ? 2350 : 2300;
+  return p.hw.fan ? 2450 : p.hw.busES || p.hw.siq ? 2350 : 2300;
 }
 export function totals(lineup, row) {
   const L = lineup.reduce((s, p) => s + p.W, 0);
@@ -142,6 +164,8 @@ export function rowSldSvg(lineup, row, sel = -1) {
     o.push(`<rect x="${x0 + 2}" y="${top + 6}" width="${w - 4}" height="${colH}" rx="3" class="${i === sel ? 'cell sel' : 'cell'}" data-lsel="${i}"/>`);
     o.push(`<line x1="${cx}" y1="${top}" x2="${cx}" y2="${top + 24}" class="l"/>`);
     if (p.hw.busES) o.push(es(cx - 52 < x0 ? cx : cx - 40, top + 14));
+    if (p.hw.siq) o.push(`${es(cx + 4, top + 14)}<text x="${cx + 22}" y="${top + 44}" class="c r">SQ</text>`);
+    if (p.hw.arc && p.hw.arc !== 'none' || p.hw.arcPress) o.push(`<text x="${x0 + 10}" y="${top + 22}" class="c r" style="text-anchor:start">${p.hw.arc && p.hw.arc !== 'none' ? '☀' : ''}${p.hw.arcPress ? 'P' : ''}</text>`);
     let y = top + 24;
     const wd = p.type !== 'ltri';
     if (wd) { o.push(chev(cx, y + 3, true)); y += 8; }
@@ -173,7 +197,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt
 
 // ------------------------------------------------------------------------------------------------ export
 export function lineupCsv(lineup, row) {
-  const head = ['Position', 'Application', 'Panel type', 'Rated current A', 'Width mm', 'Height mm', 'CTs', 'VTs', 'Voltage detection', 'Busbar earthing switch', 'Forced ventilation', 'Key interlocks', 'Padlocks', 'Motor racking', 'Surge arresters / limiters', 'Protection device', 'Weight kg (≤ 31.5 kA)'];
-  const rows = lineup.map((p, i) => [`+${i + 1}`, APPS[p.app]?.label || '', TYPE_LABEL[p.type], p.In ?? '', p.W, panelHeight(p, row), p.hw.ct || p.type === 'ltri' ? 'yes' : 'no', p.type === 'wvt' ? 'removable' : p.type === 'mp' ? 'on the part' : p.hw.vt ? 'fixed' : 'no', p.hw.vds, p.hw.busES ? 'yes' : 'no', p.hw.fan ? 'yes' : 'no', p.hw.keys ? 'yes' : 'no', p.hw.padlock ? 'yes' : 'no', p.hw.motor ? 'yes' : 'no', p.hw.arresters ? 'yes' : 'no', p.hw.relay && p.hw.relay !== 'none' ? `SIPROTEC 5 ${p.hw.relay}` : 'none', (WEIGHT[p.W] || []).join('–')]);
+  const head = ['Position', 'Application', 'Panel type', 'Rated current A', 'Width mm', 'Height mm', 'CTs', 'VTs', 'Voltage detection', 'Busbar earthing switch', 'Forced ventilation', 'Key interlocks', 'Padlocks', 'Motor racking', 'Surge arresters / limiters', 'Protection device', 'Arc detection', 'Overpressure monitors', 'SIQuench', 'Weight kg (≤ 31.5 kA)'];
+  const rows = lineup.map((p, i) => [`+${i + 1}`, APPS[p.app]?.label || '', TYPE_LABEL[p.type], p.In ?? '', p.W, panelHeight(p, row), p.hw.ct || p.type === 'ltri' ? 'yes' : 'no', p.type === 'wvt' ? 'removable' : p.type === 'mp' ? 'on the part' : p.hw.vt ? 'fixed' : 'no', p.hw.vds, p.hw.busES ? 'yes' : 'no', p.hw.fan ? 'yes' : 'no', p.hw.keys ? 'yes' : 'no', p.hw.padlock ? 'yes' : 'no', p.hw.motor ? 'yes' : 'no', p.hw.arresters ? 'yes' : 'no', p.hw.relay && p.hw.relay !== 'none' ? `SIPROTEC 5 ${p.hw.relay}` : 'none', {aq: 'optical, AQ-110 / AQ-101 + AQ-01 sensors', sip: 'optical, SIPROTEC ARC-CD-3FO + point sensors'}[p.hw.arc] || 'none', p.hw.arcPress ? 'yes' : 'no', p.hw.siq ? 'SIQuench Core 3AM4' : 'no', (WEIGHT[p.W] || []).join('–')]);
   return [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
 }
