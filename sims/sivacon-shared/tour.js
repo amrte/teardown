@@ -26,8 +26,8 @@ export const TOUR = [
   // the infeed becomes a 3WL with a COM35, is drawn out of its guide frame and comes apart
   {t: 36.0, at: '[data-a="field:0"]', do: (act) => act('field', '0')},
   {t: 37.4, at: '[data-a="opt:acb:3WL12"]', do: (act) => act('opt', 'acb:3WL12')},
-  {t: 39.4, at: '[data-a="wlx:1"]', do: (act) => act('wlx', '1')},
-  {t: 44.6, at: '[data-a="wlx:0"]', do: (act) => act('wlx', '0')},
-  {t: 46.4, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
+  {t: 39.4, at: '[data-a="wlstep:all"]', do: (act) => act('wlstep', 'all')},
+  {t: 51.0, at: '[data-a="wlstep:0"]', do: (act) => act('wlstep', '0')},
+  {t: 54.0, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
 ];
-export const TOUR_LEN = 51;
+export const TOUR_LEN = 58;

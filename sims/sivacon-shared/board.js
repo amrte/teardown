@@ -9,6 +9,7 @@ import {BUILD} from './fields.js';
 import {createHardware} from './hardware.js';
 import {makeMaterials, mergeGeos} from './parts.js';
 import {createRegistry, NSTAGE} from './registry.js';
+import {NMAINT} from './wl.js';
 
 let MATS = null;
 const smoother = (x) => {
@@ -144,12 +145,15 @@ export function buildBoard(cfg, R) {
   // the selected field's 3WL comes apart on its own (S.wlx), eased here
   let wlx = 0;
   let wlxField = -1;
+  const TS = {sel: -1, v: 0};
   const pose = (S, dt) => {
     const wt = S.wlx || 0;
     if (wlxField !== S.sel) wlx = 0;
     wlxField = S.sel;
     const wPrev = wlx;
-    wlx += (wt - wlx) * (1 - Math.exp(-(dt || 0.016) / 0.5));
+    // one maintenance step per 0.9 s: the counter runs at a steady rate toward its target
+    const rate = (dt || 0.016) / (0.9 * NMAINT);
+    wlx += Math.max(-rate * 3, Math.min(rate, wt - wlx));
     if (Math.abs(wt - wlx) < 1e-3) wlx = wt;
     if (wlx !== wPrev) dirty = true;
     const n = fields.length;
@@ -162,8 +166,11 @@ export function buildBoard(cfg, R) {
       fd.g.position.x = R.side + R.xs[i] + dx;
     });
     const scope = (fi) => (S.scope === 'all' ? 1 : fi === S.sel || fi < 0 ? 1 : 0);
-    const moving = reg.pose(S.x, scope, {dt, doors: S.doors, distK: S.scope === 'all' ? 0.7 : 1, fly: (r) => (r.field === S.sel ? wlx : 0)});
-    for (const t of ticks) t();
+    const moving = reg.pose(S.x, scope, {dt, doors: S.doors, distK: S.scope === 'all' ? 0.7 : 1, fly: (r) => (r.field === S.sel ? wlx : 0), flySteps: NMAINT});
+    // the ticks see the selected field's maintenance step counter
+    TS.sel = S.sel;
+    TS.v = wlx * NMAINT;
+    for (const t of ticks) t(TS);
     if (dirty || moving > 0.01 || S.x !== lastX || S.sel !== lastSel || S.scope !== lastScope) {
       hw.update();
       dirty = moving > 0.01;

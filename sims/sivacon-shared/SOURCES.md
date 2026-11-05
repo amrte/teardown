@@ -33,29 +33,41 @@ Inferred values, because no document gives them: breaker outer dimensions, the c
 (about 12 / 26 mm), frame profile section (40 mm), busbar compartment depth (200 mm at 600 mm depth, 400 mm at 800 mm),
 and the maximum transport-unit length (2400 mm).
 
-## SENTRON 3WL air circuit-breaker (`wl.js`, `breaker3wl.js`)
+## SENTRON 3WL1 air circuit-breaker (`wl.js`, `breaker3wl.js`)
 
-Source: *3WL Air Circuit Breaker COM35 Communication Guide PROFINET IO, Modbus TCP*, Equipment Manual 03/2020,
-L1V30536190-04 (`MAN_L1V30536190-04_en_en-US.pdf`, page numbers as printed).
+Sources:
+- **OI**: *Manual for 3WL1 circuit breaker*, 3ZW1012-0WL11-0AB1, 08/2015 (`Segment 001`–`004 of Z_8714.pdf`), with page numbers as printed.
+- **COM**: *3WL COM35 Communication Guide*, L1V30536190-04 (`MAN_L1V30536190-04_en_en-US.pdf`).
 
 | Value | Source |
 |---|---|
-| COM35 at position X7 of the auxiliary conductor plug-in system; X7 terminals not usable with it | p.15–16 |
-| COM35 body 72 × 60 × 92 mm, 160 g; 24 V DC ±20 %, 125 mA, 2.6 VA; terminals 0.5 Nm | p.47–50 |
-| LEDs PN / TCP / CUB and their states; CUB flashing = no ETU found | p.12 |
-| Terminals 1–9: Write Enable, free input, free output, Close (Y1), Open (F1, F2) | p.16–19 |
-| Two Ethernet ports X1 X2 with switch; function button S1; CubicleBUS RJ45 at the rear with terminating plug; 4-wire lead to X8:1–4 | p.11–20, 39 |
-| Position detection: micro-switches S46 (rear), S47 (centre), S48 (front) → connected / test / disconnected / not available; data point 24 values 1 / 2 / 0 / 3 | p.30, Format (24) p.178 |
-| Breaker data available only in the connected and test positions | p.13 |
-| Order number structure (3WL · market · size · rated current - class · ETU · G/B · poles · connections - mechanism · releases · aux switch) | Format (103) p.180 |
-| Interrupting class codes N 2, S 3, H 4, C 5; frame size 1 / 2 / 3 | Format (99), (100) p.180 |
-| ETU letters E (ETU45B), F (ETU45B with display), Y (ETU55B), N (ETU76B); G = with ground-fault module | Format (103) p.180 |
-| Trip unit type codes ETU45B 4 / 5 / 6 / 7, ETU76B 13 / 14 | Format (412) p.193 |
-| Poles: 1 = 3-pole, 2 = 4-pole; rating plug = data point 377 | Format (108) p.181, Tab. 4-6 |
-| Protection parameters IR, tR, Ii, Isd, tsd, IN, Ig, tg (data points 333–342), sets A / B (data point 370) | Tab. 4-10 p.106 |
-| DAS maintenance mode: ETU76B parameter set B switched by the COM35 free input, indicated by its free output | p.24–29 |
-| DSP800 in the door: cut-out 92 × 92 mm, 24 V DC, 2.2 W, up to 8 breakers | p.83 |
-| TD400 at the ETU front interface | p.85–89 |
+| Breaker items 1–28: front panel in three columns (ETU, operating field, label column), spring charging lever, racking handle drawer, position indicator, receptacles along the top edge, arc chutes, carrying handles, racking shaft | OI 1-1 |
+| Guide frame items 1–18: arcing openings, crane holes, shutter, disconnecting contacts, Ø14 earthing terminals, guide rails and their lock, coding, position signalling switch, sliding contact modules | OI 1-2 |
+| Front panel common to all frame sizes: door cut-out 300 × 350 mm, 65 mm above the mounting surface; IP41 sealing frame with 8 × Ø5.5 holes | OI 21-1 |
+| Body widths 320 / 410 (FS I 3/4-pole) and 460 / 590 mm (FS II) from the mounting-bracket widths c = 338 / 428 / 478 / 608 mm | OI 5-3 |
+| Weights of breaker / guide frame: FS I 47/55 + 27/32 kg, FS II 85/103 + 54/65 kg, FS III 90/108 + 70/119 kg | OI 4-2 |
+| Fixing: M8-8.8 at 20 Nm (FS I/II), M10 at 40 Nm (FS III); guide frame M8 at 20 Nm | OI 5-2 |
+| Main terminals: Ø13.5 bar holes, M12 at 85 Nm; flange M12 at 70 Nm; bracing ≤ 100 mm | OI 5-4…5-14 |
+| Receptacles X8 · X7/COM · X6 · X5 left to right, 14 terminals each; which options use which receptacle | OI 5-16, 5-21 |
+| Terminal assignments: Y1 X6.7/8, F1 X6.13/14, F2–F4 X5.11–14, motor X5.1/2, CubicleBUS X8.1/2 | OI 7-1…7-9, 10-6 |
+| Positions CONNECT (red) / TEST (blue) / DISCON (green) and the maintenance position; the shutter closes at TEST | OI 6-2, 17-1 |
+| Racking: clockwise to the stop; no movement during the first ~6 turns | OI 6-3, 6-11 |
+| Spring: 9 strokes of the lever; motor recharges within 12 s; CONTACTS / READY / SPRING windows | OI 6-4, 6-6 |
+| Releases F1 · Y1 · F2/F3/F4 left to right under the receptacles; S22 and S23 on the releases; F3 td < 80 ms; F4 td 0.2–1.7 s | OI 10-1…10-3 |
+| Motor on the hand-charging shaft, fixed with one hex 5 screw at 6 Nm | OI 12-1, 12-2 |
+| BSS behind the ETU; metering function PLUS on the back of the ETU | OI 8-79, 8-92 |
+| COM35 at X7 on the guide-frame crossbar; S48 S47 S46 underneath, left to right | OI 8-83 · COM p.30 |
+| ETU15B / 25B / 27B / 45B / 76B: function matrix and every switch position | OI 8-1…8-29 |
+| Settings: IR, tR, Isd, tsd (incl. 0.02 s motor mode), Ii with MAX = 0.8 × Ics, IN, Ig letters A–E (100–1200 A or 400–1200 A), tg | OI 8-1…8-29 |
+| Rating plugs 250–6300 A and their validity per frame size | OI 8-65, 8-66 |
+| Maintenance sequence and torques: front panel 2 × PH2 at 2.5 Nm, arc chutes hex 4 at 8 Nm, main shaft retainer, racking shaft, CTs at 10 Nm, feet at 10 Nm, rear wall at 18/12 (FS III 25/18) Nm, fixed contacts at 10 Nm, pole assemblies | OI 23-3…23-26 |
+| Order-number positions 14/15 (releases) and 16 (auxiliary switches); class digit; ETU letter | OI 10-9, 10-10, 11-5 · COM Format 103 |
+| COM35 body, LEDs, ports, terminals, position detection, data points, DAS parameter set B | COM p.11–50 |
 
-The manual does not give the breaker's outer dimensions, the inner layout, the racking travel, or the setting ranges and
-curve of the trip unit. Those are typical values, marked `[inferred]` in the code. The curve on screen is labelled as typical.
+Not in the manuals:
+- the breaker's height and depth, and the FS III width;
+- the racking travel;
+- the order-number codes for position 12 (installation) and the ETU letter for ETU15B/25B/27B (shown as •);
+- the number of splitter plates.
+
+These are marked `[inferred]` in the code, and they only shape the geometry. The trip curve on screen is an L-S-I characteristic drawn from the settings (L as I²t through tR at 6 × IR, S as definite time).

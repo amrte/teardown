@@ -12,7 +12,7 @@ import {layout} from './layout.js';
 import {NSTAGE} from './registry.js';
 import {createStage} from './stage.js';
 import {TOUR, TOUR_LEN} from './tour.js';
-import {WL_STEPS} from './wl.js';
+import {NMAINT, settingsFor} from './wl.js';
 
 const W = 1600;
 const H = 900;
@@ -237,11 +237,15 @@ export function runLive() {
         S.mod = -1;
         rb = true;
         break;
-      case 'wlx': {
-        // the 3WL's own exploded view: the breaker is drawn out of its guide frame first
-        S.wlx = Number(arg);
-        if (S.wlx > 0) for (const m of f.modules) if (m.kind === 'acb' && f.opts.wlMount !== 'fixed') m.pos = 'removed';
-        if (S.view !== 'field' && S.wlx > 0) {
+      case 'wlstep': {
+        // the 3WL maintenance teardown, one step of OI chapter 23 at a time; stepping out of the guide frame racks the
+        // breaker to DISCON and then to the maintenance position, stepping all the way back racks it in again
+        const n = Math.round((S.wlx || 0) * NMAINT);
+        const t = arg === 'all' ? NMAINT : arg === '0' ? 0 : Math.max(0, Math.min(NMAINT, n + Number(arg)));
+        S.wlx = t / NMAINT;
+        const fixed = f.opts.wlMount === 'fixed';
+        for (const m of f.modules) if (m.kind === 'acb' && !fixed) m.pos = t >= 2 ? 'removed' : t >= 1 ? 'disconnected' : 'connected';
+        if (S.view !== 'field' && t > 0) {
           S.view = 'field';
           S.viewAt = T;
         }
@@ -249,8 +253,9 @@ export function runLive() {
         break;
       }
       case 'optstep': {
-        const st = WL_STEPS[a0];
-        const i = st.steps.indexOf(f.opts[a0]);
+        const st = settingsFor(f.opts).find((x) => x.key === a0);
+        if (!st) break;
+        const i = st.steps.map(String).indexOf(String(f.opts[a0]));
         f.opts[a0] = st.steps[Math.max(0, Math.min(st.steps.length - 1, i + Number(a1)))];
         rb = true;
         break;
@@ -394,7 +399,7 @@ export function runLive() {
     field: () => {
       const fx = board?.fieldCentre(S.sel) ?? 0.5;
       const k = S.wlx || 0;
-      return {tx: fx - 0.15 * S.x, ty: 1.15 + 0.1 * S.x, tz: 0.25 + 0.3 * S.x + 0.55 * k, az: 28 + 6 * k, el: 12 + 6 * S.x + 4 * k, d: (5.6 + 3.2 * S.x) * (1 - 0.18 * k)};
+      return {tx: fx - 0.15 * S.x, ty: 1.15 + 0.1 * S.x, tz: 0.25 + 0.3 * S.x + 0.85 * k, az: 28 + 22 * k, el: 12 + 6 * S.x + 8 * k, d: (5.6 + 3.2 * S.x) * (1 - 0.25 * k)};
     },
   };
   const cam = {...VIEW.iso(), sx: 0, sy: 0};
@@ -575,7 +580,7 @@ export function runLive() {
       const rk = Math.max(0, 1 - (T - ring.t) / 0.55);
       cursor = {...cu, ring: rk, ringX: ring.x, ringY: ring.y};
     } else {
-      if (T - lastInput > IDLE) startTour();
+      if (T - lastInput > IDLE && !q.has('notour')) startTour();
       const rk = Math.max(0, 1 - (T - ring.t) / 0.55);
       cursor = {x: -99, y: -99, press: false, ring: rk, ringX: ring.x, ringY: ring.y};
     }

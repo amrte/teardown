@@ -401,14 +401,21 @@ export const BUILD = {
         const r = br.wl ? breakerWL(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out, br) : breaker(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out);
         if (br.wl && r.com) com35Cables(ctx, r);
         acbs.push({...r, b, j});
-        const cyc = r.yb + 8 + br.h / 2 - (b.y0 + h / 2);
+        // the 3WL door cut-out is 300 x 350 for every frame size (OI 21-1); the 3WA cut-out follows its front
+        const cyc = br.wl ? r.cut.y - (b.y0 + h / 2) : r.yb + 8 + br.h / 2 - (b.y0 + h / 2);
         buildDoor(ctx, {
           name: `Breaker door ${loc}`, module: j, x: 0, y: b.y0, w: W, h, lock: 'handle', dist: 1100,
           open: () => (m.pos === 'removed' ? 1 : 0),
-          cut: [[0, cyc, br.w + 10, br.h + 10]],
+          cut: [br.wl ? [0, cyc, r.cut.w, r.cut.h] : [0, cyc, br.w + 10, br.h + 10]],
           lines: ['Door with cut-out for the breaker front', 'Racking with the door closed', br.wl ? 'Door sealing frame around the cut-out' : 'Door frame seal for IP54'],
           // the 3WL door sealing frame around the cut-out
-          extra: br.wl ? (dg) => mk(dg, ringGeo(br.w + 34, br.h + 34, 6, 12), M.devDark, 0, cyc, DOOR_T / 2 + 3) : null,
+          // the IP41 door sealing frame, 8 × Ø5.5 holes (OI 21-1)
+          extra: br.wl
+            ? (dg) => {
+                mk(dg, ringGeo(r.cut.w + 30, r.cut.h + 30, 6, 15), M.devDark, 0, cyc, DOOR_T / 2 + 3);
+                for (const [hx, hy] of [[-157, 0], [-157, -140], [157, 0], [157, 140], [-120, 185], [40, 185], [-40, -180], [120, -180]]) hw.screw(dg, [hx, cyc + hy, DOOR_T / 2 + 6.2], [0, 0, 1], 5, 'Door sealing frame IP41 · Ø5.5');
+              }
+            : null,
         });
       } else {
         // the louvred compartment: cable connection behind it

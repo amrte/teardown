@@ -5,7 +5,7 @@
 // configuration on every change (refresh) and the live parts (callouts, slider, hover card) move every frame (frame).
 import {FIELD_TYPES, MODULE_KINDS, SYSTEM} from './catalog.js';
 import {STAGES} from './registry.js';
-import {activeSettings, com35Data, isWL, orderNo, tripTime, WL_STEPS} from './wl.js';
+import {activeSettings, com35Data, isWL, NMAINT, orderNo, settingsFor, tripTime, WL_MAINT} from './wl.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', copper: '#c8784a', blue: '#3d8fe0'};
 export const VIEWS = ['iso', 'front', 'rear', 'side', 'top', 'field'];
@@ -333,7 +333,7 @@ export function createConsole(app, act) {
             .join(''))}`;
           // the 3WL's own teardown sits right under the breaker choice
           return o.key === 'acb' && wl
-            ? row + `<div class="lb">3WL TEARDOWN · ${orderNo(f.opts)}</div>${gr(3, [['0', 'assembled'], ['0.5', 'half'], ['1', 'exploded']].map(([v, t]) => `<div class="tb ${Math.abs((S.wlx || 0) - Number(v)) < 0.01 ? 'on' : ''}" data-a="wlx:${v}">${t}</div>`).join(''))}`
+            ? row + maintRow(S, f)
             : row;
         })
         .join('') + (wl ? wlPanel(S, f) : '');
@@ -395,15 +395,34 @@ export function createConsole(app, act) {
     tdBtns.scope.classList.toggle('on', S.scope === 'all');
   };
 
+  // ------------------------------------------------------------ the 3WL maintenance teardown, OI chapter 23
+  const maintRow = (S, f) => {
+    const n = Math.round((S.wlx || 0) * NMAINT);
+    const cur = n === 0 ? {label: 'In service', sub: `${orderNo(f.opts)} · step through the maintenance sequence of OI chapter 23`} : WL_MAINT[n - 1];
+    return `<div class="lb">3WL MAINTENANCE · STEP ${n} / ${NMAINT}</div>
+      ${gr(4, `<div class="tb ${n === 0 ? 'dis' : ''}" data-a="wlstep:-1">◀ back</div><div class="tb ${n === NMAINT ? 'dis' : ''}" data-a="wlstep:1">next ▶</div><div class="tb ${n === NMAINT ? 'on' : ''}" data-a="wlstep:all">all</div><div class="tb ${n === 0 ? 'on' : ''}" data-a="wlstep:0">refit</div>`)}
+      <div style="margin-top:4px;font-size:10px;font-weight:700">${cur.label}</div>
+      <div class="mu" style="font-size:8.8px;line-height:12px;margin-top:1px">${cur.sub}</div>`;
+  };
+
   // ------------------------------------------------------------ the 3WL panel: trip unit settings, curve, COM35 data
   const wlPanel = (S, f) => {
     const o = f.opts;
     const P = activeSettings(o);
     const In = o.wlIn;
-    const val = {wlIr: `${o.wlIr} × In · ${Math.round(P.Ir * In)} A`, wltR: `${P.tR} s`, wlIsd: `${o.wlIsd} × IR · ${Math.round(P.Isd * P.Ir * In)} A`, wltsd: `${P.tsd} s`, wlIi: `${o.wlIi} × In · ${Math.round(P.Ii * In)} A`, wlIg: `${o.wlIg} × In · ${Math.round(o.wlIg * In)} A`, wltg: `${o.wltg} s`};
-    const steps = Object.entries(WL_STEPS)
-      .filter(([, s]) => !s.gf || o.wlGf === 'yes')
-      .map(([k, s]) => `<div class="srow"><span class="lb">${s.label} · DP ${s.dp}</span><div class="stp"><div class="tb" data-a="optstep:${k}:-1">−</div><span>${val[k]}</span><div class="tb" data-a="optstep:${k}:1">+</div></div></div>`)
+    const amps = (k, x) => (x === null || x === undefined ? 'OFF' : `${Math.round(x * In)} A`);
+    const val = {
+      wlIr: `${o.wlIr} × In · ${amps('', P.Ir)}`,
+      wltR: `${o.wltR} s`,
+      wlIsd: `${o.wlIsd} × In · ${amps('', P.Isd)}`,
+      wltsd: o.wltsd === 'OFF' ? 'OFF' : `${o.wltsd} s${o.wltsd === 0.02 ? ' · motor' : ''}`,
+      wlIi: o.wlIi === 'OFF' ? 'OFF' : o.wlIi === 'MAX' ? `MAX · ${amps('', P.Ii)}` : `${o.wlIi} × In · ${amps('', P.Ii)}`,
+      wlIN: o.wlIN === 'OFF' ? 'OFF' : `${o.wlIN} × In`,
+      wlIg: `${o.wlIg} · ${P.Ig} A`,
+      wltg: `${o.wltg} s`,
+    };
+    const steps = settingsFor(o)
+      .map((s) => `<div class="srow"><span class="lb">${s.label} · DP ${s.dp}</span><div class="stp"><div class="tb" data-a="optstep:${s.key}:-1">−</div><span>${val[s.key]}</span><div class="tb" data-a="optstep:${s.key}:1">+</div></div></div>`)
       .join('');
     // the time-current curve, log-log: I / In from 0.5 to 50, t from 0.01 to 10 000 s
     const Wd = 238;
@@ -424,10 +443,10 @@ export function createConsole(app, act) {
     const C35 = o.wlCom === 'COM35' ? com35Data(o, pos) : null;
     const ledc = (s) => (s === 'green' ? '#2fbf55' : s === 'flash' ? '#9fe3b0' : '#c9ccd0');
     return `<div class="wl">
-      <div class="hd" style="margin-bottom:4px"><span class="cp">TRIP UNIT · SET ${P.set}</span><span class="cp mu">${o.wlGf === 'yes' ? 'LSIG' : 'LSI'} · TYPICAL</span></div>
+      <div class="hd" style="margin-bottom:4px"><span class="cp">${o.wlEtu.replace('D', '')} TRIP UNIT · SET ${P.set}</span><span class="cp mu">${P.Ig ? 'LSIG' : P.IN !== null ? 'LSIN' : P.Isd !== null ? 'LSI' : 'LI'}</span></div>
       ${steps}
       <svg width="${Wd}" height="${Hd}" style="display:block;margin-top:6px;background:#fafafa;border:1px solid ${C.line}">${grid}<path d="${d}" fill="none" stroke="${C.red}" stroke-width="1.6"/></svg>
-      <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Data points from the COM35 manual (Tab. 4-10). Setting ranges and the curve are typical values, not from the manual.</div>
+      <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Switch positions from the 3WL1 manual (8-22…8-29), data points from the COM35 guide (Tab. 4-10). Curve: L as I²t through tR at 6 IR, S definite time.</div>
     </div>
     <div class="wl">
       <div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">${C35 ? (C35.live ? 'BREAKER DATA LIVE' : 'NO BREAKER DATA') : 'NOT FITTED'}</span></div>

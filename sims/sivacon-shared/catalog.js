@@ -10,7 +10,7 @@ import {WL_OPTIONS, isWL, normaliseWL, wlBreaker} from './wl.js';
 // ------------------------------------------------------------ tightening torques (Nm) by thread, OI El. Anschluss / Feldverbund
 // 8.8 bolts with DIN 6796 conical spring washers (OI El. Anschluss p.9); M6 frame joint screw + nut 6 Nm and
 // thread-forming M6 Torx T30 into sheet 4 Nm (OI Feldverbund p.6, Aufstellung p.14); M4 terminal carriers ~1.5 Nm
-export const TORQUE = {4: 1.5, 6: 6, 8: 20, 10: 40, 12: 70, s6: 4, s4: 1.5};
+export const TORQUE = {4: 1.5, 6: 6, 8: 20, 10: 40, 12: 70, s6: 4, s4: 1.5, s5: '—'};
 
 // ------------------------------------------------------------ the field's vertical structure (TIP p.46, Abb. 4/3)
 // frame 2200: head zone + 1800 device compartment + foot zone; frame 2000: 1600 device compartment

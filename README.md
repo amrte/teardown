@@ -52,7 +52,7 @@ A low-voltage switchboard built from its planning manual and operating instructi
 - **Configure:** add fields at either end, duplicate, move, remove or replace them with any of 8 field types; change widths; fill the device compartments module by module on the 50 mm grid; set the frame height, plinth, busbar position, rated current, depth, form and IP for the whole lineup. The configuration is kept in the URL hash, and it exports as JSON with its bill of materials.
 - **Take apart:** 8 teardown stages, for one field or the whole lineup: doors, covers, walls, units, partitions, connections, busbars, frame. Rack a unit or a breaker to TEST, DISCONNECTED or out.
 - **Read:** point at any part for its data and its source, for example a fishplate bolt: M10 8.8, DIN 6796, 40 Nm.
-- **3WL breaker:** choose a SENTRON 3WL11/12/13 for any breaker field and configure it: rated current, breaking capacity, trip unit (ETU45B, 55B, 76B), ground-fault module, poles, withdrawable or fixed, motor, releases, COM35. It has its own exploded view. The COM35 at X7 reports the position through S46/S47/S48 and shows its data points live. The trip unit shows its settings and a typical trip curve.
+- **3WL breaker:** a SENTRON 3WL1 built from its operating instructions and the COM35 guide. It goes into any breaker field and is configurable: frame size, rated current, breaking capacity, trip unit ETU15B–76B with its real switch positions, ground fault, poles, withdrawable or fixed, motor, releases, COM35. The front panel and the guide frame are laid out as in the manual, and the 11 maintenance steps of chapter 23 come with their fasteners and torques.
 
 Numbers and their sources are listed in `sims/sivacon-shared/SOURCES.md`.
 
