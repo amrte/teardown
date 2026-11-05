@@ -207,7 +207,7 @@ export function buildPanel(mats, opts) {
   if (EQ.endWalls) {
     const prof = [[0, YB], [D, YB], [D, LVTOP], [zLV, LVTOP], [zLV, Hd - 120], [zLV - 120, Hd], [100, Hd], [0, Hd - 100]];
     for (const s of [-1, 1]) {
-      const p = part('endWall', V(s * 400, 0, 0));
+      const p = part('endWall', V(s * 400, 0, 0), {shell: true});
       p.group.userData.side = s;
       const x = s * hw;
       p.add(EX(prof, Math.min(x, x + s * 35), Math.max(x, x + s * 35)), 'ral', s < 0 ? 'End wall (left)' : 'End wall (right)');
@@ -468,6 +468,29 @@ export function buildPanel(mats, opts) {
       lk.add(B(Math.min(xc + s * 3, xc + s * 3.5), Math.max(xc + s * 3, xc + s * 3.5), yShelf + 200, yShelf + 240, zP + 40, zP + 80), 'yellow', 'Warning label: danger of crushing');
     }
     lk.finish();
+    for (const s of [-1, 1]) {
+      const x = s * xSM, side = s < 0 ? 'L' : 'R';
+      const lev = new THREE.Group();
+      lev.position.set(x, yShelf + 158, zP + 78);
+      const pb = new PartBuilder(lev, mats);
+      pb.add(C(7, 7, D + 220 - (zP + 78), 'z', 0, 0, (D + 220 - (zP + 78)) / 2, 10), 'steel', `Slip-on shutter lever ${side} (O Fig. 40)`);
+      pb.add(C(14, 14, 120, 'x', -s * 60, 0, D + 220 - (zP + 78), 12), 'red', `Slip-on shutter lever ${side}: handle`);
+      pb.finish();
+      lev.userData.slipLever = side;
+      lev.userData.label = `Slip-on shutter lever ${side}`;
+      lev.visible = false;
+      parts.shutterMech[0].add(lev);
+      const pad = new THREE.Group();
+      pad.position.set(x, yShelf + 104, zP + 96);
+      const pp = new PartBuilder(pad, mats);
+      pp.add(T(9, 2.2, 'z', 0, 8, 0), 'steel', 'Padlock shackle (shutter mechanism)');
+      pp.add(RB(-11, 11, -22, 2, -6, 6, 3), 'yellow', `Padlock on the ${s < 0 ? 'left' : 'right'} shutter mechanism`);
+      pp.finish();
+      pad.userData.shutPad = side;
+      pad.userData.label = `Padlock on the ${s < 0 ? 'left' : 'right'} shutter mechanism`;
+      pad.visible = false;
+      parts.shutterMech[0].add(pad);
+    }
   }
 
   // ================================================================ SHELF, GUIDE RAILS, INTERLOCK UNITS, LV SOCKET
@@ -826,6 +849,25 @@ export function buildPanel(mats, opts) {
         if (EQ.padlock) b.add(RB(-11, 11, -66, -42, 6, 18, 3), 'yellow', 'Padlock (busbar earthing switch)');
       }, V(xo, yo, D + 2));
       mkLv('busInd', 'Position indicator busbar earthing switch (vertical = earthed)', (b) => b.add(B(-4, 4, -18, 18, 0, 1), 'white', 'Indicator bar'), V(xo + 50, yo, D + 2));
+      const lev = mkLv('busLever', 'Operating lever, busbar earthing switch (≈ 115°)', (b) => {
+        b.add(C(9, 9, 160, 'z', 0, 0, 80), 'steel', 'Lever shaft');
+        b.add(C(16, 16, 240, 'x', 0, 0, 165), 'black', 'Lever handle (cross bar)');
+        b.add(C(19, 19, 60, 'x', 112, 0, 165), 'red', 'Grip');
+      }, V(xo, yo, D + 8));
+      lev.visible = false;
+    }
+    if (EQ.vds === 'lrm') {
+      const g = new THREE.Group();
+      const pb = new PartBuilder(g, mats);
+      pb.add(RB(-20, 20, -10, 60, 0, 30, 5, 2), 'beige', 'LRM-ST plug-in voltage indicator (8DX1620)');
+      pb.add(C(5, 5, 2, 'z', 0, 40, 31), 'ledOff', 'LRM-ST indication: flashing or lit = NOT isolated');
+      pb.add(B(-14, 14, 4, 22, 30, 30.5), 'white', 'LRM-ST label: last repeat test');
+      pb.finish();
+      g.userData.lrmSt = true;
+      g.userData.label = 'LRM-ST plug-in voltage indicator';
+      g.userData.sockets = [0, 1, 2].map((k) => V(-hw + 40 + 48 + k * 36 - 6, yLV + 40, D + 8));
+      g.visible = false;
+      parts.lv[0].add(g);
     }
   }
 

@@ -140,7 +140,7 @@ export const OPS_STEPS = [
     ],
   },
   {
-    id: 'remove', phase: 'Service', title: 'Take the breaker out and put it back', view: 'iso', ex: 0, truck: 'out', row: false, focus: ['serviceTruck', 'truck'],
+    id: 'remove', phase: 'Service', title: 'Take the breaker out and put it back', view: 'iso', ex: 0, truck: 'test', row: false, focus: ['serviceTruck', 'truck', 'hvdoor', 'lvPlug'], drills: ['takeOut', 'putIn', 'door'],
     body: [
       'Out: service truck for this panel width, breaker in test, spring discharged, HV door open, LV connector stowed. 1 Centre the truck. 2 Push the left and right locking elements into the frame openings, rails aligned; set the height with the 2 setting wheels. 3 Pull back to check it is latched (click). 4 Turn the 2 breaker locking levers 90° outward. 5 Pull the breaker onto the truck by its handles to the end stop. 6 Levers inward. 7 Pull the 2 unlocking levers up. 8 Wheel away slowly on a dry, flat floor.',
       'In: same coding, earthing-switch coupling pin vertical on the breaker and in the compartment (turn with the lever if needed), spring discharged, auxiliary voltage off. Dock and check the truck, levers outward, pull out the truck unlocking handle and hold it, push the breaker in to the stop, pull the unlocking levers up, pull the truck back, turn the breaker levers inward until both latch, plug the LV connector on, close the door, auxiliary voltage on.',
@@ -149,7 +149,7 @@ export const OPS_STEPS = [
     ],
   },
   {
-    id: 'shutterOps', phase: 'Service', title: 'Open shutters, fit the earthing device', view: 'iso', ex: 0, truck: 'out', row: false, focus: ['shutters', 'shutterMech', 'bushU', 'bushL'],
+    id: 'shutterOps', phase: 'Service', title: 'Open shutters, fit the earthing device', view: 'iso', ex: 0, truck: 'out', row: false, focus: ['shutters', 'shutterMech', 'bushU', 'bushL', 'earthDev'], drills: ['shutters', 'earthDev'],
     body: [
       'Upper (busbar) shutter = left mechanism, lever L. Lower (feeder) shutter = right mechanism, lever R. Padlock the other mechanism unless both must be open.',
       'Preconditions: withdrawable part removed, door open, LV connector stowed, isolated, earthed, verified dead, PPE. Work the lever from outside the panel by its handle; never put hands into the mechanism or push a shutter.',
@@ -159,7 +159,17 @@ export const OPS_STEPS = [
     ],
   },
   {
-    id: 'isolate', phase: 'Operate', title: 'Verify safe isolation', view: 'front', ex: 0, truck: 'test', row: false, focus: ['lv'],
+    id: 'frontAccess', phase: 'Service', title: 'Reach the connection compartment from the front', view: 'connFront', ex: 0, truck: 'test', esw: 1, row: false, focus: ['partition', 'protPlate'], joints: ['partition', 'protPlate'], drills: ['front'],
+    body: [
+      'Danger: isolate and earth the cable or bar connections before the partition comes off; warning sign on the HV door; do not operate the feeder earthing switch during the work (O §23.1).',
+      'Feeder earthing switch CLOSED (indicator vertical I on the door and inside the compartment), breaker taken out, door open.',
+      'Withdrawable breaker and disconnector panels: protection plate first (4 nuts M8 with contact washers), then the vertical partition: 10 × M8x20 with contact and plain washers + 5 × M8x20 with contact washers (O §23.2). 435 mm contactor: left part 7 × M8x20, right part 4 × M8x16 (heater moved aside first if fitted).',
+      'Refit (O §23.3): no foreign objects, clean, leave greased areas alone; all bolts all round, screwed to the end of the thread, hand-tight, then 25 Nm; protection plate 4 × M8 25 Nm. Then insert the breaker, close the door, de-earth, rack to service.',
+      'From the rear instead (O §24): horizontal ledge 8 × M8x25, each vertical ledge 14 × M8x20, 2 sealing brackets, 4 × M8x20 at the base, lift the rear wall out by its handle; refit everything at 25 Nm. Never remove the ledges of the busbar compartment.',
+    ],
+  },
+  {
+    id: 'isolate', phase: 'Operate', title: 'Verify safe isolation, earth the busbars', view: 'front', ex: 0, truck: 'test', row: false, focus: ['lv', 'busES'], drills: ['verify', 'busEarth', 'busDeearth'],
     body: [
       'Capacitive voltage detecting system to IEC 61243-5 with test sockets for feeder and busbar below the LV door: LRM sockets, or CAPDIS-S1+/S2+ or VOIS+/VOIS-R+ indicators (IP54, no auxiliary power for the display).',
       'Function-test the indicator first (battery test unit, or on a live panel).',

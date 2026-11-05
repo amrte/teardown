@@ -31,7 +31,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', gas: false, door: 0, busEs: 0, busSlide: 0, earthDev: null,
+  mode: 'panel', gas: false, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
   peq: {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
@@ -252,7 +252,7 @@ function syncPanelCb() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {door: 0, busEs: 0, busSlide: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
+const anim = {door: 0, busEs: 0, busSlide: 0, busLever: 0, shutU: 0, shutL: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -265,7 +265,7 @@ function applyPose(force) {
         continue;
       }
       if (g.userData.service) {
-        g.visible = anim.truck > 700;
+        g.visible = anim.truck > 700 || !!state.svcTruck;
         continue;
       }
       if (g.userData.crane) {
@@ -282,6 +282,11 @@ function applyPose(force) {
     c.geometry = lvCableGeometry(subject.lvCable, dzc);
     c.userData.dz = dzc;
     c.visible = anim.truck < TRAVEL + 40;
+  }
+  // LV connector stowed in its support under the LV compartment (O §10.18)
+  for (const g of subject.parts.lvPlug || []) {
+    g.position.set(0, -60 * state.lvStowed, 110 * state.lvStowed);
+    for (const c of g.children) if (c.userData.lvCable) c.visible = !state.lvStowed && anim.truck < TRAVEL + 40;
   }
   // shutters follow the truck; earthing switch, door slide, indicators and lever follow the drill state
   const open = THREE.MathUtils.clamp(1 - anim.truck / 160, 0, 1);
@@ -305,6 +310,16 @@ function applyPose(force) {
     if (c.userData.busInd) c.rotation.z = (1 - anim.busEs) * Math.PI / 2;
   }
   for (const g of subject.parts.endWall || []) g.visible = !state.row;
+  for (const g of subject.parts.shutterMech || []) for (const c of g.children) {
+    if (c.userData.slipLever) { c.visible = state.slip === c.userData.slipLever; c.rotation.x = -0.3 * (c.userData.slipLever === 'L' ? anim.shutU : anim.shutL); }
+    if (c.userData.shutPad) c.visible = state.shutPad === c.userData.shutPad;
+  }
+  for (const g of subject.parts.protPlate || []) g.visible = !state.protOff;
+  for (const g of subject.parts.partition || []) g.visible = !state.partOff;
+  for (const g of subject.parts.lv || []) for (const c of g.children) {
+    if (c.userData.busLever) { c.visible = anim.busLever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.busLever); c.rotation.z = -2.0 * anim.busEs; }
+    if (c.userData.lrmSt) { c.visible = state.lrm != null; if (state.lrm != null) c.position.copy(c.userData.sockets[state.lrm]); }
+  }
   for (const g of subject.parts.earthDev || []) g.visible = state.earthDev === g.userData.earthDev && anim.truck > 700;
   if (world.bk) for (const g of Object.values(world.bk.parts)) { g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx); if (g.userData.extra) g.position.add(g.userData.extra); }
   if (world.lv) world.lv.pose({ex: anim.lvEx, door: anim.lvDoor});
@@ -313,7 +328,7 @@ function applyPose(force) {
       for (const c of g.children) {
         if (!c.userData.shut) continue;
         c.userData.y0 ??= c.position.y;
-        c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (p === subject ? open : 1);
+        c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (p === subject ? Math.max(open, c.userData.shut > 0 ? anim.shutU : anim.shutL) : 1);
       }
     }
     for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + c.userData.openDelta * (1 - (p === subject ? anim.esw : 0)); });
@@ -399,6 +414,11 @@ const BK_VIEWS = {
 };
 // LV compartment (stand-alone, origin at the floor of the compartment, front = door plane at z = 0)
 VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
+VIEWS.sdcOpen = {p: [1.05, 1.25, 2.35], t: [0, 0.85, 0.15]};
+VIEWS.shutters = {p: [0.75, 1.15, 1.95], t: [0, 1.0, 0.0]};
+VIEWS.lvTop = {p: [0.2, 2.2, 1.75], t: [-0.28, 2.06, 0.75]};
+VIEWS.lrm = {p: [-0.1, 1.45, 1.55], t: [-0.2, 1.41, 0.75]};
+VIEWS.connFront = {p: [0.9, 1.0, 1.9], t: [0, 0.7, -0.15]};
 VIEWS.gas = {p: [-4.4, 3.5, 3.9], t: [-0.55, 1.45, -0.1]};
 VIEWS.eswCut = {p: [-2.3, 1.0, -0.55], t: [0, 0.72, -0.42]};
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
@@ -611,7 +631,7 @@ function frame(now) {
   let moved = false;
   const doorT = state.truck === 'out' ? 1 : state.door;
   if (Math.abs(anim.door - doorT) > 1e-3) { anim.door += (doorT - anim.door) * (reduced ? 1 : 1 - Math.exp(-dt * 3)); moved = true; }
-  for (const [a, b] of [['busEs', 'busEs'], ['busSlide', 'busSlide'], ['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
+  for (const [a, b] of [['busEs', 'busEs'], ['busSlide', 'busSlide'], ['busLever', 'busLever'], ['shutU', 'shutU'], ['shutL', 'shutL'], ['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
   if (moved) applyPose();
@@ -698,6 +718,7 @@ function renderStep() {
     ${s.warn ? `<div class="warn">${esc(s.warn)}</div>` : ''}
     ${extra}
     ${s.drill ? drillHtml(s.drill) : ''}
+    ${s.drills ? pdrillHtml(s.drills) : ''}
     ${joints.length ? `<h3>Fasteners in this step</h3><div class="joints">${joints.map((j) => jointRow(j, {sel: state.selJoint === j.id})).join('')}</div>` : ''}
     <h3>All steps</h3>
     <ol class="plain small" style="padding-left:22px">${STEPS.map((x, i) => `<li><a href="#steps" data-goto="${i}" style="color:${i === state.step ? 'var(--accent-ink)' : 'inherit'};${i === state.step ? 'font-weight:600' : ''}">${esc(x.title)}</a> <span class="muted">· ${esc(x.phase)}</span></li>`).join('')}</ol>`;
@@ -711,6 +732,8 @@ function setStep(i, {view = true} = {}) {
   state.eswT = s.esw ?? (state.truck === 'service' ? 0 : 1);
   state.slide = 0;
   state.lever = 0;
+  Object.assign(state, {door: 0, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, earthDev: null, busSlide: 0, busLever: 0, lrm: null});
+  pdrill = null;
   drill = null;
   state.row = s.row ?? true;
   state.cut = !!s.cut;
@@ -1016,6 +1039,9 @@ function rackTo(pos) {
   if (pos === state.truck) return true;
   if (pos === 'service' && state.eswT > 0.5) { toast('Interlocked: the feeder earthing switch is CLOSED. De-earth it before racking to service (O §7.1).'); return false; }
   if (state.lever > 0.5) { toast('Interlocked: remove the earthing-switch lever first.'); return false; }
+  if (pos === 'service' && state.door > 0.5) { toast('Interlocked: racking to service needs the HV door closed (O §7.1).'); return false; }
+  if (pos === 'service' && state.lvStowed) { toast('Interlocked: racking to service needs the LV connector plugged on (O §7.1).'); return false; }
+  if (pos !== 'out' && state.truck === 'out' && (state.shutPad || state.slip || state.earthDev)) { toast('Remove the earthing device, the slip-on lever and every padlock from the shutter mechanisms before the breaker goes back in.'); return false; }
   if (state.bk.s > 0.5 && state.mode === 'panel') { /* the panel breaker is shown OPEN in the panel view */ }
   state.truck = pos;
   syncTools();
@@ -1044,6 +1070,117 @@ function setEsw(cmd) {
   const seq = [[0, () => { state.slide = 1; }], [500, () => { state.lever = 1; }], [1100, () => { state.eswT = want; }], [2900, () => { state.lever = 0; }], [3400, () => { state.slide = 0; eswBusy = false; syncTools(); }]];
   for (const [ms, f] of seq) setTimeout(() => { f(); applyPose(); }, reduced ? 0 : ms);
   syncTools();
+}
+
+// ================================================================================ panel drills (O 110-0134.9)
+// Each step acts on the 3D model; act() returns a note, or {block: why} when an interlock of O §7.1 stops it.
+const pd = (patch) => Object.assign(state, patch);
+const P_DRILL = {
+  door: {name: 'HV door', steps: [
+    {t: 'Preconditions: breaker in TEST position, closing spring discharged, padlock taken off the door handle.', view: 'door', act() { if (state.truck === 'service') return {block: 'Interlocked: the HV door opens only with the breaker in test position (O §7.1). Rack it to test first.'}; }},
+    {t: 'Pull the door handle upwards and open the HV door.', view: 'sdcOpen', act() { pd({door: 1}); }},
+    {t: 'To close it: the LV connector must be plugged on (or no breaker in the panel); with forced ventilation the flap on the inside must be in its operational position. Push the handle fully up and hold it.', view: 'sdcOpen', act() { if (state.lvStowed && state.truck !== 'out') return {block: 'Interlocked: the door closes only with the LV connector plugged on (O §7.1). Plug it on first.'}; if (state.truck === 'out') return {block: 'The breaker stands in front of the panel on the service truck: put it back first.'}; }},
+    {t: 'Press the door fully onto the frame with the handle, push the handle fully down and release it; fit the padlock.', view: 'door', act() { pd({door: 0}); }},
+  ], done: 'Door closed. The motor in the breaker charges the spring as soon as auxiliary voltage is on (noise is normal).'},
+  takeOut: {name: 'Take the breaker out', steps: [
+    {t: 'Breaker OPEN in TEST position, closing spring discharged, auxiliary voltage off, HV door open.', view: 'sdcOpen', act() {
+      if (state.truck === 'out') return {block: 'The breaker is already out.'};
+      if (state.bk.s > 0.5) return {block: 'Open the breaker first (OFF).'};
+      let note = '';
+      if (state.truck === 'service') { if (!rackTo('test')) return {block: 'Racking to test is blocked.'}; note = 'Racked to test first. '; }
+      if (state.bk.c > 0.99) { state.bk.c = 0; syncPanelCb(); note += 'Spring discharged with OFF – ON – OFF. '; }
+      pd({door: 1});
+      return {note: note + 'Door open.'};
+    }},
+    {t: 'Remove the LV connector: push the longitudinal fastener of the coupling up, pull the connector forward and hang it in the support under the LV compartment.', view: 'sdcOpen', act() { pd({lvStowed: 1}); }},
+    {t: 'Move the service truck (the one for this panel width) centrally in front of the panel, push its locking elements into the openings of the panel frame with the rails level (setting wheels), pull it back to check that it is locked.', view: 'side', act() { pd({svcTruck: 1}); }},
+    {t: 'Turn the two locking levers of the breaker to the OUTSIDE: it is free from the panel frame.', view: 'sdcOpen'},
+    {t: 'Pull the breaker by its handles onto the service truck to the end stop, then turn its locking levers to the INSIDE: it is locked on the truck.', view: 'side', act() { state.truck = 'out'; syncTools(); }},
+    {t: 'Pull the two unlocking levers of the service truck up and move it away slowly, on a dry level floor only.', view: 'side'},
+  ], done: 'Breaker out. The shutters have closed; open them only with the slip-on levers (drill "Shutters by hand").'},
+  putIn: {name: 'Put the breaker in', steps: [
+    {t: 'Panel empty and ready; coding symbols of breaker and LV connector the same (never change them); coupling pin of the earthing-switch shaft vertical on breaker and panel; spring discharged; auxiliary voltage off; door open.', view: 'side', act() { if (state.truck !== 'out') return {block: 'The breaker is in the panel. Take it out first.'}; pd({svcTruck: 1, slip: null, shutPad: null, shutU: 0, shutL: 0, earthDev: null}); }},
+    {t: 'Service truck centrally in front of the panel, locking elements into the frame, rails level, pull back to check. Turn the breaker\'s locking levers to the OUTSIDE (free from the truck).', view: 'side'},
+    {t: 'Pull the unlocking handle of the truck, hold it and push the breaker into the panel as far as it goes.', view: 'side', act() { state.truck = 'test'; syncTools(); }},
+    {t: 'Pull the two unlocking levers of the truck up and pull it back; turn the breaker\'s locking levers to the INSIDE until both latch: interlocked in test position.', view: 'sdcOpen', act() { pd({svcTruck: 0}); }},
+    {t: 'Plug the LV connector on: from its support onto the breaker from the front, longitudinal fastener down.', view: 'sdcOpen', act() { pd({lvStowed: 0}); }},
+    {t: 'Close the HV door, switch the auxiliary voltage on: the motor charges the closing spring (indicator CHARGED).', view: 'door', act() { pd({door: 0}); state.bk.c = 1; syncPanelCb(); }},
+  ], done: 'In test position, door closed, spring charged. Racking to service: step "Rack the breaker".'},
+  shutters: {name: 'Shutters by hand', steps: [
+    {t: 'Breaker taken out, door open, LV connector stowed. Busbars isolated and earthed and safe isolation verified (for the lower shutter: the cable side). PPE on.', view: 'shutters', act() { if (state.truck !== 'out') return {block: 'Take the breaker out first (drill "Take the breaker out").'}; }},
+    {t: 'Padlock the shutter mechanism on the RIGHT side, so the lower shutter stays shut.', view: 'shutters', act() { pd({shutPad: 'R'}); }},
+    {t: 'Push the slip-on lever marked L onto the mechanism on the LEFT side.', view: 'shutters', act() { pd({slip: 'L'}); }},
+    {t: 'Standing outside the panel, push its handle down as far as it goes: the lever latches and the upper (busbar-side) shutter opens. Never touch the mechanism itself.', view: 'shutters', act() { pd({shutU: 1}); }},
+    {t: 'Do the voltage test or the work at once. To close: push the handle slightly to the right to release the latch and let it slip up; remove the lever; take the padlock off the right side.', view: 'shutters', act() { pd({shutU: 0, slip: null, shutPad: null}); }},
+  ], done: 'Lower shutter: the same mirrored, padlock on the LEFT, lever R on the RIGHT, release to the left (O §22.2). Remove every padlock before the breaker goes back in.'},
+  earthDev: {name: 'Earthing device', steps: [
+    {t: 'Breaker out, LV connector stowed, both shutters closed, the contacts to be earthed isolated. Inspect the device: copper wires not brown or stiff, tulip joints tight. An observer stays until all three tulips are on.', view: 'shutters', act() { if (state.truck !== 'out') return {block: 'Take the breaker out first.'}; }},
+    {t: 'Bolt the earthing clamp to the fixed earthing point at the lower left with its screw handle (≈ 20 Nm), before any shutter is opened.', view: 'sdcOpen'},
+    {t: 'Padlock the mechanism of the lower shutter (right side) and open the upper shutter with lever L.', view: 'shutters', act() { pd({shutPad: 'R', slip: 'L', shutU: 1}); }},
+    {t: 'Push the central earthing tulip onto the rod coupling; hold the rod only in the hand area; push the tulip onto the central contact and turn the rod clockwise; then the two outer contacts. A small discharge (light, noise) is normal.', view: 'shutters', act() { pd({earthDev: 'upper'}); }},
+    {t: 'Removing: rod onto each tulip, turn counter-clockwise, pull it off and lay the tulip on the floor; close the shutter; unscrew the clamp; take the padlock off.', view: 'shutters', act() { pd({earthDev: null, shutU: 0, slip: null, shutPad: null}); }},
+  ], done: 'The same on the lower contacts through the lower shutter (padlock on the left, lever R). 25 kA 1 s, Ø 40 / 60 mm contacts (O §26).'},
+  front: {name: 'Connection compartment from the front', steps: [
+    {t: 'Feeder earthed: the indicator on the HV door shows vertical I.', view: 'door', act() { if (state.eswT < 0.5) return {block: 'Earth the feeder first (step "Earth and de-earth the feeder"): the partition only comes off with the feeder earthing switch CLOSED.'}; }},
+    {t: 'Open the door and take the breaker out; the earthing-switch indicator inside the compartment also points to vertical I.', view: 'sdcOpen', act() { pd({door: 1, lvStowed: 1}); if (state.truck !== 'out') { state.truck = 'out'; syncTools(); } }},
+    {t: 'Remove the protection plate at the bottom of the compartment: 4 nuts M8 with contact washers.', view: 'connFront', act() { pd({protOff: 1}); }},
+    {t: 'Remove the vertical partition: 10 bolts M8x20 with contact and plain washers and 5 bolts M8x20 with contact washers. The connection compartment is open from the front.', view: 'connFront', act() { pd({partOff: 1}); }},
+    {t: 'Refit: no foreign objects, partition in, all 15 bolts hand-tight all round, then 25 Nm; protection plate, 4 nuts M8, 25 Nm. Then breaker in, door closed, de-earth, rack to service.', view: 'connFront', act() { pd({partOff: 0, protOff: 0}); }},
+  ], done: 'Partition and protection plate back at 25 Nm (O §23.3).'},
+  verify: {name: 'Verify isolation (LRM)', steps: [
+    {t: 'Function-test the LRM-ST indicator on its test unit (or on a live panel). Only an indicator tested immediately before may be used.', view: 'lrm', act() { if (state.peq.vds !== 'lrm') { state.peq.vds = 'lrm'; build(); return {note: 'LRM test sockets fitted for this drill (Specs → Panel options).'}; } }},
+    {t: 'HV door and LV door closed. Take the cover off test socket L1 (it stays on the panel) and plug the LRM-ST on.', view: 'lrm', act() { pd({lrm: 0}); }},
+    {t: 'No light and no flashing: L1 isolated. Refit the cover; plug on L2.', view: 'lrm', act() { pd({lrm: 1}); }},
+    {t: 'L2 isolated; refit the cover; plug on L3.', view: 'lrm', act() { pd({lrm: 2}); }},
+    {t: 'L3 isolated: L1, L2 and L3 isolated, safe isolation verified. Refit the cover, take the LRM-ST off.', view: 'lrm', act() { pd({lrm: null}); }},
+  ], done: 'With CAPDIS / VOIS instead: doors closed and the display shows A0 "operational high voltage not present" on L1, L2, L3 (O §20.7).'},
+  busEarth: {name: 'Earth the busbars', steps: [
+    {t: 'Switching released from outside; this panel is the released one. Electrician\'s ladder in front of the panel. (Busbar earthing switch OPEN.)', view: 'lvTop', act() { if (!state.peq.busES) { state.peq.busES = true; state.peq.fan = false; build(); return {note: 'Busbar earthing switch fitted for this drill (Specs → Panel options); panel 2350 mm with the high LV compartment.'}; } if (state.busEs > 0.5) return {block: 'The busbars are already earthed.'}; }},
+    {t: 'Open the padlock and lift the operating slide on the LV door: the actuating opening is free.', view: 'lvTop', act() { pd({busSlide: 1}); }},
+    {t: 'Insert the operating lever with its pins at "10 past 8" (the closing receptacle) as far as it goes.', view: 'lvTop', act() { pd({busLever: 1}); }},
+    {t: 'Hold it straight and turn clockwise to the stop, ≈ 115°, without stopping: the indicator goes OPEN → intermediate → CLOSED.', view: 'lvTop', act() { pd({busEs: 1}); }},
+    {t: 'Remove the lever, push the slide fully down and padlock it.', view: 'lvTop', act() { pd({busLever: 0, busSlide: 0}); }},
+  ], done: 'Busbars earthed. There is no internal interlock: it is secured only by the padlock, an electromagnetic interlock or the key locks.'},
+  busDeearth: {name: 'De-earth the busbars', steps: [
+    {t: 'De-earthing released from outside, ladder in front of the panel. (Busbar earthing switch CLOSED.)', view: 'lvTop', act() { if (!state.peq.busES || state.busEs < 0.5) return {block: 'The busbars are not earthed (drill "Earth the busbars").'}; }},
+    {t: 'Open the padlock and lift the operating slide.', view: 'lvTop', act() { pd({busSlide: 1}); }},
+    {t: 'Insert the operating lever with its pins VERTICAL (the opening receptacle).', view: 'lvTop', act() { pd({busLever: 1}); }},
+    {t: 'Turn counter-clockwise to the stop, ≈ 115°: indicator CLOSED → intermediate → OPEN.', view: 'lvTop', act() { pd({busEs: 0}); }},
+    {t: 'Remove the lever, slide down, padlock.', view: 'lvTop', act() { pd({busLever: 0, busSlide: 0}); }},
+  ], done: 'Busbars de-earthed.'},
+};
+let pdrill = null; // {id, i, note}
+function pdrillHtml(ids) {
+  const id = ids.includes(pdrill?.id) ? pdrill.id : ids[0];
+  const d = P_DRILL[id], i = pdrill?.id === id ? pdrill.i : 0;
+  return `<div class="drill" id="pDrill">
+    <h3>Do it on the model</h3>
+    ${ids.length > 1 ? `<div class="seg wrap" role="group" aria-label="Procedure">${ids.map((k) => `<button type="button" data-pdrill="${k}" aria-pressed="${k === id}">${esc(P_DRILL[k].name)}</button>`).join('')}</div>` : ''}
+    <ol class="dsteps">${d.steps.map((st, k) => `<li class="${k < i ? 'done' : k === i ? 'on' : ''}">${esc(st.t)}</li>`).join('')}</ol>
+    <div class="row">
+      <button type="button" class="btn primary" data-pdrillgo="next" ${i >= d.steps.length ? 'disabled' : ''}>${i >= d.steps.length ? 'Done' : `Do step ${i + 1}`}</button>
+      <button type="button" class="btn" data-pdrillgo="reset">Restart</button>
+    </div>
+    <p class="small muted">${esc((pdrill?.id === id && pdrill.note) || 'Each step acts on the 3D model with the interlocks of the panel (O §7.1).')}</p>
+  </div>`;
+}
+function pdrillAct(cmd, id) {
+  const ids = STEPS[state.step].drills || [];
+  if (id) { pdrill = {id, i: 0}; renderStep(); goView(P_DRILL[id].steps[0].view); return; }
+  pdrill ||= {id: ids[0], i: 0};
+  const d = P_DRILL[pdrill.id];
+  if (cmd === 'reset') { pdrill = {id: pdrill.id, i: 0}; renderStep(); goView(d.steps[0].view); return; }
+  const st = d.steps[pdrill.i];
+  if (!st) return;
+  goView(st.view);
+  const r = (st.act && st.act()) || {};
+  if (r.block) { pdrill.note = r.block; toast(r.block); renderStep(); return; }
+  pdrill.note = r.note || `Step ${pdrill.i + 1} done.`;
+  pdrill.i++;
+  if (pdrill.i >= d.steps.length) pdrill.note = (r.note ? r.note + ' ' : '') + d.done;
+  applyPose();
+  syncTools();
+  renderStep();
 }
 
 // ================================================================================ earthing-switch drill
@@ -1619,6 +1756,8 @@ function wire() {
     else if (t.id === 't-iso') { state.isolate = !state.isolate; applyGlass(); syncTools(); }
     else if (t.id === 't-lab') { state.labels = !state.labels; renderLabels(); syncTools(); }
     else if (t.dataset.drill) drillAct(t.dataset.drill);
+    else if (t.dataset.pdrill) pdrillAct(null, t.dataset.pdrill);
+    else if (t.dataset.pdrillgo) pdrillAct(t.dataset.pdrillgo);
     else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
     else if (t.dataset.gas) { state.gas = !state.gas; applyGas(); renderSpecs(); syncTools(); if (state.gas) goView('gas'); }
     else if (t.dataset.bk) bkDo(t.dataset.bk);
