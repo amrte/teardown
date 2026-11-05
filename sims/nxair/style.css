@@ -357,3 +357,13 @@ details.dev .kv { margin: 4px 0 8px; }
 .tchart .mark { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 3 3; }
 .tchart .mk { fill: var(--warn); font-size: 9.5px; }
 .tchart .cursor { stroke: #d33; stroke-width: 1.6; }
+
+/* live single-line diagram over the 3D view (panel mode) */
+.sld { position: absolute; right: 10px; bottom: 44px; width: 150px; background: color-mix(in srgb, var(--surface) 92%, transparent); border: 1px solid var(--line); border-radius: 3px; padding: 4px; pointer-events: none; }
+.sld svg { display: block; width: 100%; height: auto; font: 9px/1 var(--mono, ui-monospace, monospace); }
+.sld .sl { stroke: var(--ink); stroke-width: 1.6; fill: none; }
+.sld .sl.blade { stroke-width: 2.2; stroke: var(--accent-ink); }
+.sld .sl.dash { stroke-dasharray: 3 2; stroke: var(--ink-3); }
+.sld .st { fill: var(--ink); font-weight: 600; font-size: 9.5px; }
+.sld .sm { fill: var(--ink-2); }
+@media (max-width: 700px) { .sld { width: 112px; bottom: 40px; right: 6px; } }

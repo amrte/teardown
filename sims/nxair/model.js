@@ -70,7 +70,8 @@ export function lvCableGeometry(L0, dz) {
 export function buildPanel(mats, opts) {
   const {W, D, bus, ur} = opts;
   const hw = W / 2;
-  // ----- levels (mm). Dimension drawing: front part 688 mm (1350 deep) or 738 mm (≥ 1500), C top at 1075,
+  // ----- levels (mm). Dimension drawings: front part 738 mm at 1500 deep (40 kA sheet 110-0262.9: 762 + 738; the
+  // ≤ 31.5 kA sheet 110-0250.9 shows 688 at 1350 and 1500, in which the 3AE5 with its catalog dimensions would not fit), C top at 1075,
   // LV compartment 630 high x 406 deep from 1370, pressure relief duct to 2300 behind the LV compartment.
   const zP = D - (D >= 1500 ? 738 : 688); // partition A | B,C
   const yBC = 1075; // B floor / C roof
@@ -202,8 +203,13 @@ export function buildPanel(mats, opts) {
     const xi = hw - 20;
     p.add(B(-(hw - 25), hw - 25, yBC, H - 100, -2, 0), 'galv', 'Busbar compartment rear wall');
     p.add(EZ(rect(-xi, yBC, xi, 1360), zP - 2, zP, xs.map((x) => circleHole(x, yU, spoutRo + 3))), 'galv', 'Bushing plate (busbar side)');
-    p.add(B(-xi, xi, yBC - 2, yBC, 2, zP - 2), 'galv', 'Floor of busbar compartment');
-    for (const [z0, z1] of [[30, zP / 2 - 10], [zP / 2 + 10, zP - 30]]) {
+    p.add(B(-xi, xi, yBC - 2, yBC, 56, zP - 2), 'galv', 'Floor of busbar compartment');
+    // rear pressure relief duct of the connection compartment (catalog HA 25.71: "pressure relief upwards through rear
+    // pressure relief duct"): a flat duct between the rear wall and the busbars, flaps at its foot and top. Depth drawn.
+    p.add(B(-(hw - 25), hw - 25, yBC, yPRC, 52, 54), 'galv', 'Rear pressure relief duct (connection compartment), front wall');
+    p.add(B(-(hw - 40), hw - 40, yBC - 2, yBC, 6, 48), 'galvDark', 'Pressure relief flap (connection compartment, into the rear duct)');
+    p.add(B(-(hw - 40), hw - 40, yPRC, yPRC + 2, 6, 48), 'galvDark', 'Pressure relief flap (rear duct, into the pressure relief duct)');
+    for (const [z0, z1] of [[62, zP / 2 - 10], [zP / 2 + 10, zP - 30]]) {
       p.add(B(-(hw - 40), hw - 40, yPRC, yPRC + 2, z0, z1), 'galvDark', 'Pressure relief flap (busbar compartment)');
       p.add(C(5, 5, W - 100, 'x', 0, yPRC + 7, z0 + 6), 'steel', 'Flap hinge');
     }
@@ -801,7 +807,7 @@ export function buildPanel(mats, opts) {
 
   const dirs = {};
   for (const [id, gs] of Object.entries(parts)) dirs[id] = gs[0].userData.dir;
-  return {root, parts, anchors, dirs, shellIds, lvCable, cb, dims: {W, D, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: cbd.cageOut, sleeveOut: cbd.sleeveIn + 6, armR, zTulip0, zTulip1, zFC1}};
+  return {root, parts, anchors, dirs, shellIds, lvCable, cb, dims: {W, D, H, yBC, yPRC, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: cbd.cageOut, sleeveOut: cbd.sleeveIn + 6, armR, zTulip0, zTulip1, zFC1}};
 }
 
 // ------------------------------------------------------------------------------------------------- bolts

@@ -31,7 +31,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', gas: false, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -120,6 +120,7 @@ function build() {
   const subject = buildPanel(mats, opts);
   subject.root.position.z = -state.D / 2;
   row.add(subject.root);
+  subject.gas = buildGas(subject);
 
   // per-part material clones so focus tinting is per part
   const partMats = {};
@@ -239,6 +240,7 @@ function build() {
 }
 // the 3AE5 in the panel shows the state and equipment of the Breaker tab
 function syncPanelCb() {
+  renderSld();
   for (const p of [world?.subject, ...(world?.neighbors || [])]) {
     if (!p?.cb) continue;
     p.cb.setEquip(state.bk.equip);
@@ -379,6 +381,7 @@ const BK_VIEWS = {
 };
 // LV compartment (stand-alone, origin at the floor of the compartment, front = door plane at z = 0)
 VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
+VIEWS.gas = {p: [-4.4, 3.5, 3.9], t: [-0.55, 1.45, -0.1]};
 VIEWS.eswCut = {p: [-2.3, 1.0, -0.55], t: [0, 0.72, -0.42]};
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
@@ -600,6 +603,7 @@ function frame(now) {
     if (sm) { world.bk.setScene(A); applyPose(); }
   }
   bkTick(now, dt);
+  if (world?.subject?.gas?.visible) for (const f of world.subject.gas.userData.flows) f.puffs.forEach((m, k) => m.position.copy(f.curve.getPointAt((now / 1000 * f.speed + k / f.puffs.length) % 1)));
   if (camTween) {
     const u = Math.min(1, (now - camTween.t0) / camTween.dur);
     const e = ease(u);
@@ -792,6 +796,73 @@ function renderTorques() {
     <table class="kv small">${Object.entries(BASIS).map(([k, b]) => `<tr><th><span class="badge ${k}">${esc(b.label)}</span></th><td>${esc(b.tip)}</td></tr>`).join('')}</table>`;
 }
 
+// ---------------------------------------------------------------- arc-gas routes (3D, panel coordinates in mm)
+function buildGas(panel) {
+  const d = panel.dims, hw = d.W / 2;
+  const g = new THREE.Group();
+  g.visible = false;
+  const mat = new THREE.MeshBasicMaterial({color: 0xe8692a, transparent: true, opacity: 0.5, depthTest: false});
+  const puffMat = new THREE.MeshBasicMaterial({color: 0xffb070, transparent: true, opacity: 0.9, depthTest: false});
+  const yD = (d.yPRC + d.H) / 2 + 60, zD = d.zP * 0.55; // collecting level in the pressure relief duct
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const paths = [
+    ['A', [V3(40, 1150, d.zP + 300), V3(40, 1450, d.zP + 140), V3(40, d.yPRC - 60, d.zP + 120), V3(40, d.yPRC + 60, d.zP + 120), V3(20, yD, zD + 60)], 0.22],
+    ['B', [V3(-40, 1450, d.zP * 0.55), V3(-40, d.yPRC - 60, d.zP * 0.5), V3(-40, d.yPRC + 60, d.zP * 0.5), V3(-20, yD, zD)], 0.26],
+    ['C', [V3(0, 760, d.zC - 40), V3(0, d.yBC - 60, 60), V3(0, d.yBC + 40, 27), V3(0, d.yPRC - 40, 27), V3(0, d.yPRC + 60, 60), V3(0, yD, zD - 60)], 0.18],
+    ['D', [V3(0, yD, zD), V3(-hw, yD + 10, zD), V3(-2 * d.W, yD + 20, zD), V3(-1.5 * d.W - 380, yD + 20, zD)], 0.14],
+  ];
+  g.userData.flows = paths.map(([name, pts, speed]) => {
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 80, name === 'D' ? 26 : 14, 10), mat);
+    tube.renderOrder = 10;
+    tube.userData.label = `Arc gas route ${name}`;
+    g.add(tube);
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(name === 'D' ? 55 : 34, 90, 16), mat);
+    const end = curve.getPointAt(1), dir = curve.getTangentAt(1);
+    tip.position.copy(end);
+    tip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    tip.renderOrder = 10;
+    g.add(tip);
+    const puffs = Array.from({length: 7}, () => { const m = new THREE.Mesh(new THREE.SphereGeometry(name === 'D' ? 34 : 22, 12, 8), puffMat); m.renderOrder = 11; g.add(m); return m; });
+    return {curve, puffs, speed};
+  });
+  panel.root.add(g);
+  return g;
+}
+function applyGas() { if (world?.subject?.gas) world.subject.gas.visible = state.gas && state.mode === 'panel'; }
+
+// ---------------------------------------------------------------- single-line diagram of the panel, live (follows the door mimic)
+function renderSld() {
+  const el = $('#sld');
+  if (!el) return;
+  const conn = state.truck === 'service', out = state.truck === 'out';
+  const closed = state.bk.s > 0.5, earthed = state.eswT > 0.5;
+  const x = 58, dx = conn ? 0 : out ? 44 : 20; // the breaker block slides out of the fixed contacts in test / out
+  const chev = (cx, y, down) => `<path d="M${cx - 7},${y - (down ? 4 : -4)} L${cx},${y + (down ? 3 : -3)} L${cx + 7},${y - (down ? 4 : -4)}" class="sl"/>`;
+  const bx = x + dx;
+  el.innerHTML = `<svg viewBox="0 0 150 250" role="img" aria-label="Single-line diagram: breaker ${closed ? 'closed' : 'open'}, ${state.truck} position, feeder ${earthed ? 'earthed' : 'not earthed'}">
+    <text x="4" y="11" class="st">Single-line diagram</text>
+    <line x1="8" y1="24" x2="142" y2="24" stroke="#c47a4a" stroke-width="4"/><text x="108" y="19" class="sm">Busbar</text>
+    <line x1="${x}" y1="24" x2="${x}" y2="44" class="sl"/>${chev(x, 47, true)}
+    ${chev(x, 186, false)}<line x1="${x}" y1="189" x2="${x}" y2="232" class="sl"/>
+    <g>
+      <rect x="${bx - 16}" y="52" width="32" height="128" rx="3" class="sl dash" fill="none"/>
+      ${chev(bx, 56, true)}<line x1="${bx}" y1="59" x2="${bx}" y2="98" class="sl"/>
+      <line x1="${bx - 5}" y1="93" x2="${bx + 5}" y2="103" class="sl"/><line x1="${bx + 5}" y1="93" x2="${bx - 5}" y2="103" class="sl"/>
+      <line x1="${bx}" y1="132" x2="${closed ? bx : bx + 14}" y2="${closed ? 98 : 102}" class="sl blade"/>
+      <line x1="${bx}" y1="132" x2="${bx}" y2="174" class="sl"/>${chev(bx, 177, false)}
+    </g>
+    <text x="${bx + 19}" y="112" class="sm">-Q0</text><text x="${bx + 19}" y="122" class="sm">${closed ? 'CLOSED' : 'OPEN'}</text>
+    <text x="4" y="112" class="sm">${conn ? 'service' : out ? 'removed' : 'test'}</text>
+    <circle cx="${x}" cy="200" r="6.5" class="sl"/><text x="${x - 30}" y="203" class="sm">-T1</text>
+    <line x1="${x}" y1="214" x2="${x + 36}" y2="214" class="sl"/>
+    <line x1="${x + 36}" y1="214" x2="${earthed ? x + 36 : x + 49}" y2="${earthed ? 230 : 227}" class="sl blade"/>
+    <line x1="${x + 28}" y1="233" x2="${x + 44}" y2="233" class="sl"/><line x1="${x + 31}" y1="237" x2="${x + 41}" y2="237" class="sl"/><line x1="${x + 34}" y1="241" x2="${x + 38}" y2="241" class="sl"/>
+    <text x="${x + 52}" y="222" class="sm">-Q8</text><text x="${x + 52}" y="232" class="sm">${earthed ? 'EARTHED' : 'open'}</text>
+    <path d="M${x - 6},232 L${x + 6},232 L${x},242 Z" class="sl"/><text x="${x - 40}" y="244" class="sm">Cable</text>
+  </svg>`;
+}
+
 // ---------------------------------------------------------------- specs + sources
 function kv(rows) { return `<table class="kv">${rows.map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join('')}</table>`; }
 function renderSpecs() {
@@ -810,6 +881,26 @@ function renderSpecs() {
     ])}
     <h3>Foundation drawing (110-2300.9)</h3><div class="scroll-x"><table class="grid4"><thead><tr>${FOUNDATION[0].map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${FOUNDATION.slice(1).map((r) => `<tr>${r.map((c, i) => (i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`)).join('')}</tr>`).join('')}</tbody></table></div>
     <p class="small muted">All mm. The model's floor shows the 40 kA / 1500 mm cut-outs for the chosen width.</p>
+    <h2>Internal arc and pressure relief</h2>
+    <p class="small">IEC 62271-200 type-tested: <b>IAC A FLR</b> up to 40 kA, 1 s (O §4.5, catalog HA 25.71). The rating plate of each panel states its own classification.</p>
+    ${kv([
+      ['IAC', 'Internal arc classification: in an arc test the panel protects people standing round it'],
+      ['A', 'Accessibility type A: for authorised personnel only (indicators 300 mm from the panel in the test, closed electrical service location)'],
+      ['F · L · R', 'Classified at the front, the lateral sides and the rear: free-standing or wall-mounted installation'],
+      ['Isc, t', '≤ 40 kA, 1 s for NXAIR ≤ 17.5 kV (≤ 50 kA for NXAIR 50 kA)'],
+      ['LSC 2B · PM', 'Loss of service continuity 2B: busbar and cables stay live while the switching-device compartment is opened · partition class PM: metal partitions and shutters'],
+      ['Access', 'Busbar compartment tool-based · switching-device compartment interlock-controlled · connection compartment interlock-controlled or tool-based'],
+    ])}
+    <h3>Where the gas goes</h3>
+    <ul class="plain small">
+      <li><b>Switching-device compartment A:</b> upwards behind the LV compartment, through its relief flap into the pressure relief duct. The pressure-resistant HV door keeps the front closed.</li>
+      <li><b>Busbar compartment B:</b> through the relief flaps on its roof into the duct.</li>
+      <li><b>Connection compartment C:</b> upwards through the rear pressure relief duct (flaps at its foot and top), past the busbar compartment, into the duct.</li>
+      <li><b>Pressure relief duct D:</b> collects the gas of all compartments of the row and leads it sideways or to the rear into the evacuation duct, out of the building through a 537 × 249 mm wall opening 2000 mm above the floor, or into a top-mounted absorber (room height then 2800 – 3500 mm).</li>
+      <li>Relief flaps must lie flush (installation report 2.6); nothing may be stored on the duct. SIQuench (option) detects the arc optically and earths it in under 5 ms.</li>
+    </ul>
+    <button type="button" class="btn" data-gas="toggle">${state.gas ? 'Hide' : 'Show'} the gas routes in 3D</button>
+    <p class="small muted">The flaps and the routes are drawn from the catalog description and the dimension drawings; the depth of the rear duct is not dimensioned there.</p>
     <h3>Room</h3>${kv(ROOM)}
     <h3>Room and foundation</h3>${kv([
       ['Room height', '≥ 2500 mm with evacuation duct; ≥ 2800 / 3000 / 3500 mm with duct or absorber depending on kV and kA (see step 2)'],
@@ -841,7 +932,7 @@ function renderSources() {
       <li>Counts, sizes, washers and torques are copied from the manuals; the section reference sits on every row.</li>
       <li>Bolt positions in 3D are representative. The counts per joint match the manual. Bolt heads are drawn ${VIS}× life size so they can be seen.</li>
       <li>Geometry is checked by <code>node sims/nxair/check.mjs --all --bolts</code>: no part or bolt penetrates another in any width, depth, busbar rating, truck position or earthing-switch state, except listed real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits verified radially).</li>
-      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. The breaker in the panel is the SION 3AE5 of the Breaker tab, built for the panel width (pole centres, terminal distance, contact arm Ø, 13 / 26 contact fingers, truck per the SION truck table) and placed from the CBP section of the dimension drawing: front just behind the door in test position, contact systems just in front of the shutters, so the fixed contacts sit inside recessed bushings. Racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). The circuit-breaker panel is 1500 mm deep (1350 mm is for the other panel types). Shapes of CTs and VTs are simplified.</li>
+      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. The breaker in the panel is the SION 3AE5 of the Breaker tab, built for the panel width (pole centres, terminal distance, contact arm Ø, 13 / 26 contact fingers, truck per the SION truck table) and placed from the CBP section of the dimension drawing: front just behind the door in test position, contact systems just in front of the shutters, so the fixed contacts sit inside recessed bushings. Racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). The circuit-breaker panel is 1500 mm deep (1350 mm is for the other panel types). Open point: the panel follows the 40 kA dimension drawing (front part 738 mm); the ≤ 31.5 kA drawing shows 688 mm, in which the 3AE5 with its catalog dimensions and 200 mm travel would not fit, so the NXAIR version of the breaker must differ (shorter arms or travel) in a way Siemens does not publish. Shapes of CTs and VTs are simplified.</li>
       <li>Two torque regimes exist: panel joints with dry threads (M8 30 / 25, M12 70, M16 110 Nm) and breaker contact-arm joints with greased threads (M12 40 ±4, M16 100 ±10 Nm). Each row says which.</li>
       <li>A badge marks how each torque is known. "Maker of part" and "Not stated" rows need the part supplier's figure.</li>
       <li>LV tab: the SIPROTEC 5 7SJ82 is drawn and described from the SIPROTEC 5 hardware and operation manuals and catalog; the 3AE plug pins from the 3AE sample circuit diagrams. The equipment of the LV compartment, the device tags, the I/O allocation and the settings are a typical cable-feeder example, not a Siemens drawing. Trip-circuit supervision and breaker-control rules are quoted from the SIPROTEC 5 7SY82 manual, which shares the SIPROTEC 5 function text (the 7SJ82 device manual could not be retrieved).</li>
@@ -860,6 +951,9 @@ function applyMode() {
   controls.minDistance = state.mode === 'lv' ? 0.12 : state.mode === 'breaker' ? 0.25 : 0.6; // LV close-ups of keys and terminals
   for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo(); }
   $('#t-row').hidden = solo();
+  $('#t-gas').hidden = solo();
+  $('#sld').hidden = solo();
+  applyGas();
   $('#lvDoorSeg').hidden = state.mode !== 'lv';
   document.querySelector('.legend').hidden = solo();
   applyCut();
@@ -1432,6 +1526,8 @@ function syncTools() {
   for (const b of document.querySelectorAll('[data-esw]')) b.setAttribute('aria-pressed', String(b.dataset.esw === (state.eswT > 0.5 ? 'closed' : 'open')));
   $('#ex').value = String(Math.round(state[mk().e] * 100));
   $('#t-cut').setAttribute('aria-pressed', String(state[mk().c]));
+  $('#t-gas').setAttribute('aria-pressed', String(state.gas));
+  renderSld();
   $('#t-row').setAttribute('aria-pressed', String(state.row));
   $('#t-glass').setAttribute('aria-pressed', String(state.glass));
   $('#t-iso').setAttribute('aria-pressed', String(state.isolate));
@@ -1465,6 +1561,7 @@ function wire() {
     else if (t.dataset.truck) rackTo(t.dataset.truck);
     else if (t.dataset.esw) setEsw(t.dataset.esw);
     else if (t.dataset.bolts) { state.bolts = t.dataset.bolts; syncTools(); applyFocus(); }
+    else if (t.id === 't-gas') { state.gas = !state.gas; applyGas(); syncTools(); if (state.gas) goView('gas'); if (state.gas) toast('Arc-gas routes: A and B up through their flaps, C up the rear duct, then along the pressure relief duct out of the row.', 'ok'); }
     else if (t.id === 't-cut') { state[mk().c] = !state[mk().c]; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
     else if (t.id === 't-glass') { state.glass = !state.glass; applyGlass(); syncTools(); }
@@ -1472,6 +1569,7 @@ function wire() {
     else if (t.id === 't-lab') { state.labels = !state.labels; renderLabels(); syncTools(); }
     else if (t.dataset.drill) drillAct(t.dataset.drill);
     else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
+    else if (t.dataset.gas) { state.gas = !state.gas; applyGas(); renderSpecs(); syncTools(); if (state.gas) goView('gas'); }
     else if (t.dataset.bk) bkDo(t.dataset.bk);
     else if (t.dataset.bkchart) { state.bk.chart = t.dataset.bkchart; renderBkChart(); }
     else if (t.dataset.bkdrill) bkDrillAct(null, t.dataset.bkdrill);

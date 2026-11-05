@@ -41,6 +41,7 @@
           <button type="button" id="t-iso" aria-pressed="false" title="Show only the selected part / the parts of this step">Isolate</button>
           <button type="button" id="t-row" aria-pressed="true" title="Show the neighbour panels">Row</button>
           <button type="button" id="t-lab" aria-pressed="true" title="Bolt labels">Tags</button>
+          <button type="button" id="t-gas" aria-pressed="false" title="Arc-gas routes through the relief flaps and the pressure relief duct">Arc gas</button>
         </div>
         <div class="seg" id="boltSeg" role="group" aria-label="Bolts shown">
           <button type="button" data-bolts="step" aria-pressed="true" title="All bolts dim, current step lit">Bolts</button>
@@ -48,6 +49,7 @@
           <button type="button" data-bolts="none" aria-pressed="false" title="Only the current step">Step only</button>
         </div>
       </div>
+      <div class="sld" id="sld" aria-live="polite"></div>
       <div class="legend" aria-hidden="true">
         <span><i class="dot hot"></i>this step</span>
         <span><i class="dot m8"></i>M8</span><span><i class="dot m10"></i>M10</span><span><i class="dot m12"></i>M12</span><span><i class="dot m16"></i>M16</span>
