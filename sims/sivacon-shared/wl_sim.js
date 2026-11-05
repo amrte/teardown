@@ -56,7 +56,7 @@ export function wlState(key, m, o) {
       caption: '',
       load: 0.62, // load current, fraction of In
       fault: null,
-      etu: {screen: 'oper', menu: [], cur: 0, edit: null, msg: null, msgT: 0, page: 0, pageT: 0, test: null, query: 0, change: null, t: 0, log: []},
+      etu: {screen: 'oper', menu: [], cur: 0, edit: null, msg: null, msgT: 0, page: 0, pageT: 0, test: null, combo: null, keys: {test: 0, query: 0, clear: 0}, query: 0, change: null, t: 0, log: []},
     };
     STATES.set(key, st);
   }
@@ -142,8 +142,16 @@ export const PROCS = {
     label: 'Reset after a trip',
     check: (st) => (!st.tripped ? 'Not tripped' : null),
     steps: (st) => [
-      {label: 'Press QUERY: the trip cause LED shows', target: 'etu', dur: 1.4, run: (s, k) => (s.etu.query = k < 1 ? 1 : 0)},
-      {label: 'Press the RESET pin (BREAKER TRIPPED)', target: 'reset', dur: 1.0, run: (s, k) => {
+      {label: 'Press QUERY: the trip-cause LED shows why it tripped (OI 6-7 step 1-2)', target: 'etu', dur: 1.6, run: (s, k) => {
+        s.etu.query = k < 1 ? 1 : 0;
+        s.etu.keys.query = k < 0.9 ? 1 : 0;
+      }},
+      {label: 'Find and remedy the cause; after a short circuit inspect the contacts (OI 6-7 step 3-4)', target: 'etu', dur: 1.4, run: () => {}},
+      {label: 'Press CLEAR: the stored trip cause is deleted (OI 6-7 step 5)', target: 'etu', dur: 1.0, run: (s, k) => {
+        s.etu.keys.clear = k < 0.8 ? 1 : 0;
+        if (k > 0.5 && s.cause) etuKey(s, 'clear');
+      }},
+      {label: 'Press the RESET pin: the reclosing lockout is released (OI 6-7 step 6)', target: 'reset', dur: 1.0, run: (s, k) => {
         press('resetPress')(s, k);
         if (k > 0.5) s.tripped = false;
       }},
@@ -281,6 +289,20 @@ function trip(st, cause, I, phase) {
   }
 }
 
+/** the trip unit is active with load current above its minimum, or with the external 24 V supply (here: with the COM35 / CubicleBUS) */
+export function etuActive(st) {
+  const c = currents(st);
+  return Math.max(...c.I) > WL_SIZES[st.o.acb].imin || st.o.wlCom === 'COM35';
+}
+/** the self-test conditions (OI 8-74): trip unit active, current not in the overload range */
+function testRefusal(st) {
+  const c = currents(st);
+  if (!etuActive(st)) return 'Self-test not possible: the trip unit is not active (needs load current or the 24 V supply, OI 8-74)';
+  if (Math.max(...c.I) >= activeSettings(st.o).Ir * st.o.wlIn) return 'Self-test not possible: the current is in the overload range (OI 8-74)';
+  return null;
+}
+const tRof = (o) => activeSettings(o).tR || 10;
+
 /** the LEDs (OI 8-20): ACTIVE flashes above Imin or with 24 V, ALARM steady at I ≥ IR, COMM with a CubicleBUS node */
 export function leds(st, now) {
   const o = st.o;
@@ -289,10 +311,12 @@ export function leds(st, now) {
   const P = activeSettings(o);
   const imax = Math.max(...c.I);
   const flash = Math.floor(now / 500) % 2 === 0;
-  const powered = imax > S.imin || o.wlCom === 'COM35';
+  const powered = etuActive(st);
   const e = st.etu;
-  const testL = e.test && e.test.phase === 'done';
-  const q = e.query > 0;
+  // self-test without tripping: after the running light the L LED shows "test OK" for 30 s (OI 8-74)
+  const testL = e.test && e.test.phase === 'ok';
+  // QUERY shows only the last stored trip cause, only while pressed (OI 8-21)
+  const q = e.query > 0 && !e.test;
   return {
     ACTIVE: powered && flash,
     ALARM: imax >= P.Ir * o.wlIn,
@@ -303,7 +327,8 @@ export function leds(st, now) {
     S: q && st.cause === 'S',
     I: q && st.cause === 'I',
     G: q && st.cause === 'G',
-    run: e.test && e.test.phase === 'run' ? Math.floor(now / 150) % 4 : -1,
+    // running light: all indicators light up one after another (OI 8-74)
+    run: e.test && e.test.phase === 'run' ? Math.floor(e.test.t / 0.14) : -1,
   };
 }
 
@@ -347,22 +372,43 @@ const nodeAt = (st) => st.etu.menu.reduce((n, i) => (n.items || n.params)[i], me
 export function etuKey(st, k, setOpt) {
   const e = st.etu;
   const E = WL_ETU[st.o.wlEtu];
+  if (k === 'test' || k === 'query' || k === 'clear') e.keys[k] = 1;
+  // TEST: internal self-test without tripping; the running light lasts tR, then the L LED shows test OK (OI 8-74)
   if (k === 'test') {
-    if (!e.test) e.test = {phase: 'run', t: 0, dur: Math.max(1.5, activeSettings(st.o).tR / 4)};
-    return;
+    if (e.test || e.combo) return 'Self-test already running: CLEAR ends it';
+    const why = testRefusal(st);
+    if (why) return why;
+    e.test = {mode: 'check', phase: 'run', t: 0, dur: tRof(st.o)};
+    return `Self-test without tripping · running light for tR = ${tRof(st.o)} s`;
   }
+  // TEST + CLEAR together, release CLEAR, then TEST: self-test with tripping (OI 8-75)
+  if (k === 'testTrip') {
+    if (e.test || e.combo) return 'Self-test already running: CLEAR ends it';
+    const why = testRefusal(st);
+    if (why) return why;
+    e.combo = {t: 0};
+    return 'Self-test WITH tripping: press TEST and CLEAR, release CLEAR, then TEST (downstream circuits must be allowed to switch off)';
+  }
+  // QUERY: the LED of the last stored trip cause lights while the key is pressed (OI 6-7, 8-21)
   if (k === 'query') {
-    e.query = 3;
-    return;
+    e.query = 2.5;
+    if (e.test) return null;
+    return st.cause ? `Trip cause: ${{L: 'L · overload in the main conductor', N: 'N · overload in the neutral', S: 'S · short-time-delayed short circuit', I: 'I · instantaneous short circuit', G: 'G · ground fault'}[st.cause]}` : 'QUERY: no trip cause stored';
   }
+  // CLEAR: ends a running self-test; otherwise deletes the stored trip cause (OI 6-7 step 5, 8-74)
   if (k === 'clear') {
-    if (e.test) e.test = null;
-    st.cause = null;
     e.query = 0;
+    if (e.test || e.combo) {
+      e.test = null;
+      e.combo = null;
+      return 'Self-test ended with CLEAR';
+    }
+    if (!st.cause) return 'CLEAR: no trip cause stored';
+    st.cause = null;
     e.msg = 'Trip cause cleared';
     e.msgT = 2;
     if (e.screen === 'trip') e.screen = 'oper';
-    return;
+    return 'Trip cause cleared · press RESET to release the reclosing lockout';
   }
   if (E.face !== 'graphic') {
     // ETU45B: ▲ ▼ scroll the screens, autoscroll pauses for 20 s
@@ -432,6 +478,11 @@ export function displayModel(st) {
     return {title: 'Tripping info', lines, status: `Set ${P.set}`};
   }
   if (e.change && e.change.t > 0) return {title: 'Parameter', lines: [e.change.text, e.change.sub], status: ''};
+  if (e.test || e.combo) {
+    const t = e.test;
+    const lines = !t ? ['TEST + CLEAR', 'release CLEAR,', 'then TEST', ''] : t.phase === 'run' ? [t.mode === 'trip' ? 'with tripping' : 'without tripping', 'Running light', `tR = ${t.dur} s`, `${Math.max(0, t.dur - t.t).toFixed(1)} s`] : t.mode === 'trip' ? ['with tripping', st.tripped ? 'Breaker tripped' : 'No trip:', st.tripped ? 'Test OK' : 'Test not OK', ''] : ['without tripping', 'L LED on:', 'Test OK', `LEDs off in ${Math.ceil(30 - t.t)} s`];
+    return {title: 'Self-test', lines, status: 'CLEAR: end test'};
+  }
   if (E.face !== 'graphic') {
     // ETU45B: autoscroll pages every 5 s (OI 8-34)
     const pages = [
@@ -478,12 +529,33 @@ export function step(st, dt) {
     e.pageT = 0;
     e.page = (e.page + 1) % 2;
   }
+  for (const k of ['test', 'query', 'clear']) if (e.keys[k] > 0) e.keys[k] = Math.max(0, e.keys[k] - dt * 3);
+  // TEST + CLEAR: both pressed, CLEAR released, then TEST released
+  if (e.combo) {
+    e.combo.t += dt;
+    const c = e.combo.t;
+    e.keys.test = c < 1.6 ? 1 : 0;
+    e.keys.clear = c < 0.8 ? 1 : 0;
+    if (c >= 1.6) {
+      e.combo = null;
+      e.test = {mode: 'trip', phase: 'run', t: 0, dur: tRof(st.o)};
+    }
+  }
   if (e.test) {
     e.test.t += dt;
     if (e.test.phase === 'run' && e.test.t > e.test.dur) {
-      e.test.phase = 'done';
+      e.test.phase = 'ok';
       e.test.t = 0;
-    } else if (e.test.phase === 'done' && e.test.t > 6) e.test = null;
+      // with tripping: the trip unit fires the tripping magnet; the breaker opens, cause L
+      if (e.test.mode === 'trip') {
+        // test OK = the breaker trips; the trip cause can then be queried as after any trip (OI 8-75 step 4-5)
+        const ok = st.closed;
+        if (ok) trip(st, 'L', Math.max(...currents(st).I), 1);
+        e.test = null;
+        e.msg = ok ? 'Self-test: breaker tripped · Test OK' : 'Self-test: breaker was open · no trip';
+        e.msgT = 3;
+      }
+    } else if (e.test.phase === 'ok' && e.test.t > 30) e.test = null;
   }
   // a fault runs toward its trip; overloads are compressed TIME_X times
   if (st.fault) {

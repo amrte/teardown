@@ -474,7 +474,8 @@ export function createConsole(app, act) {
   // ------------------------------------------------------------ live 3WL readouts and the trip unit replica
   const etuP = add(`<div class="pn" style="left:306px;top:84px;width:250px;height:678px;padding:8px 10px;display:none;z-index:4"></div>`);
   etuP.innerHTML = `<div class="hd"><span class="cp">TRIP UNIT</span><span class="cp mu" data-k="etun"></span></div>
-    <canvas width="${ETU_W * 2}" height="${ETU_H * 2}" style="width:228px;height:570px;display:block;cursor:pointer;margin:0 auto"></canvas>
+    <canvas width="${ETU_W * 2}" height="${ETU_H * 2}" style="width:216px;height:540px;display:block;cursor:pointer;margin:0 auto"></canvas>
+    <div class="srow" style="margin-top:5px"><span class="lb">SELF-TEST</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;flex:1"><div class="tb" data-a="etuhit:test:1" title="OI 8-74: running light for tR, then the L LED; CLEAR ends it">TEST · no trip</div><div class="tb" data-a="etuhit:testTrip:1" title="OI 8-75: press TEST and CLEAR, release CLEAR, then TEST; the breaker trips">TEST+CLEAR · trip</div></div></div>
     <div class="srow" style="margin-top:6px"><span class="lb">LOAD</span><div class="stp"><div class="tb" data-a="wlload:-0.1">−</div><span data-k="etuload"></span><div class="tb" data-a="wlload:0.1">+</div></div></div>
     <div class="srow"><span class="lb">FAULT</span><div data-k="etuf"></div></div>
     <div data-k="etus" class="mu" style="font-size:8.6px;line-height:11px;margin-top:3px"></div>`;
@@ -537,7 +538,7 @@ export function createConsole(app, act) {
       etuP.querySelector('[data-k=etus]').innerHTML = f
         ? `<b style="color:#d6182b">${f.label}: ${Math.round(f.I)} A</b> · trips in ${Math.max(0, f.tTrip - f.t).toFixed(f.tTrip > 5 ? 0 : 2)} s${f.kind === 'L' ? ` (shown ${TIME_X}× faster)` : ''}`
         : c.live
-        ? 'Keys, rotary and slide switches, TEST · QUERY · CLEAR and RESET work. Right-click a switch to turn it back. Inject a fault to trip the breaker.'
+        ? 'TEST: self-test without tripping (running light for tR, then L LED = OK). Shift- or right-click TEST: with tripping. QUERY: last trip cause while pressed. CLEAR: ends a test, or deletes the stored trip cause. Right-click a switch to turn it back.'
         : 'Close the breaker in CONNECT to load it. The trip unit is powered from its CTs above Imin, or with 24 V via the COM35.';
     }
   };

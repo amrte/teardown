@@ -83,6 +83,9 @@ export function drawETU(g, st, now) {
   const e = st.etu;
   const hits = [];
   const hit = (id, x, y, w, h) => hits.push({id, x, y, w, h});
+  // every indicator is collected and drawn last, so the self-test running light can pass through all of them in turn
+  const lamps = [];
+  const lamp = (x, y, on, c) => lamps.push([x, y, on, c]);
   const W = ETU_W;
   const H = ETU_H;
   g.fillStyle = '#3d4a56';
@@ -108,8 +111,7 @@ export function drawETU(g, st, now) {
   txt(g, 'Release 2', W - 14, 106, 9, '#c9d1d6', 600, 'right');
   const ledList = E.face === 'graphic' ? [['ACTIVE', L.ACTIVE], ['ALARM', L.ALARM, '#e7c11e'], ['COMM.', L.COMM], ['EXTEND.', L.EXTEND], ['TRIP L', L.L, '#ff5b5b'], ['TRIP N', L.N, '#ff5b5b'], ['TRIP S', L.S, '#ff5b5b'], ['TRIP I', L.I, '#ff5b5b']] : o.wlEtu === '45B' || o.wlEtu === '45BD' ? [['ACTIVE', L.ACTIVE], ['ALARM', L.ALARM, '#e7c11e'], ['COMM.', L.COMM], ['EXTEND.', L.EXTEND]] : [['ACTIVE', L.ACTIVE], ['ALARM', L.ALARM, '#e7c11e']];
   ledList.forEach(([s, on, c], i) => {
-    const run = L.run >= 0 && i === L.run % ledList.length;
-    ledDot(g, 16 + i * 26, 152, on || run, c);
+    lamp(16 + i * 26, 152, on, c);
     g.save();
     g.translate(20 + i * 26, 146);
     g.rotate(-Math.PI / 4);
@@ -248,7 +250,7 @@ export function drawETU(g, st, now) {
     g.stroke();
     g.setLineDash([]);
     [['L', L.L], ['N', L.N], ['S', L.S], ['I', L.I]].forEach(([s, on], i) => {
-      ledDot(g, 108, y + 50 + i * 16, on, '#ff5b5b');
+      lamp(108, y + 50 + i * 16, on, '#ff5b5b');
       txt(g, s, 124, y + 54 + i * 16, 8, '#e8eef2', 700);
     });
   }
@@ -268,22 +270,31 @@ export function drawETU(g, st, now) {
       txt(g, `${o.wltg} s`, W - 64, y + 44, 8.5, '#9fd3c7', 700, 'right');
       hit('knob:wltg', W - 64, y + 12, 40, 34);
     }
-    ledDot(g, 112, y + 18, L.G, '#ff5b5b');
+    lamp(112, y + 18, L.G, '#ff5b5b');
     txt(g, 'TRIP', 126, y + 22, 7.5, '#e8eef2', 700);
-    ledDot(g, 112, y + 32, false, '#e7c11e');
+    lamp(112, y + 32, false, '#e7c11e');
     txt(g, 'ALARM', 126, y + 36, 7.5, '#e8eef2', 700);
   }
   // TEST · QUERY · CLEAR over the test connector
   ['test', 'query', 'clear'].forEach((id, i) => {
     const x = 46 + i * 74;
-    g.fillStyle = '#e4e5e2';
+    const p = e.keys?.[id] || 0;
+    if (p > 0) {
+      g.fillStyle = 'rgba(231,193,30,.55)';
+      g.beginPath();
+      g.arc(x, 563, 16, 0, Math.PI * 2);
+      g.fill();
+    }
+    g.fillStyle = p > 0 ? '#a9aba7' : '#e4e5e2';
     g.beginPath();
-    g.arc(x, 563, 12, 0, Math.PI * 2);
+    g.arc(x, 563, 12 - p * 2, 0, Math.PI * 2);
     g.fill();
     txt(g, id.toUpperCase(), x, 582, 8, '#e8eef2', 700, 'center');
     hit(id, x - 18, 549, 36, 40);
   });
   rrect(g, 40, 590, W - 80, 7, 2, '#9aa3aa');
+  const runI = L.run >= 0 ? L.run % lamps.length : -1;
+  lamps.forEach(([x, y, on, c], i) => ledDot(g, x, y, runI >= 0 ? i === runI : on, c));
   return hits;
 }
 

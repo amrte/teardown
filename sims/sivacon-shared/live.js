@@ -198,7 +198,12 @@ export function runLive() {
     if (!ws || !id) return;
     const o = fd.opts;
     const setOpt = (k, v) => act('optset', `${k}:${v}`);
-    if (['up', 'down', 'esc', 'enter', 'test', 'query', 'clear'].includes(id)) return etuKey(ws, id, setOpt);
+    if (['up', 'down', 'esc', 'enter', 'test', 'query', 'clear', 'testTrip'].includes(id)) {
+      // shift-click or right-click on TEST: the two-key self-test with tripping
+      const why = etuKey(ws, id === 'test' && dir < 0 ? 'testTrip' : id, setOpt);
+      if (why) ui.say(why);
+      return;
+    }
     if (id === 'reset') return wlAction(ws, 'reset', fd);
     if (id.startsWith('knob:')) {
       const k = id.slice(5);
