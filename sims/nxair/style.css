@@ -320,3 +320,20 @@ ul.checks b { font-family: var(--font-mono); margin-right: 6px; }
 .dlg-head .eyebrow { margin: 0; }
 .dlg-body { overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 3px; }
 .dlg-body .sch { min-width: 760px; }
+
+/* breaker: equipment options and device cards */
+.equip { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px 12px; margin: 8px 0; font-size: 12.5px; }
+.equip label { display: grid; gap: 3px; color: var(--ink-2); }
+.equip label.check { display: flex; align-items: center; gap: 6px; }
+.equip select { padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
+.devs { display: grid; gap: 6px; margin-top: 6px; }
+details.dev { border: 1px solid var(--line); border-radius: 3px; background: var(--bg); }
+details.dev > summary { cursor: pointer; padding: 8px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; list-style: none; }
+details.dev > summary::-webkit-details-marker { display: none; }
+details.dev[open] > summary { border-bottom: 1px solid var(--line); }
+details.dev .dtag { font: 600 12px var(--font-mono); color: var(--accent-ink); min-width: 56px; }
+details.dev .dt { font-weight: 600; font-size: 13px; flex: 1; min-width: 0; }
+details.dev > div { padding: 8px 10px 10px; }
+details.dev p { margin: 0 0 6px; }
+details.dev .kv { margin: 4px 0 8px; }
+.warnline { color: var(--warn); }

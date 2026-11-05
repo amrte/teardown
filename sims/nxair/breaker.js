@@ -22,22 +22,19 @@
 // (mechanism rear plate at 0, front frame at 150, cover face at 169), poles and contact arms behind (z < 0).
 import * as THREE from 'three';
 import {B, C, L, PartBuilder, RB, T, TU, spread} from './geom.js';
+import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, buildDevices} from './bkdevices.js';
 
 export const YB = 107; // breaker base on top of the 107 mm truck
 // the breaker shown in the Breaker tab: SION 3AE5, 12 kV, 1250 A, 31.5 kA, pole centres 210 mm, terminals 275 mm apart
 export const BK_SPEC = {P: 210, TD: 275, armD: 40, fingers: 13};
 
-export const BK_PARTS = [
+const BK_BASE = [
   {id: 'bkTruck', name: 'Withdrawable truck', grp: 'Truck', dir: [0, -260, 0], desc: 'NXAIR withdrawable truck under the breaker: 679 mm wide, 620 mm deep, 107 mm high, ≈ 20 kg (HG 11.02 · 2018 p. 71, pole centres 210 mm). Four wheels on the panel rails, racking spindle driven by the racking crank through the door, sliding earthing contact, two locking levers that latch it in the panel or on the service truck. Racking travel in NXAIR 200 mm.'},
   {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
   {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
-  {id: 'bkLV', name: 'LV interface -X0 (32), plugs -X01/-X02 (33.2)', grp: 'Operating mechanism', dir: [0, 240, 60], desc: '64-pole low-voltage plug-connector -X0 3AX1134 on the top plate, crimp contacts for 1.5–2.5 mm² control wires (alternatively a 20- or 30-pole plug strip Q0-X1.1 … X1.3, WAGO 231 spring terminals, with a cable bracket 60 fixed by Torx 20 self-tapping screws, 3 Nm, single use). Plugs -X01 / -X02 for the cassette position switches. Inside: the wiring loom from -X0 to the devices.'},
-  {id: 'bkMotor', name: 'Motor -M1 (53), gear unit (57), hand-crank coupling (57.2)', grp: 'Operating mechanism', dir: [-240, 120, 160], desc: 'Motor 3AY1411 charges the closing spring through the gear unit as soon as supply voltage is applied and the spring is discharged, and is switched off internally by -S21 when the spring has latched. Charging < 15 s; the motor runs in its overload range for this short time and needs ≥ 60 s between charging operations. Power 100–210 W/VA depending on voltage (24 V DC 140 W, 110 V DC 100 W, 230 V AC 200 VA). Motor protection is not supplied: C-characteristic MCB 2 A at 24 V DC, 1 A at 48/60 V DC, 0.5 A at 110 V DC, 0.315 A at 110 V AC / 220 V DC, 0.25 A at 230 V AC. Hand crank 3AX1530-4B with slip clutch through the cover opening, clockwise until the spring indicator changes; it uncouples when motor voltage returns.'},
   {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [280, 40, 170], desc: 'Helical extension spring hanging from a bracket at the top right of the mechanism plate. The charging shaft turns the crank, which stretches the spring through a link until the crank is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. ON (56.1 or -Y9) frees the latch, the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor recharges the spring at once, so OFF – ON – OFF is stored. Discharging: supply off, then OFF, ON, OFF by hand.'},
   {id: 'bkShaft', name: 'Main shaft, pole levers, roller lever', grp: 'Operating mechanism', dir: [0, -90, 220], desc: 'The switching shaft runs across the bottom of the drive and out through both side plates (optional shaft covers, Torx T20, 5 Nm, close off the ends). The cam turns it through the roller lever; one lever per pole reaches back under the pole and pushes its shed insulator (45) up: the contacts close, the contact-pressure springs are loaded, the opening springs on the shaft ends wound. Pole synchronism ≤ 2 ms. Do not touch the poles or the shaft: they move fast, also by remote control.'},
   {id: 'bkOpeningSpring', name: 'Opening springs, torsion, on the main shaft', grp: 'Operating mechanism', dir: [-300, -80, 120], desc: 'Helical torsion springs on the main-shaft ends, one leg fixed to the base, one on the shaft. The closing movement winds them; with the contact-pressure springs they open the breaker when the opening latch is released: opening ≤ 30 ms with -Y1, arcing < 15 ms, break time ≤ 45 ms. Spring forces are not published.'},
-  {id: 'bkReleases', name: 'Closing solenoid -Y9 (52), releases -Y1 (51.1), -Y2 / -Y3 (51.2, 51.3)', grp: 'Operating mechanism', dir: [-120, 0, 280], desc: 'Closing solenoid -Y9 (3AY1410, 300–370 W/VA) frees the closing latch; 1st shunt release -Y1 (3AY1410, 300–370 W/VA) strikes the opening latch with a direct-acting armature. Both are switched off inside the breaker by -S1 and are not rated for continuous duty; ≥ 60 V DC versions carry a varistor. Minimum command time -Y9 45 ms, -Y1 40 ms, 2nd / 3rd release 20 ms. Supply tolerance -15 / +10 % (-Y1 on DC -30 / +10 %). Up to two more releases 3AX11: 2nd shunt release -Y2 3AX1101 (10 W, energy store), c.t.-operated releases -Y4 / -Y5 3AX1102 and -Y6 3AX1104 (0.1 Ws), undervoltage release -Y7 3AX1103 (20 W, only with its series resistor -R1; move the striker locking screw from A to B before commissioning). Optional electrical closing lock-out -Y8E.'},
-  {id: 'bkAux', name: 'Auxiliary switch -S1 (31), -K1 (34), position switches, counter, heater', grp: 'Operating mechanism', dir: [0, 200, 240], desc: 'Auxiliary switch -S1 3SV9273 (6 NO + 6 NC) or 3SV9274 (12 NO + 12 NC), coupled to the main shaft: 250 V AC/DC, 10 A continuous, making 50 A, breaking 10 A at 230 V AC, 5 A (4 A inductive) at 110 V DC, 2.5 A at 220 V DC. Auxiliary contactor -K1 3AY1420: electrical anti-pumping (with OFF and ON both held, the breaker stays open until ON is given again). Position switches 3AX4206-0A: -S21 motor cut-off, -S3 controls -K1, -S4 "closing spring charged" (both open when the spring is charged), -S6 breaker-tripped signal (fleeting contact on a release trip, ≥ 10 ms with -Y1), -S12 blocks electrical closing with the mechanical interlock. Operations counter 58. Anti-condensation heater -R01 50 W 230 V AC (110 V option), surface about 180 °C.'},
   {id: 'bkShell', name: 'Pole shells (46)', grp: 'Pole', dir: [0, 0, -330], desc: 'One epoxy pole shell per phase, open towards the panel (rear), with creepage ribs at its foot. It carries the pole head, the interrupter and the lower connection and takes the switching forces. Clean insulating parts with a damp cloth, warm water and a mild household cleaner only.'},
   {id: 'bkSep', name: 'Separating shells to the drive side (41, optional)', grp: 'Pole', dir: [0, 220, 0], desc: 'Insulating U-shells between each pole and the drive housing, standing above the housing top. Optional.'},
   {id: 'bkUpper', name: 'Pole heads with contact plate (42)', grp: 'Pole', dir: [0, 210, -200], desc: 'Upper connection: pole head with the pole contact plate facing the panel, 4 tapped holes M12 for flat busbars plus the centre thread for the contact-arm bolt. The fixed stem of the interrupter is bolted rigidly here. Screw-in depth 20 ±1 mm (12 kV, ≤ 31.5 kA, ≤ 1600 A, M12).'},
@@ -49,6 +46,9 @@ export const BK_PARTS = [
   {id: 'bkTulips', name: 'Contact systems (23, 23.1) with arm adapter (22.2)', grp: 'Primary contacts', dir: [0, 0, -600], desc: 'Contact system: a cage of spring-loaded contact fingers held by ring springs. For Ø 40 mm arms the contact arm adapter (22.2) is set in from the back of the contact system: fingers greased with Molykote Longterm 2, adapter adjusted with screw, washers and nut, tightened with an open-ended spanner, then screw, washers and nut removed. The contact system goes onto bolt and arm with the round outer edge towards the arm, 40 ±4 Nm (M12, greased); the other side of the fingers is greased last.'},
   {id: 'bkSleeves', name: 'Separating shells to the panel side (47, optional)', grp: 'Primary contacts', dir: [0, 0, -260], desc: 'Insulating sleeves slid over the main conductors and snapped into the pole shell, to insulate the poles from each other where the connection space is tight; conductors up to Ø 60 mm. Up to 17.5 kV: slide onto the bolts, set against the pole shell and let them engage; check that the snap hooks are fully behind the insulating ribs.'},
 ];
+// mechanism, then the secondary devices (basic, option), then the poles and contacts
+const ORDER = ['Truck', 'Operating mechanism', 'Secondary equipment (basic)', 'Secondary equipment (option)', 'Pole', 'Vacuum interrupter', 'Primary contacts'];
+export const BK_PARTS = [...BK_BASE, ...DEVICE_PARTS.map((d) => ({...d, desc: DEVICE_INFO[d.id]?.summary || ''}))].sort((a, b) => ORDER.indexOf(a.grp) - ORDER.indexOf(b.grp));
 
 const HAS_DOM = typeof document !== 'undefined';
 function canvasTex(Wmm, Hmm, ppm, draw) {
@@ -251,7 +251,6 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     if (tex) p.add(coverDecal(20, 120, 405, 478, ZC + 0.6), 'bkCoverArt', 'Rating plate (21): 3AE5123-2, 12 kV, 1250 A, 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg');
     if (tex) p.add(coverDecal(-110, 110, 130, 250, ZC + 1.05), 'bkCoverArt', 'Control board');
     p.add(C(15, 15, 0.8, 'z', 0, 360, ZC + 0.4, 24), 'black', 'Hand-crank opening (57.1)');
-    p.add(C(8, 8, 3, 'z', -25, 305, ZC + 1.5, 16), 'steel', 'Key lock 3AX1437 (59.3, optional): hold OFF, turn the key to vertical, the key comes out locked');
     p.add(B(-95, -55, 150, 170, ZC + 1, ZC + 1.5), 'black', 'Operating cycle counter (58)');
     if (tex) p.add(plane(-95, -55, 150, 170, ZC + 1.6), 'bkCounter', 'Operating cycle counter (58)');
     p.add(B(-52, -18, 143, 177, ZC + 1, ZC + 1.5), 'black', 'Position indicator ON-OFF (56.3)');
@@ -270,32 +269,6 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     rig.flagO = flag(-50, -20, 145, 175, 'bkFlagO', 'green', 'Position indicator: O = open');
     rig.flagCh = flag(45, 75, 170, 200, 'bkFlagcharged', 'yellow', 'Spring state: charged');
     rig.flagDis = flag(45, 75, 170, 200, 'bkFlagdischarged', 'white', 'Spring state: discharged');
-  }
-
-  // ------------------------------------------------------------ LV interface
-  {
-    const p = part('bkLV');
-    p.add(B(-75, 75, H, H + 18, 40, 110), 'grey', 'Low-voltage plug-connector -X0 (32), 64-pole, 3AX1134');
-    p.add(RB(-70, 70, H + 18, H + 52, 45, 105, 5, 2), 'black', 'Plug housing (crimp contacts 1.5–2.5 mm²)');
-    for (const s of [-1, 1]) p.add(TU([[s * 70, H + 12, 55], [s * 82, H + 34, 75], [s * 70, H + 46, 95]], 3, 12, 6), 'steel', 'Locking bow');
-    p.add(C(14, 14, 22, 'z', 0, H + 35, 116, 16), 'black', 'Cable outlet');
-    p.add(TU([[-40, H - 14, 70], [-60, H - 34, 70], [-100, 500, 75], [-110, 484, 80]], 8, 20, 8), 'black', 'Wiring loom from -X0');
-    p.add(B(200, 245, 420, 470, 50, 110), 'grey', 'Plugs -X01 / -X02 for the cassette (33.2)');
-    p.add(B(-60, 20, 485, 520, 128, 138), 'galvDark', 'Position for the plug strip Q0-X1 (33), not fitted');
-    p.finish();
-  }
-
-  // ------------------------------------------------------------ motor, gear unit, hand-crank coupling
-  {
-    const p = part('bkMotor');
-    p.add(C(30, 30, 100, 'x', -95, 360, zCS, 28), 'blue', 'Motor -M1 (53), 3AY1411');
-    p.add(C(24, 24, 6, 'x', -148, 360, zCS, 24), 'black', 'Motor end cap');
-    p.add(C(9, 9, 20, 'x', -35, 360, zCS, 14), 'steel', 'Motor pinion');
-    p.add(B(-25, 25, 245, 395, 25, 118), 'galvDark', 'Gear unit (57)');
-    p.add(C(12, 12, 22, 'z', 0, 360, 129, 6), 'steel', 'Hand-crank coupling (57.2), clockwise to charge');
-    p.finish();
-    rig.motorRotor = sub('bkMotor', 'Motor rotor (spins while charging)', (b) => b.add(B(-1, 1, -20, 20, -4, 4), 'zinc', 'rotor mark'));
-    rig.motorRotor.position.set(-152, 360, zCS);
   }
 
   // ------------------------------------------------------------ charging shaft, crank, cam, closing spring
@@ -326,6 +299,10 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   {
     const p = part('bkShaft');
     p.add(B(xCam - 34, xCam - 18, yMS + 30, yMS + 62, zMS - 8, zMS + 8), 'black', 'Opening latch (released by OFF / -Y1)');
+    p.add(B(-155, -25, 180, 186, 105, 125), 'steel', 'Trip bar: the strikers of -Y2 … -Y7 hit it, it frees the opening latch');
+    p.add(B(-28, -22, 110, 180, 100, 112), 'steel', 'Trip bar link to the opening latch');
+    p.add(B(-22, xCam - 34, 110, 116, 100, 112), 'steel', 'Trip bar link to the opening latch');
+    p.add(B(xCam - 40, xCam - 34, 110, 116, 68, 100), 'steel', 'Trip bar link to the opening latch');
     p.finish();
     rig.shaft = sub('bkShaft', 'Main shaft with pole levers', (b) => {
       b.add(C(18, 18, 2 * hh + 30, 'x', 0, 0, 0), 'steel', 'Main shaft');
@@ -356,42 +333,9 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     p.finish();
   }
 
-  // ------------------------------------------------------------ releases (front zone, z ≤ 135; plungers pulse)
-  {
-    const p = part('bkReleases');
-    p.add(B(-150, -100, 195, 300, 95, 135), 'grey', '3rd release (51.3, optional), e.g. -Y4 / -Y7');
-    p.add(B(-140, -110, 300, 312, 102, 128), 'black', 'Terminal block of the 3rd release');
-    p.add(B(-95, -45, 195, 300, 95, 135), 'grey', '2nd release (51.2, optional): -Y2 3AX1101');
-    p.add(B(-85, -55, 300, 312, 102, 128), 'black', 'Terminal block of the 2nd release');
-    p.add(C(16, 16, 35, 'z', -20, 225, 117.5, 24), 'black', '1st shunt release -Y1 (51.1), 3AY1410');
-    p.add(B(-5, 35, 160, 205, 100, 135), 'black', 'Closing solenoid -Y9 (52), 3AY1410');
-    p.finish();
-    rig.plungerClose = sub('bkReleases', 'Closing solenoid plunger', (b) => b.add(C(6, 6, 20, 'y', 0, 0, 0), 'zinc', 'plunger'));
-    rig.plungerClose.position.set(15, 150, 117);
-    rig.plungerOpen = sub('bkReleases', 'Shunt release armature', (b) => b.add(C(6, 6, 16, 'z', 0, 0, 0), 'zinc', 'armature'));
-    rig.plungerOpen.position.set(-20, 225, 92);
-  }
-
-  // ------------------------------------------------------------ aux switch, -K1, position switches, counter, heater
-  {
-    const p = part('bkAux');
-    p.add(B(-175, -35, 420, 470, 40, 120), 'grey', 'Auxiliary switch -S1 (31), 3SV9273 6 NO + 6 NC');
-    for (let i = 0; i < 6; i++) p.add(B(-170 + i * 22, -152 + i * 22, 424, 466, 120, 128), 'black', 'Auxiliary switch contact element (NO + NC)');
-    p.add(C(6, 6, 15, 'x', -182.5, 445, 80, 6), 'steel', 'Auxiliary switch operating shaft');
-    p.add(C(4, 4, 345, 'y', -182, 92 + 345 / 2, 15 + zMS, 10), 'steel', 'Auxiliary switch coupling rod');
-    p.add(B(-25, 20, 410, 480, 50, 120), 'grey', 'Auxiliary contactor -K1 (34), 3AY1420: anti-pumping');
-    p.add(B(-25, 20, 470, 480, 120, 126), 'black', 'Terminal strip of -K1');
-    const sw = [['Position switch -S21 (54.2): motor cut-off', 95], ['Position switch -S3 (54.3): controls -K1', 107], ['Position switch -S4 (54.4): "closing spring charged"', 119]];
-    for (const [lab, x] of sw) p.add(B(x, x + 10, 120, 160, 100, 130), 'black', lab);
-    p.add(B(60, 78, 120, 150, 100, 130), 'black', 'Position switch -S12 (54.1): no electrical closing with the mechanical interlock');
-    p.add(B(-12, 4, 120, 150, 100, 130), 'black', 'Position switch -S6 (54.6): breaker-tripped signal');
-    p.add(B(-95, -55, 145, 175, 118, 148), 'black', 'Operating cycle counter mechanism (58)');
-    p.add(B(-50, -20, 140, 180, 118, 148), 'black', 'Position indicator drive (56.3)');
-    p.add(B(45, 75, 165, 205, 118, 148), 'black', 'Spring state indicator drive (55.1)');
-    p.add(B(-70, 70, 14, 40, 95, 140), 'black', 'Anti-condensation heater -R01 (59.4), 50 W, ≈ 180 °C surface');
-    for (const x of spread(-60, 60, 9)) p.add(B(x - 1, x + 1, 40, 46, 100, 135), 'galv', 'Heater fins');
-    p.finish();
-  }
+  // ------------------------------------------------------------ secondary equipment (bkdevices.js), one part per device
+  rig.setEquip = buildDevices({part, sub, rig, parts, MX, H, zCS});
+  rig.setEquip(EQUIP_DEFAULT);
 
   // ------------------------------------------------------------ poles
   const shell = part('bkShell');
@@ -539,5 +483,5 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     rig.flagDis.visible = c <= 0.98;
   };
   pose({});
-  return {root, parts, pose, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
+  return {root, parts, pose, setEquip: rig.setEquip, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
 }

@@ -136,9 +136,12 @@ const BK_ALLOW = [
   [/^bkShaft:(Pole lever|Lever pin)/, /^bkRods:Insulator foot eye/, 'lever fork and pin engage the insulator foot'],
   [/^bkShaft:Main shaft/, /^bkFrame:(Side plate|Mechanism mounting plate)/, 'shaft runs through the side plates and the mechanism plate'],
   [/^bkShaft:(Main shaft|Opening spring leg)/, /^bkOpeningSpring:Opening spring, torsion/, 'torsion springs coaxial on the main shaft (radial check below)'],
-  [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkMotor:Gear unit/, 'charging shaft runs through the mechanism plate into the gear unit'],
-  [/^bkClosingSpring:Charging gear wheel/, /^bkMotor:Gear unit/, 'gear wheel inside the gear-unit housing'],
-  [/^bkAux:Auxiliary switch coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
+  [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkGear:Gear unit/, 'charging shaft runs through the mechanism plate into the gear unit'],
+  [/^bkClosingSpring:Charging gear wheel/, /^bkGear:Gear unit/, 'gear wheel inside the gear-unit housing'],
+  [/^bkS1:-S1 coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
+  [/^bkX0plug:/, /^bkX0:-X0 (pin|locking bow)/, 'plug pushed over the pins, held by the locking bows'],
+  [/^bkKey:Key lock 3AX1437, lock cylinder/, /^bkCover:/, 'lock cylinder through its hole in the cover'],
+  [/^bkInterlock:Mechanical interlock plunger/, /^bkFrame:(Housing floor|Base frame)/, 'plunger passes through the floor from below'],
   [/^bkClosingSpring:Spring hook/, /^bkClosingSpring:Closing spring \(55\)/, 'top hook through the end coil of the spring'],
   [/^bkClosingSpring:Spring eye/, /^bkClosingSpring:(Closing spring \(55\)|Link rod|Crank pin)/, 'bottom eye in the spring, link rod in the eye'],
   [/^bkClosingSpring:Link rod/, /^bkClosingSpring:Crank pin/, 'link rod on the crank pin'],
@@ -186,7 +189,9 @@ if (args.includes('--breaker') || args.includes('--all')) {
     if (dd.viFront >= dd.shellFrontIn) { console.log(`breaker W${W}: interrupter touches the front wall of the pole shell`); bt++; }
     if (dd.sleeveIn <= dd.armR) { console.log(`breaker W${W}: separating shell bore touches the contact arm`); bt++; }
     if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
-    for (const [c, s, crank] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360]]) {
+    const EQ = [{}, {s1: '12', slot2: 'Y4', slot3: 'Y6', lv: 'strip', y8e: true, key: false}, {slot2: 'Y7', slot3: 'Y2', y8e: true, key: true}, {slot2: 'none', slot3: 'Y4', heater: false, s12: false}];
+    for (const [c, s, crank, ei] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3]]) {
+      bk.setEquip(EQ[ei || 0]);
       bk.pose({c, s, crank});
       const res = clashes(collect(bk.root)).filter((r) => !allowIn(BK_ALLOW, r.pa, r.pb));
       if (res.length) {

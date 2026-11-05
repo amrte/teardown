@@ -9,6 +9,7 @@ import {
 import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
 import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeometry} from './model.js';
 import {BK_PARTS, BK_SPEC, buildBreaker} from './breaker.js';
+import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, SLOT_TYPES} from './bkdevices.js';
 import {CB_JOINTS, CB_ACCESSORIES, CB_AUX, CB_CHECKS, CB_DEPTHS, CB_MOTOR, CB_TIMES} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
 import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
@@ -29,7 +30,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, equip: {...EQUIP_DEFAULT}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -207,6 +208,7 @@ function build() {
   // the stand-alone breaker for the teardown tab
   if (world?.bkHolder) { scene.remove(world.bkHolder); disposeTree(world.bkHolder); }
   const bk = buildBreaker(mats, BK_SPEC); // SION 3AE5 12 kV 1250 A 31.5 kA, independent of the panel width
+  bk.setEquip(state.bk.equip);
   const bkHolder = new THREE.Group();
   bkHolder.scale.setScalar(0.001);
   bk.root.position.z = 75;
@@ -425,10 +427,19 @@ function renderLabels() {
 let labelFrame = 0;
 const partCentre = new Map();
 const tmpBox = new THREE.Box3();
+// box of the visible meshes only (parts can hold hidden equipment variants)
+function visibleBox(groups, box) {
+  box.makeEmpty();
+  for (const g of groups) g?.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let p = o; p; p = p.parent) if (p.visible === false) return;
+    box.expandByObject(o);
+  });
+  return box;
+}
 function partAnchor(pid) {
   const groups = bkById[pid] ? [world.bk.parts[pid]] : lvById[pid] ? world.lv.parts[pid] || [] : world.subject.parts[pid] || [];
-  tmpBox.makeEmpty();
-  for (const g of groups) if (g && g.visible !== false) tmpBox.expandByObject(g);
+  visibleBox(groups, tmpBox);
   if (tmpBox.isEmpty()) return null;
   const c = tmpBox.getCenter(new THREE.Vector3());
   const cutOn = state[mk().c];
@@ -699,10 +710,10 @@ function renderParts() {
 function framePart(id) {
   const box = new THREE.Box3();
   const gs = bkById[id] ? [world?.bk.parts[id]] : lvById[id] ? world?.lv.parts[id] || [] : world?.subject.parts[id] || [];
-  for (const g of gs) if (g && g.visible !== false) box.expandByObject(g);
+  visibleBox(gs, box);
   if (box.isEmpty()) return;
   const c = box.getCenter(new THREE.Vector3());
-  const r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() * 0.5);
+  const r = Math.max(state.mode === 'panel' ? 0.25 : 0.07, box.getSize(new THREE.Vector3()).length() * 0.5); // small devices on the breaker / LV models
   const dir = camera.position.clone().sub(controls.target).normalize();
   const dist = r / Math.sin((camera.fov * Math.PI) / 360) * 0.95;
   camTween = {t0: performance.now(), dur: 800, p0: camera.position.clone(), t0v: controls.target.clone(), p1: c.clone().addScaledVector(dir, dist), t1: c};
@@ -939,12 +950,30 @@ const BK_TEAR = [
   {t: 'Make it safe and take it out', field: true, ex: 0, focus: ['bkTruck'], view: 'iso', text: 'Breaker OFF, test position, supply voltage off and locked. Discharge the closing spring: OFF – ON – OFF with the push buttons. Unplug -X0, take the breaker out with the service truck. Lift only at the marked points on the top plate (crane hook symbol) or carry it on the truck; never let it tip – with the arms fitted it can fall onto the contact systems.'},
   {t: 'Contact systems off', field: true, ex: 0.3, focus: ['bkTulips'], view: 'rear', text: 'Contact system (23) off the threaded bolt (6 per breaker). Refit: fingers greased inside with Molykote Longterm 2 (3AX1133-2L), for Ø 40 mm arms the adapter 22.2 set in from the back, round outer edge towards the arm, 40 ±4 Nm on M12 (greased threads), then grease the other side of the fingers.'},
   {t: 'Contact arms and separating shells off', field: true, ex: 0.45, focus: ['bkArms', 'bkSleeves'], view: 'rear', text: 'Pull the hollow arms (22) off the bolts, unclip the separating shells (47) if fitted. Bolts (22.1): screw-in section greased with Vaseline (3AX1133-4A), 20 ±1 mm deep in both terminals (12 kV, 31.5 kA, 1250 A, M12), 40 ±4 Nm. Arm end faces: copper roughened, cleaned, Vaseline; silver-plated cleaned, Vaseline.'},
-  {t: 'Cover off: see the mechanism', field: true, ex: 0.5, focus: ['bkCover', 'bkLV'], view: 'iso', text: 'Plastic cover 20.1: pull both snap hooks at once, swing the cover forward, lift it off forward and up. Metal cover 20.2: two upper M6 loosened, four lower M6 with contact washers out, lift off; refit teeth towards the cover, 12 Nm. With the cover off: never trip the breaker by hand while the mechanical interlock is actuated (irreparable damage), keep 1 m away during test operations, block all operations before working inside.'},
-  {t: 'Operating mechanism', field: false, ex: 0.75, focus: ['bkMotor', 'bkClosingSpring', 'bkShaft', 'bkOpeningSpring', 'bkReleases', 'bkAux'], view: 'iso', text: 'Shown for understanding. Spare parts (motor, releases, switches) only by Siemens-trained and certified personnel with a final test on a Siemens-approved tester; otherwise the product liability lapses. Joints and bearings: wipe with a dry lint-free cloth only, never water or cleaner.'},
+  {t: 'Cover off: see the mechanism', field: true, ex: 0.5, focus: ['bkCover', 'bkX0', 'bkX0plug'], view: 'iso', text: 'Plastic cover 20.1: pull both snap hooks at once, swing the cover forward, lift it off forward and up. Metal cover 20.2: two upper M6 loosened, four lower M6 with contact washers out, lift off; refit teeth towards the cover, 12 Nm. With the cover off: never trip the breaker by hand while the mechanical interlock is actuated (irreparable damage), keep 1 m away during test operations, block all operations before working inside.'},
+  {t: 'Operating mechanism', field: false, ex: 0.75, focus: ['bkM1', 'bkGear', 'bkClosingSpring', 'bkShaft', 'bkOpeningSpring', 'bkY9', 'bkY1', 'bkS1', 'bkK1'], view: 'iso', text: 'Shown for understanding. Spare parts (motor, releases, switches) only by Siemens-trained and certified personnel with a final test on a Siemens-approved tester; otherwise the product liability lapses. Joints and bearings: wipe with a dry lint-free cloth only, never water or cleaner.'},
   {t: 'Poles', field: false, ex: 0.85, focus: ['bkShell', 'bkUpper', 'bkLower', 'bkRods', 'bkSep'], view: 'rear', text: 'Pole shells open to the panel, pole heads (42) and lower connections (44) with their contact plates, shed insulators (45) that carry the movement up from the main shaft. Factory-assembled and set; not dismantled in the field.'},
   {t: 'Inside the vacuum interrupter', field: false, ex: 0, iso: true, focus: ['bkVI', 'bkVIin', 'bkRods', 'bkUpper', 'bkLower'], view: 'vi', cut: true, text: 'Section through the middle pole. Sealed for life: the interrupter is replaced, never opened. Internals drawn generically: ceramic body, vapour shield, fixed and moving contact discs, bellows.'},
 ];
 let bkSel = null;
+function devCard(d) {
+  const i = DEVICE_INFO[d.id];
+  if (!i) return '';
+  const eq = state.bk.equip;
+  const fitted = world?.bk.parts[d.id]?.visible !== false;
+  return `<details class="dev"${bkSel === d.id ? ' open' : ''}>
+    <summary><span class="dtag">${esc(i.tag)}</span><span class="dt">${esc(i.title)}</span><span class="badge ${i.kind.startsWith('Basic') ? 'step' : 'none'}">${esc(i.kind)}</span>${fitted ? '' : '<span class="small muted"> · not fitted now</span>'}</summary>
+    <div class="small">
+      <p><b>Part no.</b> ${esc(i.pn)} · <b>Where</b> ${esc(i.where)}</p>
+      <p><b>What it does.</b> ${esc(i.does)}</p>
+      <p><b>How it works.</b> ${esc(i.how)}</p>
+      ${i.data?.length ? kv(i.data) : ''}
+      ${i.circuit && i.circuit !== '—' ? `<p><b>Circuit.</b> ${esc(i.circuit)}</p>` : ''}
+      ${i.notes ? `<p class="warnline"><b>Note.</b> ${esc(i.notes)}</p>` : ''}
+      <button type="button" class="btn" data-bkpart="${d.id}" ${fitted ? '' : 'disabled'}>Show in 3D</button>
+    </div>
+  </details>`;
+}
 function renderBreaker() {
   const {P, TD, armD, fingers} = BK_SPEC;
   const sel = bkSel && bkById[bkSel];
@@ -990,6 +1019,20 @@ function renderBreaker() {
       <li>Electrical closing lock-out -Y8E (option): closing only with control voltage present. Undervoltage release -Y7: closing only with -Y7 energised; move its striker locking screw from A to B before commissioning.</li>
       <li>Mechanical interlock (59.2) for trucks and cassettes: the panel's interrogation part (cross-section ≤ 14 × 3 mm, force 50–450 N) senses the breaker position; with the breaker OFF it is lifted 5–10 mm and blocks closing (-S12 blocks electrically); with the breaker ON it cannot move, so the truck cannot be racked. Closing only in service or disconnected position, racking only when OFF.</li>
     </ul>
+    <h3>Secondary equipment</h3>
+    <p class="small">Every device of the basic and the optional equipment lists (operating instructions p. 22) is its own part in 3D. Choose the options below; "Show in 3D" isolates the device with the X-ray housing. Hover any detail (terminals, varistors, rectifiers, -X0 pins) for its name.</p>
+    <div class="equip">
+      <label>Auxiliary switch <select data-equip="s1"><option value="6">6 NO + 6 NC (3SV9273)</option><option value="12">12 NO + 12 NC (3SV9274)</option></select></label>
+      <label>Release position 51.2 <select data-equip="slot2">${SLOT_TYPES.map((t) => `<option value="${t}">${t === 'none' ? 'empty' : '-' + t}</option>`).join('')}</select></label>
+      <label>Release position 51.3 <select data-equip="slot3">${SLOT_TYPES.map((t) => `<option value="${t}">${t === 'none' ? 'empty' : t === 'Y4' ? '-Y5' : '-' + t}</option>`).join('')}</select></label>
+      <label>LV interface <select data-equip="lv"><option value="X0">64-pole -X0</option><option value="strip">plug strip Q0-X1</option></select></label>
+      <label class="check"><input type="checkbox" data-equip="key"> Key lock 3AX1437</label>
+      <label class="check"><input type="checkbox" data-equip="y8e"> Closing lock-out -Y8E</label>
+      <label class="check"><input type="checkbox" data-equip="s12"> -S12</label>
+      <label class="check"><input type="checkbox" data-equip="heater"> Heater -R01</label>
+    </div>
+    <p class="small muted">Besides -Y1 at most two releases 3AX11 can be fitted (positions 51.2, 51.3); the permitted combinations are in catalog HG 11.02. -R1 appears with -Y7.</p>
+    <div class="devs">${DEVICE_PARTS.map((d) => devCard(d)).join('')}</div>
     <h3>Teardown</h3>
     <ol class="tear">${BK_TEAR.map((x, k) => `<li><button type="button" class="tearbtn" data-tear="${k}"><span class="tt">${esc(x.t)}</span><span class="badge ${x.field ? 'step' : 'none'}">${x.field ? 'Field work' : 'Siemens only'}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
     ${sel ? `<div class="pcard" style="margin-top:14px"><span class="eyebrow">${esc(sel.grp)}</span><h2>${esc(sel.name)}</h2>${state.selLabel && state.selLabel !== sel.name ? `<p class="small"><b>Clicked:</b> ${esc(state.selLabel)}</p>` : ''}<p>${esc(sel.desc)}</p>${comps.length ? `<h3>Components</h3><ul class="plain small">${comps.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}</div>` : ''}
@@ -1002,6 +1045,7 @@ function renderBreaker() {
     <h3>Commissioning checklist</h3><ul class="plain small checks">${CB_CHECKS.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
     <h3>Accessories and lubricants</h3>${table(['Item', 'Order no.', 'Note'], CB_ACCESSORIES)}
     <h3>Breaker data</h3>${kv(CB_DATA)}`;
+  for (const el of document.querySelectorAll('[data-equip]')) { const v = state.bk.equip[el.dataset.equip]; if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v); }
   renderBreakerReadout();
 }
 function componentsOfBk(id) {
@@ -1231,7 +1275,16 @@ function variantNote() {
 
 function wire() {
   $('#views').innerHTML = VIEW_BUTTONS.map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="false">${l}</button>`).join('');
-  document.addEventListener('change', (e) => { if (e.target.id === 'bkAux') state.bk.aux = e.target.checked; });
+  document.addEventListener('change', (e) => {
+    if (e.target.id === 'bkAux') state.bk.aux = e.target.checked;
+    const k = e.target.dataset?.equip;
+    if (k) {
+      state.bk.equip[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      world.bk.setEquip(state.bk.equip);
+      if (bkSel && world.bk.parts[bkSel]?.visible === false) { bkSel = null; state.selPart = null; }
+      applyGlass(); applyFocus(); renderBreaker();
+    }
+  });
   document.addEventListener('click', (e) => {
     const t = e.target.closest('button, a');
     if (!t) return;
