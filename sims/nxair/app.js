@@ -11,7 +11,7 @@ import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeo
 import {BK_PARTS, BK_SPEC, buildBreaker} from './breaker.js';
 import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, SLOT_TYPES} from './bkdevices.js';
 import {chartSvg, makeProfiles} from './bkcycle.js';
-import {APPS, CURRENTS, DEFAULT_ROW, TYPE_LABEL, defaultLineup, fanNeeded, lineupCsv, newPanel, panelHeight, rowDepth, rowSldSvg, totals, validate, widthsFor} from './lineup.js';
+import {APPS, CURRENTS, DEFAULT_ROW, TYPE_LABEL, defaultLineup, fanNeeded, lineupCsv, newPanel, normPanel, RELAY_OPTS, panelHeight, rowDepth, rowSldSvg, totals, validate, widthsFor} from './lineup.js';
 import {CB_JOINTS, CB_ACCESSORIES, CB_AUX, CB_CHECKS, CB_DEPTHS, CB_MOTOR, CB_TIMES} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
 import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
@@ -49,16 +49,16 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------------------------------------- state
 const state = {
-  W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp', isc: 31.5, relief: 'lateralL', lsel: 0,
+  W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp', isc: 31.5, relief: 'lateralL', lsel: 0, rowSolid: store.get('rowSolid', false),
   mode: 'panel', gas: false, ltSw: 1, ltSlide: 0, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
-  peq: {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
+  peq: {vds: 'lrm', relay: '7SJ82', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
 };
 state.step = Math.min(store.get('step', 0), STEPS.length - 1);
 // the configured row (left to right); the selected panel is the one the Steps, drills and options act on
-state.lineup = store.get('lineup', null) || defaultLineup({...DEFAULT_ROW, busbar: state.bus});
+state.lineup = (store.get('lineup', null) || defaultLineup({...DEFAULT_ROW, busbar: state.bus})).map(normPanel);
 state.lsel = Math.min(state.lsel, state.lineup.length - 1);
 const rowCfg = () => ({isc: state.isc, relief: state.relief, busbar: state.bus, ur: state.ur});
 const panelEq = (p, i) => ({...p.hw, endWalls: true, endL: i === 0, endR: i === state.lineup.length - 1});
@@ -75,7 +75,7 @@ function pushToLineup() {
   if (!p) return;
   if (p.type !== state.ptype) { p.type = state.ptype; if (!CURRENTS[p.type].includes(p.In)) p.In = CURRENTS[p.type].find((x) => x === null || x >= 630) ?? CURRENTS[p.type][0]; }
   p.W = state.W;
-  for (const k of ['vds', 'busES', 'fan', 'keys', 'padlock', 'motor', 'arresters', 'ct', 'vt']) if (k in state.peq) p.hw[k] = state.peq[k];
+  for (const k of ['vds', 'relay', 'busES', 'fan', 'keys', 'padlock', 'motor', 'arresters', 'ct', 'vt']) if (k in state.peq) p.hw[k] = state.peq[k];
   saveLineup();
 }
 const saveLineup = () => store.set('lineup', state.lineup);
@@ -242,11 +242,13 @@ function build() {
     n.lineupIndex = i;
     n.root.traverse((c) => {
       if (c.isMesh) {
-        c.material = ghostMat;
+        c.userData.solidMat = c.material;
+        c.userData.shell = n.shellIds.has(c.parent?.userData?.part);
         c.raycast = () => {};
-        if (n.shellIds.has(c.parent?.userData?.part)) {
+        if (c.userData.shell) {
           const e = new THREE.LineSegments(new THREE.EdgesGeometry(c.geometry, 25), ghostLine);
           c.add(e);
+          c.userData.edge = e;
         }
       }
     });
@@ -419,8 +421,26 @@ function applyGlassLite() { if (state.isolate) applyGlass(); }
 // parts drawn see-through in X-ray: the panel enclosure, or on the Breaker tab the mechanism cover, housing and pole shells
 const BK_SHELLS = new Set(['bkCover', 'bkFrame', 'bkShell', 'bkSep', 'bkSleeves']);
 const shellSet = () => (state.mode === 'breaker' ? BK_SHELLS : state.mode === 'lv' ? LV_SHELLS : world.subject.shellIds);
+// neighbour panels: ghosts (default) or solid with their real materials; solid enclosures follow X-ray
+const rowGlass = new Map();
+const glassOf = (m) => {
+  if (!rowGlass.has(m)) { const g = m.clone(); g.transparent = true; g.opacity = 0.13; g.depthWrite = false; rowGlass.set(m, g); }
+  return rowGlass.get(m);
+};
+function applyRowLook() {
+  for (const n of world?.neighbors || []) {
+    n.root.traverse((c) => {
+      const sm = c.userData.solidMat;
+      if (!c.isMesh || !sm) return;
+      const glass = c.userData.shell && state.glass;
+      c.material = !state.rowSolid ? ghostMat : glass ? glassOf(sm) : sm;
+      if (c.userData.edge) c.userData.edge.visible = !state.rowSolid || glass;
+    });
+  }
+}
 function applyGlass() {
   if (!world) return;
+  applyRowLook();
   const focus = new Set(state.selPart ? [state.selPart] : state[mk().f]);
   const iso = state.isolate && focus.size > 0;
   for (const [pid, list] of Object.entries(world.partMats)) {
@@ -1005,10 +1025,18 @@ function viewRow() {
   if (!L.length) return;
   let acc = 0; const xc = L.map((p) => { const c = acc + p.W / 2; acc += p.W; return c; });
   const cx = (acc / 2 - xc[state.lsel]) / 1000, len = acc / 1000;
-  const t = new THREE.Vector3(cx, 1.05, 0), to = new THREE.Vector3(cx + 0.25 * len + 0.8, 1.6 + 0.25 * len, 1.6 + 0.85 * len);
+  const t = new THREE.Vector3(cx, 1.05, 0), to = new THREE.Vector3(cx + 0.3 * len + 0.9, 1.7 + 0.3 * len, 2.0 + 1.1 * len);
   camTween = {t0: performance.now(), dur: 850, p0: camera.position.clone(), t0v: controls.target.clone(), p1: to, t1: t};
 }
+function renderLvRelayNote() {
+  const n = $('#lvRelayNote'), p = state.lineup[state.lsel];
+  if (!n || !p) return;
+  const r = p.hw.relay || 'none';
+  n.hidden = r === '7SJ82';
+  n.innerHTML = r === 'none' ? `<b>Panel +${state.lsel + 1} has no protection device</b> (Configurator). This tab still shows the 7SJ82 cable-feeder example.` : `<b>Panel +${state.lsel + 1} has a SIPROTEC 5 ${esc(r)}</b> (Configurator; drawn in its LV door). This tab details the 7SJ82 example: the ${esc(r)} shares the SIPROTEC 5 operation panel, housing and fixing${r === '7SJ85' ? ', with one 1/6 expansion module added (1/2 × 19")' : ''}; its functions and terminals differ.`;
+}
 function renderLineup() {
+  renderLvRelayNote();
   const el = $('#pane-row');
   if (!el) return;
   const row = rowCfg(), L = state.lineup;
@@ -1027,6 +1055,7 @@ function renderLineup() {
         <label>Type <select data-lp="${i}" data-lk="type">${Object.entries(TYPE_LABEL).map(([k, t]) => opt(k, p.type, t)).join('')}</select></label>
         <label>Rated current <select data-lp="${i}" data-lk="In">${CURRENTS[p.type].map((c) => opt(c ?? '', p.In ?? '', c ? `${c} A` : '—')).join('')}</select></label>
         <label>Width <select data-lp="${i}" data-lk="W">${[...new Set([...ws, p.W])].map((w) => opt(w, p.W, `${w} mm${ws.includes(w) ? '' : ' (not allowed)'}`)).join('')}</select></label>
+        <label>Protection device <select data-lp="${i}" data-lk="hw.relay">${RELAY_OPTS.map(([v, l]) => opt(v, p.hw.relay, v === 'none' ? 'None' : 'SIPROTEC 5 ' + l)).join('')}</select></label>
         <label>Voltage detection <select data-lp="${i}" data-lk="hw.vds">${opt('lrm', p.hw.vds, 'LRM sockets')}${opt('capdis', p.hw.vds, 'CAPDIS-S2+')}${opt('vois', p.hw.vds, 'VOIS+')}</select></label>
         ${chk(i, 'ct', 'CTs', feeder && p.type !== 'ltri')}${chk(i, 'vt', 'Fixed VTs', feeder && p.type !== 'wvt' && p.type !== 'ltri')}${chk(i, 'busES', 'Busbar earthing switch', p.W <= 800 && p.type !== 'mp')}${chk(i, 'fan', 'Forced ventilation', p.W >= 800 && p.type !== 'ltri')}
         ${chk(i, 'keys', 'Key interlocks', feeder && p.type !== 'ltri')}${chk(i, 'padlock', 'Padlocks')}${chk(i, 'motor', 'Motor racking', p.type === 'cbp' || p.type === 'wvt')}${chk(i, 'arresters', 'Surge arresters / limiters', feeder && p.type !== 'ltri')}
@@ -1040,7 +1069,7 @@ function renderLineup() {
   el.innerHTML = `
     <span class="eyebrow">NXAIR switchgear row · ${L.length} panel${L.length === 1 ? '' : 's'} · ${tot.L} mm</span>
     <h2>Configurator</h2>
-    <p class="small">Put the panels of a row together left to right, each with its application and hardware. The rules (widths by rated current and short-time current, heights, depth, forced ventilation, type limits, end panels, room and ceiling) are the catalog's and the manuals'. The applications are typical choices mapped onto the panel types drawn here. Select a panel (its +number, the diagram, or click it in 3D) to work on it: the Steps, drills and panel options then act on that panel; the others stay ghosted.</p>
+    <p class="small">Put the panels of a row together left to right, each with its application and hardware. The rules (widths by rated current and short-time current, heights, depth, forced ventilation, type limits, end panels, room and ceiling) are the catalog's and the manuals'. The applications are typical choices mapped onto the panel types drawn here. Select a panel (its +number, the diagram, or click it in 3D) to work on it: the Steps, drills and panel options then act on that panel. The others are ghosted; <b>Solid row</b> in the toolbar draws them solid (X-ray then makes all enclosures see-through), and <i>View the whole row</i> switches to that and frames the row.</p>
     <h3>Row</h3>
     <div class="equip">
       <label>Ur <select data-lrow="ur">${[7.2, 12, 17.5].map((v) => opt(v, state.ur, `${v} kV`)).join('')}</select></label>
@@ -1103,7 +1132,7 @@ function lineupAction(t) {
   const a = t.dataset.lact;
   if (a === 'add') { L.push(newPanel($('#lAddApp').value, row)); return lineupChanged(); }
   if (a === 'example') { state.lineup = defaultLineup(row); state.lsel = 0; return lineupChanged(); }
-  if (a === 'view') return viewRow();
+  if (a === 'view') { if (!state.row || !state.rowSolid || state.glass || state.isolate) { Object.assign(state, {row: true, rowSolid: true, glass: false, isolate: false}); store.set('rowSolid', true); applyGlass(); syncTools(); } return viewRow(); }
   if (a === 'csv') return download('nxair-row.csv', lineupCsv(L, row), 'text/csv');
   if (a === 'json') return download('nxair-row.json', JSON.stringify({row: {...row, depth: state.D}, lineup: L}, null, 2), 'application/json');
 }
@@ -1114,7 +1143,7 @@ function lineupChange(e) {
       try {
         const j = JSON.parse(txt);
         if (!Array.isArray(j.lineup) || !j.lineup.every((p) => APPS[p.app] && TYPE_LABEL[p.type])) throw new Error('not an NXAIR row');
-        state.lineup = j.lineup; state.lsel = 0;
+        state.lineup = j.lineup.map(normPanel); state.lsel = 0;
         if (j.row) Object.assign(state, {ur: j.row.ur ?? state.ur, isc: j.row.isc ?? state.isc, bus: j.row.busbar ?? state.bus, relief: j.row.relief ?? state.relief});
         lineupChanged(); toast('Row loaded.', 'ok');
       } catch (err) { toast(`Could not load the file: ${err.message}`); }
@@ -1158,6 +1187,7 @@ function renderSpecs() {
     ])}
     <h3>Panel options</h3>
     <div class="equip">
+      <label>Protection device (LV door) <select data-peq="relay">${RELAY_OPTS.map(([v, l]) => `<option value="${v}">${v === 'none' ? 'None' : 'SIPROTEC 5 ' + l}</option>`).join('')}</select></label>
       <label>Voltage detection <select data-peq="vds"><option value="lrm">LRM test sockets (feeder + busbar)</option><option value="capdis">CAPDIS-S2+ in the LV door</option><option value="vois">VOIS+ in the LV door</option></select></label>
       <label class="check"><input type="checkbox" data-peq="busES" ${state.W > 800 ? 'disabled' : ''}> Busbar earthing switch (600 / 800 mm; panel 2350)</label>
       <label class="check"><input type="checkbox" data-peq="fan" ${state.W < 800 ? 'disabled' : ''}> Forced ventilation (800 / 1000 mm; 2450)</label>
@@ -1252,6 +1282,7 @@ function applyMode() {
   controls.minDistance = state.mode === 'lv' ? 0.12 : state.mode === 'breaker' ? 0.25 : 0.6; // LV close-ups of keys and terminals
   for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo() || (id === 'eswSeg' && state.ptype === 'mp') || (id === 'truckSeg' && state.ptype === 'ltri'); }
   $('#t-row').hidden = solo();
+  $('#t-solid').hidden = solo();
   $('#t-gas').hidden = solo();
   $('#sld').hidden = solo();
   applyGas();
@@ -1663,6 +1694,7 @@ function renderLv() {
       <li>Control cables come up the wiring duct on the left inner side of the switching-device compartment and are connected per the circuit diagrams kept in the compartment; bus wires are clamped or plugged on the bus-wire terminal block. <span class="ref">I §10.12–10.13</span></li>
       <li>Protection devices are typically SIPROTEC 5; with an arc protection module (3 optical point or line sensors) the arc is cleared within 100 ms including the breaker. Update the protection-device firmware before commissioning and register for the SIPROTEC / SICAM security notices. <span class="ref">HA 25.73 p. 31 · I §14</span></li>
     </ul>
+    <p class="note-box small" id="lvRelayNote" hidden></p>
     <div class="note-box small"><b>Typical example, not an order drawing.</b> What is fitted in a given panel, the device tags and the terminal numbers come from that panel's circuit diagrams. This page shows a cable feeder with a SIPROTEC 5 7SJ82 (PS101 + IO102) drawn to the SIPROTEC 5 hardware manual, wired to the 3AE breaker pins of the 3AE sample circuit diagrams.</div>
     <h3>Walk through it on the model</h3>
     <ol class="tear">${LV_TOUR.map((x, k) => `<li><button type="button" class="tearbtn${lvTour === k ? ' on' : ''}" data-lvtour="${k}"><span class="tt">${esc(x.t)}</span></button><div class="small">${esc(x.text)}</div></li>`).join('')}</ol>
@@ -1729,6 +1761,7 @@ function renderLv() {
       <li>Primary injection or load check: CT polarity and the direction of the directional functions, earth-fault path through the core-balance CT (cable screens returned through the CT).</li>
       <li>Alarms: MCB trip, VT MCB trip, breaker trip, device fault (life contact) up to the terminal strip or SCADA (report 8.1 / 8.2).</li>
     </ul>`;
+  renderLvRelayNote();
 }
 function selectLv(id) {
   lvSel = id;
@@ -1987,6 +2020,8 @@ function syncTools() {
   $('#t-gas').setAttribute('aria-pressed', String(state.gas));
   renderSld();
   $('#t-row').setAttribute('aria-pressed', String(state.row));
+  $('#t-solid').setAttribute('aria-pressed', String(state.rowSolid));
+  $('#t-solid').disabled = !state.row;
   $('#t-glass').setAttribute('aria-pressed', String(state.glass));
   $('#t-iso').setAttribute('aria-pressed', String(state.isolate));
   $('#t-lab').setAttribute('aria-pressed', String(state.labels));
@@ -2036,6 +2071,7 @@ function wire() {
     else if (t.id === 't-gas') { state.gas = !state.gas; applyGas(); syncTools(); if (state.gas) goView('gas'); if (state.gas) toast('Arc-gas routes: A and B up through their flaps, C up the rear duct, then along the pressure relief duct out of the row.', 'ok'); }
     else if (t.id === 't-cut') { state[mk().c] = !state[mk().c]; applyCut(); syncTools(); }
     else if (t.id === 't-row') { state.row = !state.row; applyPose(); syncTools(); }
+    else if (t.id === 't-solid') { state.rowSolid = !state.rowSolid; store.set('rowSolid', state.rowSolid); applyRowLook(); syncTools(); }
     else if (t.id === 't-glass') { state.glass = !state.glass; applyGlass(); syncTools(); }
     else if (t.id === 't-iso') { state.isolate = !state.isolate; applyGlass(); syncTools(); }
     else if (t.id === 't-lab') { state.labels = !state.labels; renderLabels(); syncTools(); }

@@ -203,7 +203,7 @@ const BK_ALLOW = [
 const mats = makeMaterials([]);
 let total = 0;
 for (const W of widths) {
-  const EQS = [null, {vds: 'capdis', busES: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true}, {vds: 'vois', fan: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true, ct: false, vt: false}];
+  const EQS = [null, {vds: 'capdis', busES: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true, relay: '7SJ85'}, {vds: 'vois', fan: true, keys: true, padlock: true, motor: true, arresters: true, endWalls: true, ct: false, vt: false, relay: 'none'}];
   // other panel types: once per allowed width and depth (busbar 2500 A), with and without options
   const PTS = {dp: [800, 1000], mp: [800], wvt: [800, 1000], cp600: [600], ltri: [800]};
   for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) for (const eq of EQS) for (const ptype of ['cbp', ...Object.keys(PTS)]) {

@@ -13,6 +13,15 @@ import {BUSBAR, WIDTHS} from './data.js';
 import {YB as BK_YB, buildBreaker} from './breaker.js';
 import {B, BAR, C, EX, EY, EZ, L, PartBuilder, RB, T, TU, circleHole, rect, rectHole, slotHole, spread} from './geom.js';
 
+// SIPROTEC 5 devices offered in the configurator: front width in mm (1/3 x 19" = 150, 1/2 x 19" = 225) and function
+export const RELAYS = {
+  '7SJ82': {w: 150, role: 'overcurrent / feeder protection'},
+  '7SK82': {w: 150, role: 'motor protection'},
+  '7UT82': {w: 150, role: 'transformer differential protection'},
+  '7SD82': {w: 150, role: 'line differential protection'},
+  '7SJ85': {w: 225, role: 'overcurrent / feeder protection, modular'},
+};
+
 export const H = 2300;
 export const TRAVEL = 200; // racking travel drawn (3AE options 180 / 200 / 220 mm; NXAIR value not published)
 const YB = 55; // top of base frame = compartment floor
@@ -79,7 +88,7 @@ export function buildPanel(mats, opts) {
   const hasFeeder = PT !== 'mp' && !isLT; // lower bushings, CTs, cable connection, feeder earthing switch of the withdrawable types
   const isWVT = PT === 'wvt';
   const isCP = PT === 'cp600'; // contactor panel 600 mm, 3TL8, 7.2 kV, truck type only (O §6.5, §14)
-  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ct: true, vt: true, ...(opts.eq || {})};
+  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ct: true, vt: true, relay: '7SJ82', ...(opts.eq || {})};
   if (isLT) EQ.ct = true; // L-TRI: the conductor runs through the CTs on the floor
   if (!hasFeeder) { EQ.arresters = false; EQ.busES = false; }
   if (isLT) { EQ.fan = false; EQ.motor = false; EQ.keys = false; } // L-TRI: not at 40 kA, no racking // catalog fn 2: no busbar ES / VT with a withdrawable metering part
@@ -894,18 +903,31 @@ export function buildPanel(mats, opts) {
     p.add(RB(-hw + 4, hw - 4, yLV + 6, LVTOP - 6, D - 24, D, 4, 1), 'ral', 'LV door');
     for (const y of [yLV + 80, LVTOP - 80]) p.add(C(6, 6, 60, 'y', -hw + 10, y, D + 5), 'steel', 'Door hinge');
     p.add(RB(hw - 60, hw - 30, 1660, 1760, D, D + 16, 4), 'black', 'Door lock (3 mm double-bit)');
-    // SIPROTEC 5 7SJ82, 1/3 x 19" flush-mounted (detailed in lv.js): front 150 x 266 mm, 34 mm proud, housing 145 x 244 mm
-    // 163 mm deep + 34 mm terminals
-    const rx = 0, ry = yLV + 380;
-    p.add(RB(rx - 75, rx + 75, ry - 133, ry + 133, D, D + 30, 5, 2), 'black', 'SIPROTEC 5 7SJ82 protection device');
-    p.add(B(rx - 70, rx + 70, ry - 128, ry + 128, D + 30, D + 33), 'slate', 'SIPROTEC 5 7SJ82 protection device');
-    p.add(B(rx - 25, rx + 47, ry - 25, ry + 85, D + 33, D + 34), 'screen', 'Protection device display');
-    for (let i = 0; i < 16; i++) p.add(B(rx - 65, rx - 61, ry + 90 - i * 6.9, ry + 94 - i * 6.9, D + 33, D + 34), i < 2 ? 'green' : 'red', 'LED');
-    for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) p.add(B(rx - 9.5 + c * 14, rx + 1.5 + c * 14, ry - 67.5 - r * 14, ry - 56.5 - r * 14, D + 33, D + 35), 'beige', 'Keypad');
-    for (const [y, m] of [[-67, 'yellow'], [-86, 'green'], [-105, 'red']]) p.add(B(rx + 36, rx + 52, ry + y - 8, ry + y + 8, D + 33, D + 35), m, 'Ctrl / CLOSE / OPEN keys');
-    p.add(B(rx - 72.5, rx + 72.5, ry - 122, ry + 122, D - 163, D - 24), 'grey', 'Protection device housing');
-    p.add(B(rx - 70, rx + 7, ry + 32, ry + 120, D - 197, D - 163), 'termGrey', 'Protection device terminals');
-    p.add(B(rx - 64, rx + 51, ry - 122, ry + 68, D - 189, D - 163), 'termGrey', 'Protection device terminals');
+    // SIPROTEC 5 protection device, flush-mounted in the LV door (configurable; the LV tab details the 7SJ82).
+    // Non-modular 1/3 x 19": front 150 x 266 mm, 34 mm proud, housing 145 x 244 mm, 163 mm deep + 34 mm terminals.
+    // Modular (7SJ85): base module 1/3 with the operation panel plus 1/6 expansion modules to its right; drawn 1/2 x 19".
+    const RL = RELAYS[EQ.relay];
+    const rx = 0, ry = yLV + 380, fw = RL ? RL.w : 0;
+    if (RL) {
+      const nm = `SIPROTEC 5 ${EQ.relay} ${RL.role}`;
+      const bx = rx - fw / 2 + 75; // centre of the base module
+      p.add(RB(rx - fw / 2, rx + fw / 2, ry - 133, ry + 133, D, D + 30, 5, 2), 'black', nm);
+      p.add(B(bx - 70, bx + 70, ry - 128, ry + 128, D + 30, D + 33), 'slate', nm);
+      p.add(B(bx - 25, bx + 47, ry - 25, ry + 85, D + 33, D + 34), 'screen', 'Protection device display');
+      for (let i = 0; i < 16; i++) p.add(B(bx - 65, bx - 61, ry + 90 - i * 6.9, ry + 94 - i * 6.9, D + 33, D + 34), i < 2 ? 'green' : 'red', 'LED');
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) p.add(B(bx - 9.5 + c * 14, bx + 1.5 + c * 14, ry - 67.5 - r * 14, ry - 56.5 - r * 14, D + 33, D + 35), 'beige', 'Keypad');
+      for (const [y, m] of [[-67, 'yellow'], [-86, 'green'], [-105, 'red']]) p.add(B(bx + 36, bx + 52, ry + y - 8, ry + y + 8, D + 33, D + 35), m, 'Ctrl / CLOSE / OPEN keys');
+      for (let k = 0; k * 75 + 150 < fw; k++) {
+        const ex = bx + 75 + 37.5 + k * 75; // 1/6 expansion module: 16 LEDs + label strip
+        p.add(B(ex - 33, ex + 33, ry - 128, ry + 128, D + 30, D + 33), 'slate', `${nm}: expansion module`);
+        for (let i = 0; i < 16; i++) p.add(B(ex - 25, ex - 21, ry + 90 - i * 6.9, ry + 94 - i * 6.9, D + 33, D + 34), 'red', 'LED (expansion module)');
+        p.add(B(ex - 15, ex + 25, ry - 20, ry + 96, D + 33, D + 33.5), 'white', 'LED label strip');
+      }
+      p.add(B(rx - fw / 2 + 2.5, rx + fw / 2 - 2.5, ry - 122, ry + 122, D - 163, D - 24), 'grey', 'Protection device housing');
+      p.add(B(bx - 70, bx + 7, ry + 32, ry + 120, D - 197, D - 163), 'termGrey', 'Protection device terminals');
+      p.add(B(bx - 64, bx + 51, ry - 122, ry + 68, D - 189, D - 163), 'termGrey', 'Protection device terminals');
+      if (fw > 150) p.add(B(bx + 80, rx + fw / 2 - 8, ry - 110, ry + 110, D - 189, D - 163), 'termGrey', 'Expansion module terminals');
+    }
     // voltage detecting system (O §20, IEC 61243-5). LRM: two test-socket strips at the bottom edge of the LV door,
     // directly above the HV door (O Fig. 48 / 484 / 485), one for the feeder and one for the busbar, each L1 L2 L3 with
     // captive covers; the plug-in indicator LRM-ST 8DX1620 is carried separately. CAPDIS / VOIS: one integrated unit in
@@ -939,7 +961,7 @@ export function buildPanel(mats, opts) {
       p.add(C(14, 14, 6, 'z', xo, yo, D + 4), 'steel', 'Actuating opening: busbar earthing switch (pins "10 past 8" = close, vertical = open)');
       if (EQ.keys) for (const x of [xo - 46, xo + 98]) p.add(C(9, 9, 10, 'z', x, yo, D + 6), 'zinc', x < xo ? 'Key lock (1): key free only with the busbar earthing switch OPEN' : 'Key lock (2): key free only with the busbar earthing switch CLOSED');
     }
-    p.add(B(rx + 110, rx + 220, 1880, 1930, D, D + 1), 'white', 'Panel designation label');
+    { const lx = Math.max(110, fw / 2 + 35); p.add(B(rx + lx, rx + lx + 110, 1880, 1930, D, D + 1), 'white', 'Panel designation label'); }
     p.add(B(-(hw - 20), hw - 20, yLV + 30, LVTOP - 30, zLV + 2, zLV + 4), 'galv', 'Mounting plate');
     for (const [y, n, mat, lab] of [[1880, 6, 'white', 'MCB (3RV)'], [1715, 4, 'grey', 'Auxiliary relay'], [1525, Math.round((W - 160) / 14), 'grey', 'Terminal block']]) {
       p.add(B(-(hw - 80), hw - 80, y - 18, y + 18, zLV + 4, zLV + 12), 'steel', 'DIN rail');

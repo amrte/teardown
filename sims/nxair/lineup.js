@@ -6,15 +6,15 @@
 
 // ------------------------------------------------------------------------------------------------ applications
 export const APPS = {
-  incoming: {label: 'Incoming feeder', type: 'cbp', In: 1250, hw: {ct: true, vt: true, vds: 'capdis'}, why: 'circuit-breaker with CTs for protection and VTs for metering and voltage protection of the supply'},
-  incomingWVT: {label: 'Incoming feeder, removable VTs', type: 'wvt', In: 1250, hw: {ct: true, vds: 'capdis'}, why: 'as above, VTs with primary fuses in a drawer so they can be taken out without opening the connection compartment'},
-  outgoing: {label: 'Outgoing cable feeder', type: 'cbp', In: 630, hw: {ct: true, vt: false}, why: 'circuit-breaker with CTs for the feeder protection'},
-  transformerCB: {label: 'Transformer feeder (circuit-breaker)', type: 'cbp', In: 630, hw: {ct: true, vt: false}, why: 'circuit-breaker and CTs; for transformers above the switch-fuse range or with differential protection'},
-  transformerSF: {label: 'Transformer feeder (switch-fuse)', type: 'ltri', In: 200, hw: {}, why: 'switch-disconnector L-TRI 5F with HV HRC fuses, up to 500 / 800 / 1250 kVA at 7.2 / 12 / 17.5 kV (catalog p. 18)'},
-  motorContactor: {label: 'Motor feeder (contactor)', type: 'cp600', In: 400, hw: {ct: true, vt: false, arresters: true}, why: 'vacuum contactor 3TL8 with HV HRC fuses, 7.2 kV; surge limiters against switching overvoltages (starting currents ≤ 600 A, catalog p. 14)'},
-  motorCB: {label: 'Motor feeder (circuit-breaker)', type: 'cbp', In: 630, hw: {ct: true, vt: false, arresters: true}, why: 'circuit-breaker for large motors or 12 / 17.5 kV, with surge limiters'},
-  disconnect: {label: 'Disconnecting feeder', type: 'dp', In: 1250, hw: {ct: true, vt: false}, why: 'withdrawable disconnector link: visible isolation without switching capacity (off-load only)'},
-  metering: {label: 'Busbar metering', type: 'mp', In: null, hw: {}, why: 'withdrawable metering part with fuses and VTs on the busbar'},
+  incoming: {label: 'Incoming feeder', type: 'cbp', In: 1250, hw: {relay: '7SJ82', ct: true, vt: true, vds: 'capdis'}, why: 'circuit-breaker with CTs for protection and VTs for metering and voltage protection of the supply'},
+  incomingWVT: {label: 'Incoming feeder, removable VTs', type: 'wvt', In: 1250, hw: {relay: '7SJ82', ct: true, vds: 'capdis'}, why: 'as above, VTs with primary fuses in a drawer so they can be taken out without opening the connection compartment'},
+  outgoing: {label: 'Outgoing cable feeder', type: 'cbp', In: 630, hw: {relay: '7SJ82', ct: true, vt: false}, why: 'circuit-breaker with CTs for the feeder protection'},
+  transformerCB: {label: 'Transformer feeder (circuit-breaker)', type: 'cbp', In: 630, hw: {relay: '7UT82', ct: true, vt: false}, why: 'circuit-breaker and CTs; for transformers above the switch-fuse range or with differential protection'},
+  transformerSF: {label: 'Transformer feeder (switch-fuse)', type: 'ltri', In: 200, hw: {relay: 'none'}, why: 'switch-disconnector L-TRI 5F with HV HRC fuses, up to 500 / 800 / 1250 kVA at 7.2 / 12 / 17.5 kV (catalog p. 18)'},
+  motorContactor: {label: 'Motor feeder (contactor)', type: 'cp600', In: 400, hw: {relay: '7SK82', ct: true, vt: false, arresters: true}, why: 'vacuum contactor 3TL8 with HV HRC fuses, 7.2 kV; surge limiters against switching overvoltages (starting currents ≤ 600 A, catalog p. 14)'},
+  motorCB: {label: 'Motor feeder (circuit-breaker)', type: 'cbp', In: 630, hw: {relay: '7SK82', ct: true, vt: false, arresters: true}, why: 'circuit-breaker for large motors or 12 / 17.5 kV, with surge limiters'},
+  disconnect: {label: 'Disconnecting feeder', type: 'dp', In: 1250, hw: {relay: 'none', ct: true, vt: false}, why: 'withdrawable disconnector link: visible isolation without switching capacity (off-load only)'},
+  metering: {label: 'Busbar metering', type: 'mp', In: null, hw: {relay: 'none'}, why: 'withdrawable metering part with fuses and VTs on the busbar'},
 };
 export const TYPE_LABEL = {cbp: 'Circuit-breaker panel', dp: 'Disconnecting panel', mp: 'Metering panel', wvt: 'CB panel + removable VTs', cp600: 'Contactor panel 3TL8', ltri: 'Switch-disconnector L-TRI 5F'};
 // rated normal currents offered per type (catalog p. 30; contactor and switch-fuse depend on the fuses)
@@ -38,9 +38,24 @@ export const fanNeeded = (p, row) => (p.In === 4000) || (iscKey(row.isc) === 40 
 
 export function newPanel(app, row) {
   const a = APPS[app];
-  const p = {app, type: a.type, In: a.In, W: 800, hw: {vds: 'lrm', ct: true, vt: true, busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, ...a.hw}};
+  const p = {app, type: a.type, In: a.In, W: 800, hw: {vds: 'lrm', relay: '7SJ82', ct: true, vt: true, busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, ...a.hw}};
   if (p.In && row && row.busbar && p.In > row.busbar && p.type !== 'cp600' && p.type !== 'ltri') p.In = CURRENTS[p.type].filter((x) => x <= row.busbar).pop() || p.In;
   p.W = widthsFor(p, row || {isc: 31.5})[0] || 800;
+  return p;
+}
+// protection devices selectable per panel (SIPROTEC 5; drawn in the LV door, the LV tab details the 7SJ82)
+export const RELAY_OPTS = [
+  ['none', 'None'],
+  ['7SJ82', '7SJ82 overcurrent / feeder (1/3 × 19")'],
+  ['7SJ85', '7SJ85 overcurrent / feeder, modular (1/2 × 19")'],
+  ['7SK82', '7SK82 motor (1/3 × 19")'],
+  ['7UT82', '7UT82 transformer differential (1/3 × 19")'],
+  ['7SD82', '7SD82 line differential (1/3 × 19")'],
+];
+// stored or loaded rows from before a field existed get the application's default
+export function normPanel(p) {
+  p.hw ||= {};
+  p.hw.relay ??= APPS[p.app]?.hw.relay ?? '7SJ82';
   return p;
 }
 export const DEFAULT_ROW = {isc: 31.5, relief: 'lateralL', busbar: 2500};
@@ -63,6 +78,15 @@ export function validate(lineup, row) {
     if (!ws.length && !(p.type === 'cbp' && p.In === 630)) add('error', i, `No panel width for ${p.In} A at ${row.isc} kA (catalog p. 30).`);
     else if (ws.length && !ws.includes(p.W)) add('error', i, `${p.W} mm is not a width for ${TYPE_LABEL[p.type]} ${p.In ?? ''} A at ${row.isc} kA; use ${ws.join(' / ')} mm.`);
     if (p.In && p.In > row.busbar && p.type !== 'cp600' && p.type !== 'ltri') add('warn', i, `Feeder ${p.In} A is above the busbar rating ${row.busbar} A.`);
+    // protection device (engineering rules, not catalog limits)
+    const rl = p.hw.relay || 'none', trips = p.type === 'cbp' || p.type === 'wvt' || p.type === 'cp600';
+    if (trips && rl === 'none') add('warn', i, 'No protection device: the switching device gets no protection trip, unless the protection sits elsewhere (e.g. a central or upstream device).');
+    if (rl !== 'none' && trips && !p.hw.ct) add('error', i, `The ${rl} needs current transformers in this panel: fit CTs.`);
+    if (rl !== 'none' && !trips) add('info', i, p.type === 'ltri' ? 'The HV HRC fuses protect the transformer; a protection device here has no circuit-breaker to trip.' : `There is no switching device in this panel for the ${rl} to trip (supervision / annunciation only).`);
+    if (rl === '7UT82' && !/^transformer/.test(p.app)) add('info', i, '7UT82 is a transformer differential device: is this panel a transformer feeder?');
+    if (rl === '7UT82' && trips) add('info', i, '7UT82: the second set of CTs (transformer secondary side) comes from the transformer or the LV switchboard.');
+    if (rl === '7SK82' && !/^motor/.test(p.app)) add('info', i, '7SK82 is a motor protection device: is this panel a motor feeder?');
+    if (rl === '7SD82') add('info', i, '7SD82 line differential needs a protection data link (fibre) to the device at the other end of the line.');
     if (fanNeeded(p, row) && !p.hw.fan) add('error', i, `Forced ventilation is required for ${p.In} A in ${p.W} mm${iscKey(row.isc) === 40 ? ' at 40 kA' : ''} (catalog p. 27): tick "Forced ventilation".`);
     if (p.hw.fan && p.W < 800) add('error', i, 'Forced ventilation only in 800 / 1000 mm panels.');
     if (p.hw.busES && p.W > 800) add('error', i, 'The busbar earthing switch is built in 600 / 800 mm panels (110-2300.9).');
@@ -132,6 +156,7 @@ export function rowSldSvg(lineup, row, sel = -1) {
       if (wd) { o.push(chev(cx, y + 3, false)); y += 8; }
       o.push(`<line x1="${cx}" y1="${y}" x2="${cx}" y2="${top + colH - 30}" class="l"/>`);
       if (p.hw.ct || p.type === 'ltri') o.push(`<circle cx="${cx}" cy="${y + 16}" r="6" class="l"/>`);
+      if (p.hw.relay && p.hw.relay !== 'none') o.push(`<line x1="${cx + 6}" y1="${y + 16}" x2="${cx + 14}" y2="${y + 16}" class="l d"/><rect x="${cx + 14}" y="${y + 9}" width="34" height="14" class="l"/><text x="${cx + 31}" y="${y + 19.5}" class="c r">${esc(p.hw.relay)}</text>`);
       if ((p.hw.vt && p.type !== 'wvt') || p.type === 'wvt') o.push(`<line x1="${cx}" y1="${y + 36}" x2="${cx - 16}" y2="${y + 36}" class="l"/>${vt(cx - 22, y + 30)}${p.type === 'wvt' ? fuse(cx - 26, y + 50) : ''}`);
       o.push(es(cx, y + 58));
       if (p.hw.arresters) o.push(`<rect x="${cx - 26}" y="${y + 80}" width="9" height="16" class="l"/><line x1="${cx - 17}" y1="${y + 84}" x2="${cx}" y2="${y + 84}" class="l"/>`);
@@ -148,7 +173,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&': '&amp;', '<': '&lt
 
 // ------------------------------------------------------------------------------------------------ export
 export function lineupCsv(lineup, row) {
-  const head = ['Position', 'Application', 'Panel type', 'Rated current A', 'Width mm', 'Height mm', 'CTs', 'VTs', 'Voltage detection', 'Busbar earthing switch', 'Forced ventilation', 'Key interlocks', 'Padlocks', 'Motor racking', 'Surge arresters / limiters', 'Weight kg (≤ 31.5 kA)'];
-  const rows = lineup.map((p, i) => [`+${i + 1}`, APPS[p.app]?.label || '', TYPE_LABEL[p.type], p.In ?? '', p.W, panelHeight(p, row), p.hw.ct || p.type === 'ltri' ? 'yes' : 'no', p.type === 'wvt' ? 'removable' : p.type === 'mp' ? 'on the part' : p.hw.vt ? 'fixed' : 'no', p.hw.vds, p.hw.busES ? 'yes' : 'no', p.hw.fan ? 'yes' : 'no', p.hw.keys ? 'yes' : 'no', p.hw.padlock ? 'yes' : 'no', p.hw.motor ? 'yes' : 'no', p.hw.arresters ? 'yes' : 'no', (WEIGHT[p.W] || []).join('–')]);
+  const head = ['Position', 'Application', 'Panel type', 'Rated current A', 'Width mm', 'Height mm', 'CTs', 'VTs', 'Voltage detection', 'Busbar earthing switch', 'Forced ventilation', 'Key interlocks', 'Padlocks', 'Motor racking', 'Surge arresters / limiters', 'Protection device', 'Weight kg (≤ 31.5 kA)'];
+  const rows = lineup.map((p, i) => [`+${i + 1}`, APPS[p.app]?.label || '', TYPE_LABEL[p.type], p.In ?? '', p.W, panelHeight(p, row), p.hw.ct || p.type === 'ltri' ? 'yes' : 'no', p.type === 'wvt' ? 'removable' : p.type === 'mp' ? 'on the part' : p.hw.vt ? 'fixed' : 'no', p.hw.vds, p.hw.busES ? 'yes' : 'no', p.hw.fan ? 'yes' : 'no', p.hw.keys ? 'yes' : 'no', p.hw.padlock ? 'yes' : 'no', p.hw.motor ? 'yes' : 'no', p.hw.arresters ? 'yes' : 'no', p.hw.relay && p.hw.relay !== 'none' ? `SIPROTEC 5 ${p.hw.relay}` : 'none', (WEIGHT[p.W] || []).join('–')]);
   return [head, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
 }

@@ -390,6 +390,8 @@ details.dev .kv { margin: 4px 0 8px; }
 .rowsld .t { fill: var(--ink); font-weight: 600; }
 .rowsld .c { fill: var(--ink-2); text-anchor: middle; }
 .rowsld .c.s { font-size: 9px; }
+.rowsld .c.r { font-size: 8px; fill: var(--ink); }
+.rowsld .l.d { stroke-dasharray: 2 2; }
 .rowsld .cell { fill: var(--bg); stroke: var(--line); cursor: pointer; }
 .rowsld .cell:hover { stroke: var(--accent); }
 .rowsld .cell.sel { fill: var(--accent-wash); stroke: var(--accent); }
