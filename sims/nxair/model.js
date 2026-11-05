@@ -434,13 +434,16 @@ export function buildPanel(mats, opts) {
   // ================================================================ SIQUENCH ARC QUENCHING DEVICE (option, 600 / 800 mm)
   // SIQuench Core 3AM4 (3-pole fast earthing device) fixed-mounted at the busbar in a top box over the busbar
   // compartment (catalog HA 25.71 p. 24-25, "in top box at the busbar"; p. 14 busbar components in the additional
-  // compartment, panel 2350 mm). On light + overcurrent it makes a controlled 3-phase short circuit to earth: arc out
-  // < 5 ms from ignition, then the incoming circuit-breaker clears. Pole centre distance 170 or 210 mm (brochure
-  // product table); pole size, box and the riser route are drawn.
+  // compartment, panel 2350 mm). Arrangement after the brochure photo "SIQuench in an NXAIR switchgear": the
+  // switching part (mechanism under its hood) at the front of the box, the three epoxy poles pointing to the rear,
+  // risers from the busbars to their high-voltage connections. Proportions from the 3AM4143 (24 kV) model of the
+  // SIQuench Core teardown (manual 9229 0100 100): base plate 740 x 216 mm, poles 275 mm, HV connection Ø 55
+  // (4 x M8, 20 Nm), hood 580 x 264.5 mm falling to 132 mm, earth connection M12 105 Nm, base plate 10 x M8 24 Nm,
+  // ≈ 60 kg. Pole centres 170 / 210 mm (brochure table). The 12 / 17.5 kV cores are drawn with the same proportions.
+  let SIQ = null;
   if (EQ.siq) {
     const PCD = W === 600 ? 170 : 210;
-    const bx = hw - 40, by0 = yPRC + 6, by1 = yPRC + 380, bz0 = 70, bz1 = zP - 110;
-    const zE = (zPh[0] + zPh[2]) / 2, yPl = by1 - 50, yHV = yPl - 230, yR = by0 + 60;
+    const bx = hw - 40, by0 = yPRC + 6, by1 = yPRC + 300, bz0 = 70, bz1 = zP - 110;
     const box = part('siqBox', V(0, 420, -200), {shell: true});
     box.add(B(-bx, bx, by0, by0 + 2, bz0, bz1), 'galv', 'SIQuench box: floor');
     box.add(B(-bx, bx, by0, by1, bz0, bz0 + 2), 'galv', 'SIQuench box: rear wall');
@@ -450,21 +453,38 @@ export function buildPanel(mats, opts) {
     box.finish();
     const q = part('siquench', V(0, 420, -200));
     const art = `3AM41${ur === 17.5 ? 3 : 2}${PCD === 170 ? 2 : 3}`;
-    q.add(B(-(bx - 12), bx - 12, yPl, yPl + 10, zE - 95, zE + 95), 'galvDark', `SIQuench Core ${art}: earthing plate (short-circuit connection of the 3 poles)`);
-    for (const sx of [-1, 1]) q.add(B(Math.min(sx * (bx - 2), sx * (bx - 14)), Math.max(sx * (bx - 2), sx * (bx - 14)), yPl - 30, yPl + 10, zE - 95, zE + 95), 'galv', 'SIQuench support bracket (to the box side wall)');
-    // pole k serves phase PH[k]: each riser stands clear of the busbar joint of its own phase
-    const PH = [1, 2, 0];
+    const nm = `SIQuench Core ${art}`;
+    const plW = Math.min(2 * PCD + 320, 2 * (bx - 2)), plH = 216;
+    const yP0 = by0 + 50, yAx = yP0 + plH / 2; // base plate bottom, pole axis
+    const zEnd = bz0 + 30, zT1 = zEnd + 25, zPl = zT1 + 275; // HV connection end, pole root, base plate rear face
+    const zH0 = zPl + 10, zH1 = Math.min(zH0 + 264.5, bz1 - 6); // hood (switching part) depth, clipped to the box
+    const rS = Math.min(85, PCD / 2 - 8), rC = rS - 16; // shed and core radius of the epoxy housing
+    q.add(B(-plW / 2, plW / 2, yP0, yP0 + plH, zPl, zPl + 10), 'galvDark', `${nm}: base plate (10 × M8, 24 Nm)`);
+    q.add(B(-(PCD + 75), PCD + 75, yAx - 55, yAx + 55, zPl - 4, zPl), 'copper', `${nm}: earthing plate (copper, bonds the 3 poles; short-circuit connection)`);
+    for (const sx of [-1, 1]) if (plW / 2 < bx - 2.5) q.add(B(Math.min(sx * plW / 2, sx * (bx - 2)), Math.max(sx * plW / 2, sx * (bx - 2)), yP0, yP0 + 40, zPl, zPl + 10), 'galv', 'SIQuench fixing angle (to the box side wall)');
+    // switching part: the mechanism (disc-spring stacks, latch, trip coil X1, position switches S1 S2) under the hood
+    const hw2 = Math.min(290, plW / 2 - 5), yHb = by0 + 70;
+    q.add(EX([[zH0, yHb], [zH1, yHb], [zH1, yHb + 132], [zH0, yP0 + plH - 4]], -hw2, hw2), 'galv', `${nm}: hood over the switching part (mechanism with the disc-spring stacks, latch, trip coil X1, position switches S1 / S2)`);
+    for (let k = 0; k < 3; k++) q.add(C(8.5, 8.5, 6, 'z', (k - 1) * PCD, yAx - 52, zH1 + 3, 16), 'steel', `Actuation opening for the charging tool, pole Q${k + 1} (Ø 16.1, SW24, clockwise to the stop, ≤ 100 Nm)`);
+    // earth connection to the earthed box
+    q.add(B(-(PCD + 75), -(PCD + 45), by0 + 12, yAx - 55, zPl - 8, zPl - 4), 'copper', `${nm}: earth connection to the earthed box`);
+    q.add(B(-(PCD + 75), -(PCD + 45), by0 + 12, by0 + 16, zPl - 44, zPl - 8), 'copper', `${nm}: earth connection to the earthed box`);
+    q.add(C(6, 6, 10, 'y', -(PCD + 60), by0 + 7, zPl - 30, 12), 'zinc', `${nm}: earth connection bolt M12 (105 Nm)`);
+    const PH = [1, 2, 0]; // pole k serves phase PH[k]: each riser stands clear of the busbar joint of its own phase
     for (let k = 0; k < 3; k++) {
-      const x = (k - 1) * PCD, ph = PH[k], q1 = `Q${k + 1}`;
-      q.add(C(64, 64, 12, 'y', x, yPl - 6, zE, 32), 'galvDark', `Pole ${q1} flange`);
-      q.add(C(58, 58, 200, 'y', x, yPl - 112, zE, 32), 'resin', `SIQuench pole ${q1} (L${ph + 1}): vacuum quenching unit with stored-energy disc-spring drive, epoxy housing (size drawn)`);
-      for (let r = 0; r < 4; r++) q.add(C(62, 62, 8, 'y', x, yPl - 50 - r * 40, zE, 32), 'resin', `SIQuench pole ${q1}: housing rib`);
-      q.add(C(26, 26, 18, 'y', x, yHV + 9, zE, 20), 'copper', `SIQuench pole ${q1}: high-voltage connection`);
-      const yTop = yPh[ph] + barH / 2;
-      for (const g of BAR([[x, yTop, zPh[ph]], [x, yR, zPh[ph]], [x, yR, zE], [x, yHV, zE]], 40, 10)) q.add(g, 'copper', `Riser L${ph + 1} from the busbar to SIQuench pole ${q1}`);
+      const x = (k - 1) * PCD, ph = PH[k], qn = `Q${k + 1}`;
+      q.add(C(rC + 6, rC + 6, 40, 'z', x, yAx, zPl - 20, 32), 'zinc', `Pole ${qn}: metal sleeve at the base plate`);
+      q.add(C(rC + 12, rC + 12, 10, 'z', x, yAx, zPl - 45, 32), 'copper', `Pole ${qn}: sliding-contact ring to the earthing plate`);
+      q.add(C(rC, rC, zPl - 50 - zT1, 'z', x, yAx, (zPl - 50 + zT1) / 2, 32), 'resinLight', `SIQuench pole ${qn} (L${ph + 1}): cycloaliphatic epoxy housing with insulating oil (Diala S4 ZX-I); fixed contact at high voltage, moving contact at earth`);
+      for (let r = 0; r < 4; r++) q.add(C(rS, rS, 14, 'z', x, yAx, zT1 + 30 + r * 45, 32), 'resinLight', `Pole ${qn}: shed`);
+      q.add(C(27.5, 27.5, 25, 'z', x, yAx, (zEnd + zT1) / 2, 24), 'silver', `Pole ${qn}: high-voltage connection Ø 55 (4 × M8, 20 Nm)`);
+      // riser from its busbar up through the box floor, back under the poles, up behind the HV connection
+      const yTop = yPh[ph] + barH / 2, yR = by0 + 54, zR = bz0 + 18;
+      for (const g of BAR([[x, yTop, zPh[ph]], [x, yR, zPh[ph]], [x, yR, zR], [x, yAx, zR], [x, yAx, zEnd]], 40, 10)) q.add(g, 'copper', `Riser L${ph + 1} from the busbar to the HV connection of pole ${qn}`);
       q.add(L([[24, 0], [28, 8], [22, 16], [28, 24], [22, 32], [20, 40]], 'y', x, by0 + 2, zPh[ph]), 'resin', 'Bushing in the floor of the SIQuench box');
     }
     q.finish();
+    SIQ = {PCD, yAx, zEnd};
   }
 
   // ================================================================ BUSHINGS (recessed: the contact system enters the bore)
@@ -1072,7 +1092,7 @@ export function buildPanel(mats, opts) {
     ARC_CMP.push(['switching-device compartment', [hw - 95, 1576, zLV], 'z', -1, 'x', [-110, 0, 0]]);
     ARC_CMP.push(['busbar compartment', [hw - 95, 1656, 54], 'z', 1, 'x', [-110, 0, 0]]);
     if (hasFeeder || isLT) ARC_CMP.push(['connection compartment', [-hw + 95, yBC - 2, zP - 124], 'y', -1, 'x', [0, 0, -70]]);
-    if (EQ.siq) ARC_CMP.push(['SIQuench box', [hw - 95, yPRC + 170, 72], 'z', 1, 'x', [-120, 0, 0]]);
+    if (SIQ) ARC_CMP.push(['SIQuench box', [SIQ.PCD / 2, SIQ.yAx + 40, 72], 'z', 1, 'x', [0, -75, 0]]);
   }
   // box from a wall point c: extent u along the long axis, v along the third axis, n proud along the normal
   const wallBox = (c, nAx, nSg, uAx, u, v, n0, n1) => {

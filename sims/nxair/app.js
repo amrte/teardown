@@ -492,6 +492,7 @@ VIEWS.sdcOpen = {p: [1.05, 1.25, 2.35], t: [0, 0.85, 0.15]};
 VIEWS.shutters = {p: [0.75, 1.15, 1.95], t: [0, 1.0, 0.0]};
 VIEWS.lvTop = {p: [0.2, 2.2, 1.75], t: [-0.28, 2.06, 0.75]};
 VIEWS.arcLv = {p: [-0.75, 1.95, 1.55], t: [0.22, 1.62, 0.42]}; // LV compartment, right side wall: arc units, SIQuench controller
+VIEWS.busEs = {p: [-1.45, 2.85, 1.25], t: [0, 1.9, -0.3]}; // busbar earthing switch box, from the front left
 VIEWS.siq = {p: [-1.7, 3.0, 0.9], t: [0, 1.95, -0.35]}; // SIQuench box over the busbar compartment
 VIEWS.lrm = {p: [-0.1, 1.45, 1.55], t: [-0.2, 1.41, 0.75]};
 VIEWS.connFront = {p: [0.9, 1.0, 1.9], t: [0, 0.7, -0.15]};
@@ -992,8 +993,16 @@ function renderSld() {
     <text x="4" y="11" class="st">${{cbp: 'Single-line diagram', dp: 'Disconnecting panel', mp: 'Metering panel', wvt: 'CB + removable VTs', cp600: 'Contactor 3TL8', ltri: 'Switch-fuse L-TRI'}[pt]}</text>
     <line x1="8" y1="24" x2="142" y2="24" stroke="#c47a4a" stroke-width="4"/><text x="108" y="19" class="sm">Busbar</text>
     <line x1="${x}" y1="24" x2="${x}" y2="44" class="sl"/>${pt === 'ltri' ? '<line x1="' + x + '" y1="44" x2="' + x + '" y2="50" class="sl"/>' : chev(x, 47, true)}
-    ${part}${posTxt}${feeder}
+    ${part}${posTxt}${feeder}${busEsSld()}
   </svg>`;
+}
+// busbar earthing switch on the panel diagram (option)
+function busEsSld() {
+  if (!state.peq.busES || state.ptype === 'mp' || state.ptype === 'ltri') return '';
+  const e = state.busEs > 0.5, x = 22;
+  return `<line x1="${x}" y1="24" x2="${x}" y2="34" class="sl"/><line x1="${x}" y1="34" x2="${e ? x : x + 9}" y2="${e ? 46 : 43}" class="sl blade"/>
+    <line x1="${x - 7}" y1="48" x2="${x + 7}" y2="48" class="sl"/><line x1="${x - 4.5}" y1="52" x2="${x + 4.5}" y2="52" class="sl"/><line x1="${x - 2}" y1="56" x2="${x + 2}" y2="56" class="sl"/>
+    <text x="${x - 14}" y="66" class="sm">Bus ES</text><text x="${x - 14}" y="75" class="sm">${e ? 'EARTHED' : 'open'}</text>`;
 }
 
 // ---------------------------------------------------------------- configurator: a row of joined panels
@@ -1298,6 +1307,7 @@ function applyMode() {
   world.lvHolder.visible = state.mode === 'lv';
   controls.minDistance = state.mode === 'lv' ? 0.12 : state.mode === 'breaker' ? 0.25 : 0.6; // LV close-ups of keys and terminals
   for (const id of ['truckSeg', 'boltSeg', 'eswSeg']) { const el = $('#' + id); if (el) el.hidden = solo() || (id === 'eswSeg' && state.ptype === 'mp') || (id === 'truckSeg' && state.ptype === 'ltri'); }
+  $('#busEsSeg').hidden = solo() || (!state.peq.busES && (state.W > 800 || state.ptype === 'mp' || state.ptype === 'ltri'));
   $('#t-row').hidden = solo();
   $('#t-solid').hidden = solo();
   $('#t-gas').hidden = solo();
@@ -1335,6 +1345,37 @@ function rackTo(pos) {
 
 // quick earthing-switch operation from the toolbar: the same interlocks and the same lever sequence, played in one go
 let eswBusy = false;
+// busbar earthing switch, straight from the toolbar: fits it if the panel can take one, then slide, lever, turn
+let busEsT = [];
+function setBusEs(cmd) {
+  if (cmd === 'howto') {
+    const i = STEPS.findIndex((x) => x.id === 'isolate');
+    location.hash = 'steps';
+    setStep(i);
+    pdrill = {id: state.busEs > 0.5 ? 'busDeearth' : 'busEarth', i: 0};
+    renderStep();
+    goView('lvTop');
+    return;
+  }
+  let fitted = '';
+  if (!state.peq.busES) {
+    if (state.W > 800 || state.ptype === 'mp' || state.ptype === 'ltri') { toast('No busbar earthing switch here: it is built in 600 / 800 mm panels, not with a withdrawable metering part or in the switch-disconnector panel.'); return; }
+    Object.assign(state.peq, {busES: true, fan: false, siq: false});
+    pushToLineup(); build(); renderLineup(); renderSpecs();
+    fitted = ' Fitted to this panel for it (Specs → Panel options, Configurator): panel 2350 mm with the high LV compartment.';
+  }
+  const on = cmd === 'closed';
+  if ((state.busEs > 0.5) === on) { syncTools(); return; }
+  busEsT.forEach(clearTimeout);
+  if (!state.glass) { state.glass = true; applyGlass(); }
+  goView('busEs');
+  state.busSlide = 1; state.busLever = 1; applyPose(); syncTools();
+  busEsT = [
+    setTimeout(() => { state.busEs = on ? 1 : 0; applyPose(); syncTools(); renderSld(); }, 700),
+    setTimeout(() => { state.busLever = 0; state.busSlide = 0; applyPose(); }, 1900),
+  ];
+  toast((on ? 'Busbars EARTHED: slide up, lever in with the pins at "10 past 8", clockwise ≈ 115° to the stop, lever out, slide down, padlock. Only on a busbar section switched off, verified dead and released for earthing: there is no internal interlock (O §7.1, §21).' : 'Busbar earthing switch OPEN: lever in with the pins vertical, counter-clockwise ≈ 115°.') + fitted, 'ok');
+}
 function setEsw(cmd) {
   if (cmd === 'howto') {
     const i = STEPS.findIndex((x) => x.id === 'earthing');
@@ -1425,7 +1466,7 @@ const P_DRILL = {
     {t: 'L3 isolated: L1, L2 and L3 isolated, safe isolation verified. Refit the cover, take the LRM-ST off.', view: 'lrm', act() { pd({lrm: null}); }},
   ], done: 'With CAPDIS / VOIS instead: doors closed and the display shows A0 "operational high voltage not present" on L1, L2, L3 (O §20.7).'},
   busEarth: {name: 'Earth the busbars', steps: [
-    {t: 'Switching released from outside; this panel is the released one. Electrician\'s ladder in front of the panel. (Busbar earthing switch OPEN.)', view: 'lvTop', act() { if (!state.peq.busES) { state.peq.busES = true; state.peq.fan = false; build(); return {note: 'Busbar earthing switch fitted for this drill (Specs → Panel options); panel 2350 mm with the high LV compartment.'}; } if (state.busEs > 0.5) return {block: 'The busbars are already earthed.'}; }},
+    {t: 'Switching released from outside; this panel is the released one. Electrician\'s ladder in front of the panel. (Busbar earthing switch OPEN.)', view: 'lvTop', act() { if (!state.peq.busES) { Object.assign(state.peq, {busES: true, fan: false, siq: false}); pushToLineup(); build(); renderLineup(); renderSpecs(); return {note: 'Busbar earthing switch fitted for this drill (Specs → Panel options); panel 2350 mm with the high LV compartment.'}; } if (state.busEs > 0.5) return {block: 'The busbars are already earthed.'}; }},
     {t: 'Open the padlock and lift the operating slide on the LV door: the actuating opening is free.', view: 'lvTop', act() { pd({busSlide: 1}); }},
     {t: 'Insert the operating lever with its pins at "10 past 8" (the closing receptacle) as far as it goes.', view: 'lvTop', act() { pd({busLever: 1}); }},
     {t: 'Hold it straight and turn clockwise to the stop, ≈ 115°, without stopping: the indicator goes OPEN → intermediate → CLOSED.', view: 'lvTop', act() { pd({busEs: 1}); }},
@@ -2066,6 +2107,7 @@ function renderBreakerReadout() {
 function syncTools() {
   for (const b of document.querySelectorAll('[data-truck]')) b.setAttribute('aria-pressed', String(b.dataset.truck === state.truck));
   for (const b of document.querySelectorAll('[data-esw]')) b.setAttribute('aria-pressed', String(b.dataset.esw === (state.eswT > 0.5 ? 'closed' : 'open')));
+  for (const b of document.querySelectorAll('[data-buses]')) b.setAttribute('aria-pressed', String(!!state.peq.busES && b.dataset.buses === (state.busEs > 0.5 ? 'closed' : 'open')));
   $('#ex').value = String(Math.round(state[mk().e] * 100));
   $('#t-cut').setAttribute('aria-pressed', String(state[mk().c]));
   $('#t-gas').setAttribute('aria-pressed', String(state.gas));
@@ -2119,6 +2161,7 @@ function wire() {
     if (t.dataset.view) goView(t.dataset.view);
     else if (t.dataset.truck) rackTo(t.dataset.truck);
     else if (t.dataset.esw) setEsw(t.dataset.esw);
+    else if (t.dataset.buses) setBusEs(t.dataset.buses);
     else if (t.dataset.bolts) { state.bolts = t.dataset.bolts; syncTools(); applyFocus(); }
     else if (t.id === 't-gas') { state.gas = !state.gas; applyGas(); syncTools(); if (state.gas) goView('gas'); if (state.gas) toast('Arc-gas routes: A and B up through their flaps, C up the rear duct, then along the pressure relief duct out of the row.', 'ok'); }
     else if (t.id === 't-cut') { state[mk().c] = !state[mk().c]; applyCut(); syncTools(); }
