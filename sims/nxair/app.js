@@ -1080,7 +1080,14 @@ function renderLineup() {
     </div>
     <p class="small muted">A planning aid built on public catalog and manual data, not an order configuration: Siemens checks every row in the order documents.</p>`;
 }
-function download(name, text, type) {
+// In the claude.ai viewer files go through the downloads capability; opened as a local file, a plain link.
+let artifactDownloads;
+const downloadsReady = (window.claude && typeof window.claude.use === 'function')
+  ? window.claude.use('downloads').then((d) => { artifactDownloads = d; }).catch(() => { artifactDownloads = null; })
+  : Promise.resolve();
+async function download(name, text, type) {
+  await downloadsReady;
+  if (artifactDownloads) { try { await artifactDownloads.save({filename: name, data: text}); } catch (e) { console.warn('download not saved', e); } return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([text], {type}));
   a.download = name;
