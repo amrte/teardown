@@ -70,6 +70,8 @@ const CSS = `
 .stp{display:grid;grid-template-columns:22px minmax(0,1fr) 22px;gap:3px;align-items:center}
 .stp span{font-size:9.6px;font-weight:600;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wl{background:#fff;border:1px solid ${C.line};padding:7px 8px;margin-top:8px}
+.wl.flash{animation:wlflash 1.6s ease-out}
+@keyframes wlflash{0%,40%{box-shadow:0 0 0 3px #e7c11e}100%{box-shadow:0 0 0 0 rgba(231,193,30,0)}}
 .sys .tb,.vw .tb{height:17px;font-size:8px}
 .stg{position:absolute;top:0;font-size:7.6px;font-weight:600;color:${C.mute};transform:translateX(-50%)}
 .stg.on{color:${C.red}}
@@ -337,9 +339,9 @@ export function createConsole(app, act) {
             .map((v) => `<div class="tb ${String(f.opts?.[o.key] ?? vals[0]) === String(v) ? 'on' : ''}" data-a="opt:${o.key}:${v}">${o.fmt ? o.fmt(v) : v}</div>`)
             .join(''))}`;
           // the 3WL's own teardown sits right under the breaker choice
-          return o.key === 'acb' && wl
-            ? row + operateBlock(S, f) + maintRow(S, f)
-            : row;
+          if (o.key !== 'acb') return row;
+          if (wl) return row + operateBlock(S, f) + maintRow(S, f);
+          return row + `<div class="wl"><div class="hd" style="margin-bottom:3px"><span class="cp">OPERATE</span><span class="cp mu">3WL ONLY</span></div><div class="mu" style="font-size:9px;line-height:12px">Operation, the trip-unit simulation and the solo view are built for the 3WL. Choose 3WL11 / 3WL12 / 3WL13 above, or:</div><div style="height:4px"></div>${gr(1, `<div class="tb" data-a="opt:acb:${f.opts.acb === '3WA13' ? '3WL13' : f.opts.acb === '3WA11' ? '3WL11' : '3WL12'}">use a 3WL here</div>`)}</div>`;
         })
         .join('') + (wl ? wlPanel(S, f) : '');
       insp.innerHTML = `
@@ -625,5 +627,14 @@ export function createConsole(app, act) {
     const s = a.width / 1600;
     return [(r.left + ((h.x + h.w / 2) / ETU_W) * r.width - a.left) / s, (r.top + ((h.y + h.h / 2) / ETU_H) * r.height - a.top) / s];
   };
-  return {root: ui, refresh, frame, say, spot, trackSpot, etuSpot};
+  // bring the OPERATE block into view and flash it
+  const reveal = () => {
+    const n = insp.querySelector('.wl');
+    if (!n) return;
+    insp.scrollTop = Math.max(0, n.offsetTop - insp.offsetTop - 60);
+    n.classList.remove('flash');
+    void n.offsetWidth;
+    n.classList.add('flash');
+  };
+  return {root: ui, refresh, frame, say, spot, trackSpot, etuSpot, reveal};
 }

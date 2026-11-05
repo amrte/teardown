@@ -35,6 +35,8 @@ html,body{background:#ecedef;overflow:hidden;margin:0}
 .tourchip{position:absolute;left:800px;top:28px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;height:21px;padding:0 11px;border:1px solid #e1e3e6;background:rgba(255,255,255,.95);color:#16181b;font:600 8.8px Inter,sans-serif;letter-spacing:1.3px;white-space:nowrap;cursor:pointer;pointer-events:auto;z-index:5}
 .tourchip i{display:block;width:6px;height:6px;border-radius:50%;background:#d6182b}
 .tourchip.on i{animation:blink 1.2s steps(2) infinite}
+.tourchip.wlgo{top:54px;background:#16181b;color:#fff;border-color:#16181b}
+.tourchip.wlgo i{background:#e7c11e}
 @keyframes blink{50%{opacity:.15}}
 `;
 
@@ -87,6 +89,17 @@ export function runLive() {
   const tourChip = document.createElement('div');
   tourChip.className = 'tourchip';
   ui.root.appendChild(tourChip);
+  // straight to the 3WL: selects a breaker field, makes it a 3WL and shows OPERATE
+  const wlChip = document.createElement('div');
+  wlChip.className = 'tourchip wlgo';
+  wlChip.innerHTML = '<i></i>3WL · OPERATE · TRIP UNIT · SOLO';
+  wlChip.title = 'Select the 3WL breaker field and open its OPERATE panel';
+  ui.root.appendChild(wlChip);
+  wlChip.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    takeOver();
+    act('wlgo');
+  });
 
   // ------------------------------------------------------------ build / rebuild the board from the configuration
   const outline = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({color: C.red, transparent: true, opacity: 0.9, depthTest: false}));
@@ -376,6 +389,20 @@ export function runLive() {
       case 'wlproc':
         wlAction(wlOf(), arg, f);
         break;
+      case 'wlgo': {
+        const fs = S.cfg.fields;
+        let i = fs.findIndex((f) => f.type === 'acb' && String(f.opts?.acb || '').startsWith('3WL'));
+        if (i < 0) i = fs.findIndex((f) => f.type === 'acb');
+        if (i < 0) {
+          ui.say('No circuit-breaker field: add one with REPLACE WITH → Circuit-breaker');
+          break;
+        }
+        if (S.sel !== i || S.mod >= 0) act('field', String(i));
+        if (!String(fs[i].opts?.acb || '').startsWith('3WL')) act('opt', 'acb:3WL12');
+        if (!S.solo) act('view', 'field');
+        requestAnimationFrame(() => ui.reveal());
+        break;
+      }
       case 'wlsolo':
         S.solo = arg === '' || arg === undefined ? (S.solo + 1) % 3 : Number(arg);
         board.setSolo(S.sel, S.solo);
