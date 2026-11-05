@@ -9,7 +9,7 @@
       <div class="field"><label for="v-w">Width</label><select id="v-w"></select></div>
       <div class="field"><label for="v-d">Depth</label><select id="v-d"></select></div>
       <div class="field"><label for="v-bus">Busbar</label><select id="v-bus"></select></div>
-      <div class="field"><label for="v-ur">Ur</label><select id="v-ur"><option value="12">≤ 12 kV</option><option value="17.5">17.5 kV</option></select></div>
+      <div class="field"><label for="v-ur">Ur</label><select id="v-ur"><option value="7.2">7.2 kV</option><option value="12">≤ 12 kV</option><option value="17.5">17.5 kV</option></select></div>
       <div class="vnote" id="vnote" role="status"></div>
     </div>
   </header>
@@ -61,6 +61,7 @@
     <aside class="rail">
       <nav class="tabs" aria-label="Reference">
         <a href="#steps" data-tab="steps">Steps</a>
+        <a href="#row" data-tab="row">Configurator</a>
         <a href="#breaker" data-tab="breaker">Breaker</a>
         <a href="#lv" data-tab="lv">LV + relay</a>
         <a href="#parts" data-tab="parts">Parts</a>
@@ -69,6 +70,7 @@
         <a href="#sources" data-tab="sources">Sources</a>
       </nav>
       <div class="pane" id="pane-steps"></div>
+      <div class="pane" id="pane-row" hidden></div>
       <div class="pane" id="pane-breaker" hidden></div>
       <div class="pane" id="pane-lv" hidden></div>
       <div class="pane" id="pane-parts" hidden></div>

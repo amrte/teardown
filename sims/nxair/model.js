@@ -79,7 +79,8 @@ export function buildPanel(mats, opts) {
   const hasFeeder = PT !== 'mp' && !isLT; // lower bushings, CTs, cable connection, feeder earthing switch of the withdrawable types
   const isWVT = PT === 'wvt';
   const isCP = PT === 'cp600'; // contactor panel 600 mm, 3TL8, 7.2 kV, truck type only (O §6.5, §14)
-  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ...(opts.eq || {})};
+  const EQ = {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: false, ct: true, vt: true, ...(opts.eq || {})};
+  if (isLT) EQ.ct = true; // L-TRI: the conductor runs through the CTs on the floor
   if (!hasFeeder) { EQ.arresters = false; EQ.busES = false; }
   if (isLT) { EQ.fan = false; EQ.motor = false; EQ.keys = false; } // L-TRI: not at 40 kA, no racking // catalog fn 2: no busbar ES / VT with a withdrawable metering part
   EQ.motor = EQ.motor && isCB;
@@ -218,6 +219,7 @@ export function buildPanel(mats, opts) {
   if (EQ.endWalls) {
     const prof = [[0, YB], [D, YB], [D, LVTOP], [zLV, LVTOP], [zLV, Hd - 120], [zLV - 120, Hd], [100, Hd], [0, Hd - 100]];
     for (const s of [-1, 1]) {
+      if (s < 0 ? EQ.endL === false : EQ.endR === false) continue; // only at the ends of the row
       const p = part('endWall', V(s * 400, 0, 0), {shell: true});
       p.group.userData.side = s;
       const x = s * hw;
@@ -580,7 +582,7 @@ export function buildPanel(mats, opts) {
   }
 
   // ================================================================ CONNECTION COMPARTMENT
-  if (hasFeeder) {
+  if (hasFeeder && EQ.ct) {
     const p = part('cts', V(0, 0, -260));
     const zCT0 = zTerm - 155, zCT1 = zTerm - 15; // on the cable side of the lower bushings, under the connection bar
     // support-type block CTs, narrow design (DIN 42600 Part 8; catalog HA 25.71 p. 22): cast-resin body tapering to the
@@ -609,8 +611,10 @@ export function buildPanel(mats, opts) {
     const p = part('connBars', V(0, 0, -400));
     for (const x of xs) {
       // in two pieces: bushing → CT terminal P1, CT terminal P2 → cable (the CT primary carries the current between them)
-      for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zTerm - 15 - 50]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (bushing to CT P1)');
-      for (const g of BAR([[x, yL, zTerm - 155 + 50], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (CT P2 to the cables)');
+      if (EQ.ct) {
+        for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zTerm - 15 - 50]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (bushing to CT P1)');
+        for (const g of BAR([[x, yL, zTerm - 155 + 50], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (CT P2 to the cables)');
+      } else for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (no current transformers)');
       p.add(B(x - 22, x + 22, yS - 25, yS + 25, zC - 22, zC - 5), 'silver', 'Earthing switch fixed contact');
     }
     anchor('lugM12', p, xs.map((x) => ({p: N(x, yLug, zC - 17), n: N(0, 0, -1)})), {nut: 22});
@@ -730,7 +734,7 @@ export function buildPanel(mats, opts) {
     }
     p.finish();
   }
-  if (hasFeeder && !isWVT) {
+  if (hasFeeder && !isWVT && EQ.vt) {
     const p = part('vt', V(0, 140, -700));
     for (const x of xs) {
       // single-pole cast-resin VT, fixed-mounted (catalog HA 25.71 p. 23 photo): base plate with feet, body tapering to the

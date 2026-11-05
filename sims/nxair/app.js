@@ -11,6 +11,7 @@ import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeo
 import {BK_PARTS, BK_SPEC, buildBreaker} from './breaker.js';
 import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, SLOT_TYPES} from './bkdevices.js';
 import {chartSvg, makeProfiles} from './bkcycle.js';
+import {APPS, CURRENTS, DEFAULT_ROW, TYPE_LABEL, defaultLineup, fanNeeded, lineupCsv, newPanel, panelHeight, rowDepth, rowSldSvg, totals, validate, widthsFor} from './lineup.js';
 import {CB_JOINTS, CB_ACCESSORIES, CB_AUX, CB_CHECKS, CB_DEPTHS, CB_MOTOR, CB_TIMES} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
 import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
@@ -48,7 +49,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // ------------------------------------------------------------------------------------------------- state
 const state = {
-  W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp',
+  W: 800, D: 1500, bus: 2500, ur: 12, ptype: 'cbp', isc: 31.5, relief: 'lateralL', lsel: 0,
   mode: 'panel', gas: false, ltSw: 1, ltSlide: 0, door: 0, busEs: 0, busSlide: 0, busLever: 0, earthDev: null, lvStowed: 0, svcTruck: 0, shutU: 0, shutL: 0, slip: null, shutPad: null, protOff: 0, partOff: 0, lrm: null,
   peq: {vds: 'lrm', busES: false, fan: false, keys: false, padlock: false, motor: false, arresters: false, endWalls: true}, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
@@ -56,6 +57,29 @@ const state = {
   ...store.get('variant', {}),
 };
 state.step = Math.min(store.get('step', 0), STEPS.length - 1);
+// the configured row (left to right); the selected panel is the one the Steps, drills and options act on
+state.lineup = store.get('lineup', null) || defaultLineup({...DEFAULT_ROW, busbar: state.bus});
+state.lsel = Math.min(state.lsel, state.lineup.length - 1);
+const rowCfg = () => ({isc: state.isc, relief: state.relief, busbar: state.bus, ur: state.ur});
+const panelEq = (p, i) => ({...p.hw, endWalls: true, endL: i === 0, endR: i === state.lineup.length - 1});
+// selected panel → the single-panel state the rest of the page uses
+function syncFromLineup() {
+  const p = state.lineup[state.lsel];
+  if (!p) return;
+  state.ptype = p.type; state.W = p.W; state.peq = panelEq(p, state.lsel);
+  state.D = Math.max(state.D, rowDepth(state.lineup, rowCfg()));
+}
+// single-panel edits (header type / width, Specs options) → the selected panel of the row
+function pushToLineup() {
+  const p = state.lineup[state.lsel];
+  if (!p) return;
+  if (p.type !== state.ptype) { p.type = state.ptype; if (!CURRENTS[p.type].includes(p.In)) p.In = CURRENTS[p.type].find((x) => x === null || x >= 630) ?? CURRENTS[p.type][0]; }
+  p.W = state.W;
+  for (const k of ['vds', 'busES', 'fan', 'keys', 'padlock', 'motor', 'arresters', 'ct', 'vt']) if (k in state.peq) p.hw[k] = state.peq[k];
+  saveLineup();
+}
+const saveLineup = () => store.set('lineup', state.lineup);
+syncFromLineup();
 // per-mode state keys: the panel, the stand-alone breaker (Breaker tab) and the stand-alone LV compartment (LV tab)
 const MK = {panel: {f: 'focus', e: 'ex', c: 'cut'}, breaker: {f: 'bkFocus', e: 'bkEx', c: 'bkCut'}, lv: {f: 'lvFocus', e: 'lvEx', c: 'lvCut'}};
 const mk = () => MK[state.mode];
@@ -204,11 +228,18 @@ function build() {
     }
   }
 
-  // neighbours: same panel, ghosted
+  // the other panels of the configured row, ghosted, each with its own type and hardware; the selected panel (subject)
+  // stays at x = 0
   const neighbors = [];
-  for (const s of [-1, 1]) {
-    const n = buildPanel(mats, opts);
-    n.root.position.set(s * state.W, 0, -state.D / 2);
+  const L = state.lineup;
+  const xc = []; let acc = 0;
+  for (const p of L) { xc.push(acc + p.W / 2); acc += p.W; }
+  L.forEach((p, i) => {
+    if (i === state.lsel) return;
+    const s = i < state.lsel ? -1 : 1;
+    const n = buildPanel(mats, {W: p.W, D: state.D, bus: state.bus, ur: state.ur, eq: panelEq(p, i), ptype: p.type});
+    n.root.position.set(xc[i] - xc[state.lsel], 0, -state.D / 2);
+    n.lineupIndex = i;
     n.root.traverse((c) => {
       if (c.isMesh) {
         c.material = ghostMat;
@@ -219,14 +250,17 @@ function build() {
         }
       }
     });
-    for (const id of ['crane', 'serviceTruck', 'rails']) for (const g of n.parts[id] || []) g.visible = false;
-    for (const g of n.parts.endWall || []) g.visible = g.userData.side === s; // end walls at the ends of the row
+    for (const id of ['crane', 'serviceTruck']) for (const g of n.parts[id] || []) g.visible = false;
     for (const g of n.parts.earthDev || []) g.visible = false;
+    // invisible hit box: click a ghosted panel to select it
+    const hb = new THREE.Mesh(new THREE.BoxGeometry(p.W - 20, 2250, state.D - 20), new THREE.MeshBasicMaterial({colorWrite: false, depthWrite: false}));
+    hb.position.set(0, 1150, state.D / 2);
+    hb.userData.lineupIndex = i;
+    n.root.add(hb);
+    n.hitBox = hb;
     row.add(n.root);
     neighbors.push(n);
-  }
-  // one continuous pair of foundation rails under the row
-  for (const g of subject.parts.rails) g.scale.x = 3;
+  });
 
   // the stand-alone breaker for the teardown tab
   if (world?.bkHolder) { scene.remove(world.bkHolder); disposeTree(world.bkHolder); }
@@ -330,7 +364,6 @@ function applyPose(force) {
     if (c.userData.busInd) c.rotation.z = (1 - anim.busEs) * Math.PI / 2;
   }
   for (const g of subject.parts.ltriSwitch || []) for (const c of g.children) if (c.userData.ltBlade) c.rotation.x = c.userData.open + (c.userData.closed - c.userData.open) * anim.ltSw;
-  for (const g of subject.parts.endWall || []) g.visible = !state.row;
   for (const g of subject.parts.shutterMech || []) for (const c of g.children) {
     if (c.userData.slipLever) { c.visible = state.slip === c.userData.slipLever; c.rotation.x = -0.3 * (c.userData.slipLever === 'L' ? anim.shutU : anim.shutL); }
     if (c.userData.shutPad) c.visible = state.shutPad === c.userData.shutPad;
@@ -355,7 +388,7 @@ function applyPose(force) {
     for (const g of p.parts.esw || []) g.children.forEach((c) => { if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + c.userData.openDelta * (1 - (p === subject ? anim.esw : 0)); });
     if (p !== subject) for (const g of p.parts.breaker || []) g.position.z = 0;
   }
-  neighbors.forEach((n, i) => { n.root.visible = state.row && !state.isolate && !(state.cut && i === 0); });
+  neighbors.forEach((n) => { n.root.visible = state.row && !state.isolate && !(state.cut && n.root.position.x < 0); });
 }
 
 function applyFocus() {
@@ -585,6 +618,10 @@ function pick(ev) {
   ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(ndc, camera);
   const hits = ray.intersectObject(state.mode === 'breaker' ? world.bk.root : state.mode === 'lv' ? world.lv.root : world.subject.root, true);
+  if (state.mode === 'panel' && state.row && !state.isolate) {
+    const nh = ray.intersectObjects(world.neighbors.filter((n) => n.root.visible).map((n) => n.hitBox), false)[0];
+    if (nh && (!hits[0] || nh.distance < hits[0].distance - 0.05)) return {lineup: nh.object.userData.lineupIndex};
+  }
   for (const h of hits) {
     if (state[mk().c] && h.point.x < -0.0005) continue;
     let o = h.object;
@@ -605,7 +642,8 @@ canvas.addEventListener('pointerdown', (e) => { down = {x: e.clientX, y: e.clien
 canvas.addEventListener('pointerup', (e) => {
   if (!down || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
   const hit = pick(e);
-  if (hit?.joint) selectJoint(hit.joint, true);
+  if (hit?.lineup != null) selectLineup(hit.lineup);
+  else if (hit?.joint) selectJoint(hit.joint, true);
   else if (hit?.part && bkById[hit.part]) { state.selLabel = hit.label || null; selectBk(hit.part); }
   else if (hit?.part && lvById[hit.part]) { state.selLabel = hit.label || null; selectLv(hit.part); }
   else if (hit?.part && partById[hit.part]) { state.selLabel = hit.label || null; selectPart(hit.part, true); }
@@ -619,7 +657,8 @@ canvas.addEventListener('pointermove', (e) => {
   const hit = pick(e);
   const r = stage.getBoundingClientRect();
   let txt = '';
-  if (hit?.joint) { const j = jointById[hit.joint]; txt = `${j.where} · ${j.t != null ? j.t + ' Nm' : BASIS[j.basis].label}`; }
+  if (hit?.lineup != null) { const p = state.lineup[hit.lineup]; txt = `+${hit.lineup + 1} ${APPS[p.app]?.label || TYPE_LABEL[p.type]} · ${p.W} mm · click to select`; }
+  else if (hit?.joint) { const j = jointById[hit.joint]; txt = `${j.where} · ${j.t != null ? j.t + ' Nm' : BASIS[j.basis].label}`; }
   else if (hit?.part && partInfo(hit.part)) txt = hit.label && hit.label !== partInfo(hit.part).name ? `${hit.label} · ${partInfo(hit.part).name}` : partInfo(hit.part).name;
   tip.hidden = !txt;
   if (txt) { tip.textContent = txt; tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`; }
@@ -708,7 +747,7 @@ function jointRow(j, {sel} = {}) {
 }
 
 // ---------------------------------------------------------------- tabs + hash routing
-const TABS = ['steps', 'breaker', 'lv', 'parts', 'torques', 'specs', 'sources'];
+const TABS = ['steps', 'row', 'breaker', 'lv', 'parts', 'torques', 'specs', 'sources'];
 function showTab(name) {
   if (!TABS.includes(name)) name = 'steps';
   const mode = name === 'breaker' || name === 'lv' ? name : 'panel';
@@ -933,6 +972,165 @@ function renderSld() {
     <line x1="${x}" y1="24" x2="${x}" y2="44" class="sl"/>${pt === 'ltri' ? '<line x1="' + x + '" y1="44" x2="' + x + '" y2="50" class="sl"/>' : chev(x, 47, true)}
     ${part}${posTxt}${feeder}
   </svg>`;
+}
+
+// ---------------------------------------------------------------- configurator: a row of joined panels
+const RELIEF = {lateralL: 'Pressure relief duct, exit to the left', lateralR: 'Pressure relief duct, exit to the right', rear: 'Pressure relief duct, exit to the rear', absorber: 'Absorbers (relief into the room)'};
+function selectLineup(i) {
+  if (i < 0 || i >= state.lineup.length) return;
+  state.lsel = i;
+  syncFromLineup();
+  for (const [id, v] of [['v-type', state.ptype], ['v-w', state.W], ['v-d', state.D]]) { const el = $('#' + id); if (el) el.value = String(v); }
+  build();
+  renderStep(); renderSpecs(); renderLineup();
+  const p = state.lineup[i];
+  toast(`+${i + 1} ${APPS[p.app]?.label || TYPE_LABEL[p.type]} selected: Steps, drills and panel options now act on it.`, 'ok');
+}
+function lineupChanged({rebuild = true} = {}) {
+  const row = rowCfg();
+  for (const p of state.lineup) {
+    const ws = widthsFor(p, row);
+    if (ws.length && !ws.includes(p.W)) p.W = ws[0];
+    if (fanNeeded(p, row)) { p.hw.fan = true; p.hw.busES = false; }
+  }
+  state.lsel = Math.min(state.lsel, state.lineup.length - 1);
+  saveLineup();
+  syncFromLineup();
+  for (const [id, v] of [['v-type', state.ptype], ['v-w', state.W], ['v-d', state.D]]) { const el = $('#' + id); if (el) el.value = String(v); }
+  if (rebuild && state.lineup.length) build();
+  renderLineup(); renderSpecs();
+}
+function viewRow() {
+  const L = state.lineup;
+  if (!L.length) return;
+  let acc = 0; const xc = L.map((p) => { const c = acc + p.W / 2; acc += p.W; return c; });
+  const cx = (acc / 2 - xc[state.lsel]) / 1000, len = acc / 1000;
+  const t = new THREE.Vector3(cx, 1.05, 0), to = new THREE.Vector3(cx + 0.25 * len + 0.8, 1.6 + 0.25 * len, 1.6 + 0.85 * len);
+  camTween = {t0: performance.now(), dur: 850, p0: camera.position.clone(), t0v: controls.target.clone(), p1: to, t1: t};
+}
+function renderLineup() {
+  const el = $('#pane-row');
+  if (!el) return;
+  const row = rowCfg(), L = state.lineup;
+  const msgs = validate(L, row), tot = totals(L, row);
+  const opt = (v, cur, lab) => `<option value="${v}" ${String(v) === String(cur) ? 'selected' : ''}>${esc(lab)}</option>`;
+  const chk = (i, k, lab, on = true) => on ? `<label class="check"><input type="checkbox" data-lp="${i}" data-lk="hw.${k}" ${L[i].hw[k] ? 'checked' : ''}> ${esc(lab)}</label>` : '';
+  const cards = L.map((p, i) => {
+    const ws = widthsFor(p, row), mine = msgs.filter((m) => m.pos === i);
+    const feeder = p.type !== 'mp';
+    return `<div class="lcard ${i === state.lsel ? 'sel' : ''}">
+      <div class="lhead"><button type="button" class="lpos" data-lsel="${i}" title="Select and show in 3D">+${i + 1}</button>
+        <select data-lp="${i}" data-lk="app" aria-label="Application of +${i + 1}">${Object.entries(APPS).map(([k, a]) => opt(k, p.app, a.label)).join('')}</select>
+        <span class="lbtns"><button type="button" class="btn" data-lmove="${i}:-1" title="Move left" ${i === 0 ? 'disabled' : ''}>◀</button><button type="button" class="btn" data-lmove="${i}:1" title="Move right" ${i === L.length - 1 ? 'disabled' : ''}>▶</button><button type="button" class="btn" data-ldup="${i}" title="Duplicate">⧉</button><button type="button" class="btn" data-ldel="${i}" title="Remove">✕</button></span>
+      </div>
+      <div class="equip">
+        <label>Type <select data-lp="${i}" data-lk="type">${Object.entries(TYPE_LABEL).map(([k, t]) => opt(k, p.type, t)).join('')}</select></label>
+        <label>Rated current <select data-lp="${i}" data-lk="In">${CURRENTS[p.type].map((c) => opt(c ?? '', p.In ?? '', c ? `${c} A` : '—')).join('')}</select></label>
+        <label>Width <select data-lp="${i}" data-lk="W">${[...new Set([...ws, p.W])].map((w) => opt(w, p.W, `${w} mm${ws.includes(w) ? '' : ' (not allowed)'}`)).join('')}</select></label>
+        <label>Voltage detection <select data-lp="${i}" data-lk="hw.vds">${opt('lrm', p.hw.vds, 'LRM sockets')}${opt('capdis', p.hw.vds, 'CAPDIS-S2+')}${opt('vois', p.hw.vds, 'VOIS+')}</select></label>
+        ${chk(i, 'ct', 'CTs', feeder && p.type !== 'ltri')}${chk(i, 'vt', 'Fixed VTs', feeder && p.type !== 'wvt' && p.type !== 'ltri')}${chk(i, 'busES', 'Busbar earthing switch', p.W <= 800 && p.type !== 'mp')}${chk(i, 'fan', 'Forced ventilation', p.W >= 800 && p.type !== 'ltri')}
+        ${chk(i, 'keys', 'Key interlocks', feeder && p.type !== 'ltri')}${chk(i, 'padlock', 'Padlocks')}${chk(i, 'motor', 'Motor racking', p.type === 'cbp' || p.type === 'wvt')}${chk(i, 'arresters', 'Surge arresters / limiters', feeder && p.type !== 'ltri')}
+      </div>
+      <p class="small muted">${esc(APPS[p.app]?.why || '')} · height ${panelHeight(p, row)} mm</p>
+      ${mine.map((m) => `<p class="lmsg ${m.level}">${esc(m.text)}</p>`).join('')}
+    </div>`;
+  }).join('');
+  const gen = msgs.filter((m) => m.pos == null);
+  const nErr = msgs.filter((m) => m.level === 'error').length, nWarn = msgs.filter((m) => m.level === 'warn').length;
+  el.innerHTML = `
+    <span class="eyebrow">NXAIR switchgear row · ${L.length} panel${L.length === 1 ? '' : 's'} · ${tot.L} mm</span>
+    <h2>Configurator</h2>
+    <p class="small">Put the panels of a row together left to right, each with its application and hardware. The rules (widths by rated current and short-time current, heights, depth, forced ventilation, type limits, end panels, room and ceiling) are the catalog's and the manuals'. The applications are typical choices mapped onto the panel types drawn here. Select a panel (its +number, the diagram, or click it in 3D) to work on it: the Steps, drills and panel options then act on that panel; the others stay ghosted.</p>
+    <h3>Row</h3>
+    <div class="equip">
+      <label>Ur <select data-lrow="ur">${[7.2, 12, 17.5].map((v) => opt(v, state.ur, `${v} kV`)).join('')}</select></label>
+      <label>Short-time current <select data-lrow="isc">${[25, 31.5, 40].map((v) => opt(v, state.isc, `${v} kA`)).join('')}</select></label>
+      <label>Busbar <select data-lrow="bus">${[[1250, '1250 A'], [2500, '2000 / 2500 A'], [4000, '3150 / 4000 A']].map(([v, l]) => opt(v, state.bus, l)).join('')}</select></label>
+      <label>Pressure relief <select data-lrow="relief">${Object.entries(RELIEF).map(([k, l]) => opt(k, state.relief, l)).join('')}</select></label>
+    </div>
+    <h3>Panels</h3>
+    <div class="lineup">${cards || '<p class="small muted">No panels yet.</p>'}</div>
+    <div class="row">
+      <select id="lAddApp" aria-label="Application of the new panel">${Object.entries(APPS).map(([k, a]) => opt(k, 'outgoing', a.label)).join('')}</select>
+      <button type="button" class="btn primary" data-lact="add">Add panel at the right</button>
+      <button type="button" class="btn" data-lact="example">Example row</button>
+      <button type="button" class="btn" data-lact="view">View the whole row</button>
+    </div>
+    <h3>Checks</h3>
+    <p class="small ${nErr ? 'bad' : 'okc'}"><b>${nErr ? `${nErr} error${nErr > 1 ? 's' : ''}` : 'No errors'}</b>${nWarn ? ` · ${nWarn} warning${nWarn > 1 ? 's' : ''}` : ''} (per panel in its card)</p>
+    ${gen.map((m) => `<p class="lmsg ${m.level}">${esc(m.text)}</p>`).join('')}
+    <h3>Single-line diagram</h3>
+    <div class="scroll-x">${rowSldSvg(L, row, state.lsel)}</div>
+    <h3>Row data</h3>
+    ${kv([
+      ['Length', `${tot.L} mm panels + 2 × 35 mm end walls = ${tot.Lwalls} mm`],
+      ['Depth', `${tot.D} mm (circuit-breaker panels with single busbar 1500; 3150 / 4000 A panels 1540, drawn 1650)`],
+      ['Height', `${tot.H} mm (2300 standard; 2350 high LV compartment / busbar earthing switch; 2450 forced ventilation; 2500 with absorbers)`],
+      ['Weight', `≈ ${tot.wMin}–${tot.wMax} kg without packing (≤ 31.5 kA values, 110-0250.9)`],
+      ['Pressure relief', RELIEF[state.relief]],
+      ['Ceiling height', `≥ ${tot.ceiling} mm (catalog p. 31)`],
+      ['Room length', `≥ ${tot.room.length} mm (side walls ${tot.room.sideL} / ${tot.room.sideR} mm; ≥ 500 mm each side for installation and maintenance: ${tot.room.lengthMaint} mm)`],
+      ['Room depth', `≥ ${tot.room.depth} mm wall-standing (rear ≥ 150 mm, operating aisle ≥ 1250 mm for replacing devices); ≥ ${tot.room.depthExt} mm with a 1700 mm aisle for extension`],
+    ])}
+    <h3>Export</h3>
+    <div class="row">
+      <button type="button" class="btn" data-lact="csv">Download panel list (CSV)</button>
+      <button type="button" class="btn" data-lact="json">Download configuration (JSON)</button>
+      <label class="btn">Load JSON <input type="file" id="lLoad" accept="application/json,.json" hidden></label>
+    </div>
+    <p class="small muted">A planning aid built on public catalog and manual data, not an order configuration: Siemens checks every row in the order documents.</p>`;
+}
+function download(name, text, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type}));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function lineupAction(t) {
+  const L = state.lineup, row = rowCfg();
+  if (t.dataset.lsel != null) return selectLineup(+t.dataset.lsel);
+  if (t.dataset.lmove) { const [i, d] = t.dataset.lmove.split(':').map(Number); const j = i + d; if (j < 0 || j >= L.length) return; [L[i], L[j]] = [L[j], L[i]]; if (state.lsel === i) state.lsel = j; else if (state.lsel === j) state.lsel = i; return lineupChanged(); }
+  if (t.dataset.ldup != null) { const i = +t.dataset.ldup; L.splice(i + 1, 0, JSON.parse(JSON.stringify(L[i]))); return lineupChanged(); }
+  if (t.dataset.ldel != null) { if (L.length <= 1) return toast('A row needs at least one panel.'); const i = +t.dataset.ldel; L.splice(i, 1); if (state.lsel >= i && state.lsel > 0) state.lsel--; return lineupChanged(); }
+  const a = t.dataset.lact;
+  if (a === 'add') { L.push(newPanel($('#lAddApp').value, row)); return lineupChanged(); }
+  if (a === 'example') { state.lineup = defaultLineup(row); state.lsel = 0; return lineupChanged(); }
+  if (a === 'view') return viewRow();
+  if (a === 'csv') return download('nxair-row.csv', lineupCsv(L, row), 'text/csv');
+  if (a === 'json') return download('nxair-row.json', JSON.stringify({row: {...row, depth: state.D}, lineup: L}, null, 2), 'application/json');
+}
+function lineupChange(e) {
+  const t = e.target;
+  if (t.id === 'lLoad' && t.files?.[0]) {
+    t.files[0].text().then((txt) => {
+      try {
+        const j = JSON.parse(txt);
+        if (!Array.isArray(j.lineup) || !j.lineup.every((p) => APPS[p.app] && TYPE_LABEL[p.type])) throw new Error('not an NXAIR row');
+        state.lineup = j.lineup; state.lsel = 0;
+        if (j.row) Object.assign(state, {ur: j.row.ur ?? state.ur, isc: j.row.isc ?? state.isc, bus: j.row.busbar ?? state.bus, relief: j.row.relief ?? state.relief});
+        lineupChanged(); toast('Row loaded.', 'ok');
+      } catch (err) { toast(`Could not load the file: ${err.message}`); }
+    });
+    return true;
+  }
+  if (t.dataset.lrow) {
+    const k = t.dataset.lrow;
+    state[k] = k === 'relief' ? t.value : Number(t.value);
+    const hv = {ur: 'v-ur', bus: 'v-bus'}[k];
+    if (hv) $('#' + hv).value = String(state[k]);
+    lineupChanged();
+    return true;
+  }
+  if (t.dataset.lp == null) return false;
+  const i = +t.dataset.lp, k = t.dataset.lk, p = state.lineup[i], row = rowCfg();
+  if (k === 'app') state.lineup[i] = newPanel(t.value, row);
+  else if (k === 'type') { p.type = t.value; if (!CURRENTS[p.type].includes(p.In)) p.In = CURRENTS[p.type].filter((x) => x === null || x <= state.bus).pop() ?? CURRENTS[p.type][0]; p.W = widthsFor(p, row)[0] || p.W; }
+  else if (k === 'In') p.In = t.value === '' ? null : Number(t.value);
+  else if (k === 'W') p.W = Number(t.value);
+  else if (k.startsWith('hw.')) { const h = k.slice(3); p.hw[h] = t.type === 'checkbox' ? t.checked : t.value; if (h === 'busES' && t.checked) p.hw.fan = false; if (h === 'fan' && t.checked) p.hw.busES = false; }
+  lineupChanged();
+  return true;
 }
 
 // ---------------------------------------------------------------- specs + sources
@@ -1797,13 +1995,16 @@ function variantNote() {
 function wire() {
   $('#views').innerHTML = VIEW_BUTTONS.map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="false">${l}</button>`).join('');
   document.addEventListener('change', (e) => {
+    if (lineupChange(e)) return;
     if (e.target.id === 'bkAux' || e.target.id === 'bkMcb') { bkSupply(e.target.checked, e.target.id === 'bkAux' ? 'aux' : 'mcb'); renderBkChart(); renderBreakerReadout(); }
     const pk = e.target.dataset?.peq;
     if (pk) {
       state.peq[pk] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       if (pk === 'busES' && state.peq.busES) state.peq.fan = false;
       if (pk === 'fan' && state.peq.fan) state.peq.busES = false;
+      pushToLineup();
       build();
+      renderLineup();
       renderSpecs();
       return;
     }
@@ -1817,6 +2018,8 @@ function wire() {
     }
   });
   document.addEventListener('click', (e) => {
+    const cell = e.target.closest('svg [data-lsel]');
+    if (cell) return selectLineup(+cell.dataset.lsel);
     const t = e.target.closest('button, a');
     if (!t) return;
     if (t.dataset.view) goView(t.dataset.view);
@@ -1833,6 +2036,7 @@ function wire() {
     else if (t.dataset.pdrill) pdrillAct(null, t.dataset.pdrill);
     else if (t.dataset.pdrillgo) pdrillAct(t.dataset.pdrillgo);
     else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
+    else if (t.dataset.lsel != null || t.dataset.lmove || t.dataset.ldup != null || t.dataset.ldel != null || t.dataset.lact) lineupAction(t);
     else if (t.dataset.gas) { state.gas = !state.gas; applyGas(); renderSpecs(); syncTools(); if (state.gas) goView('gas'); }
     else if (t.dataset.bk) bkDo(t.dataset.bk);
     else if (t.dataset.bkchart) { state.bk.chart = t.dataset.bkchart; renderBkChart(); }
@@ -1872,6 +2076,7 @@ function wire() {
         $('#v-w').value = String(state.W);
         $('#v-type').value = state.ptype;
       }
+      if (key === 'ptype' || key === 'W') pushToLineup();
       store.set('variant', {W: state.W, D: state.D, bus: state.bus, ur: state.ur, ptype: state.ptype});
       variantNote();
       build();
@@ -1879,6 +2084,7 @@ function wire() {
       renderSpecs();
       renderTorques();
       renderLv();
+      renderLineup();
       if (state.selPart) renderParts();
     });
   }
@@ -1904,6 +2110,7 @@ build();
 renderParts();
 renderTorques();
 renderSpecs();
+renderLineup();
 renderSources();
 renderBreaker();
 renderLv();
