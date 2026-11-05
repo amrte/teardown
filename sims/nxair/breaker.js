@@ -29,6 +29,7 @@ export const YB = 107; // breaker base on top of the 107 mm truck
 export const BK_SPEC = {P: 210, TD: 275, armD: 40, fingers: 13};
 
 const BK_BASE = [
+  {id: 'bkTool', name: 'Hand crank 3AX1530-4B (for charging the closing spring)', grp: 'Tools', dir: [0, 0, 0], desc: 'Original hand crank with slip clutch and adapter. Push it with the adapter forward through the opening 57.1 onto the coupling 57.2 and turn clockwise until the spring indicator shows CHARGED, then take it out. Only with the supply voltage off: if the motor starts, a crank without slip clutch would turn with it. Use only the original crank; the adapter uncouples when the motor voltage returns.'},
   {id: 'bkTruck', name: 'Withdrawable truck', grp: 'Truck', dir: [0, -260, 0], desc: 'NXAIR withdrawable truck under the breaker: 679 mm wide, 620 mm deep, 107 mm high, ≈ 20 kg (HG 11.02 · 2018 p. 71, pole centres 210 mm). Four wheels on the panel rails, racking spindle driven by the racking crank through the door, sliding earthing contact, two locking levers that latch it in the panel or on the service truck. Racking travel in NXAIR 200 mm.'},
   {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
   {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
@@ -49,7 +50,7 @@ const BK_BASE = [
   {id: 'bkSleeves', name: 'Separating shells to the panel side (47, optional)', grp: 'Primary contacts', dir: [0, 0, -260], desc: 'Insulating sleeves slid over the main conductors and snapped into the pole shell, to insulate the poles from each other where the connection space is tight; conductors up to Ø 60 mm. Up to 17.5 kV: slide onto the bolts, set against the pole shell and let them engage; check that the snap hooks are fully behind the insulating ribs.'},
 ];
 // mechanism, then the secondary devices (basic, option), then the poles and contacts
-const ORDER = ['Truck', 'Operating mechanism', 'Secondary equipment (basic)', 'Secondary equipment (option)', 'Pole', 'Vacuum interrupter', 'Primary contacts'];
+const ORDER = ['Truck', 'Operating mechanism', 'Secondary equipment (basic)', 'Secondary equipment (option)', 'Pole', 'Vacuum interrupter', 'Primary contacts', 'Tools'];
 export const BK_PARTS = [...BK_BASE, ...DEVICE_PARTS.map((d) => ({...d, desc: DEVICE_INFO[d.id]?.summary || ''}))].sort((a, b) => ORDER.indexOf(a.grp) - ORDER.indexOf(b.grp));
 
 const HAS_DOM = typeof document !== 'undefined';
@@ -123,10 +124,11 @@ function flagArt(kind) {
     }
   };
 }
-function counterArt(g) {
+const counterArt = (n) => (g) => {
+  const d = String(n % 100000).padStart(5, '0');
   g.fillStyle = '#111'; g.fillRect(0, 0, 40, 20);
-  for (let i = 0; i < 5; i++) { g.fillStyle = '#f4f4f0'; g.fillRect(2 + i * 7.4, 3, 6.4, 14); txt(g, '00042'[i], 5.2 + i * 7.4, 10.4, 10, '#111', 600); }
-}
+  for (let i = 0; i < 5; i++) { g.fillStyle = '#f4f4f0'; g.fillRect(2 + i * 7.4, 3, 6.4, 14); txt(g, d[i], 5.2 + i * 7.4, 10.4, 10, '#111', 600); }
+};
 
 export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} = {}) {
   const root = new THREE.Group();
@@ -178,7 +180,8 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     MX.bkBtnO = mk(canvasTex(32, 32, 8, buttonArt('O')), {alphaTest: 0.3});
     MX.bkBtnI = mk(canvasTex(32, 32, 8, buttonArt('I')), {alphaTest: 0.3});
     for (const k of ['I', 'O', 'charged', 'discharged']) MX['bkFlag' + k] = mk(canvasTex(30, 30, 8, flagArt(k)));
-    MX.bkCounter = mk(canvasTex(40, 20, 8, counterArt));
+    rig.counterTex = canvasTex(40, 20, 8, counterArt(0));
+    MX.bkCounter = mk(rig.counterTex);
   }
   const tex = !!MX.bkCoverArt;
 
@@ -266,6 +269,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     p.add(RB(COVER.x0, COVER.x1, COVER.y0, COVER.y1, ZF, ZC, 8, 2), 'housing', 'Cover (20.1), plastic, snap hooks');
     if (tex) p.add(plane(COVER.x0, COVER.x1, COVER.y0, COVER.y1, ZC + 0.1), 'bkCoverArt', 'Cover (20.1), plastic, snap hooks');
     p.add(B(-110, 110, 130, 250, ZC, ZC + 1), 'grey', 'Control board');
+    for (const x of [-100, 100]) p.add(B(x - 9, x + 9, COVER.y1 - 4, COVER.y1 + 6, ZF + 6, ZC - 3), 'housing', 'Snap hook of the cover (pull both at the same time)');
     p.add(B(20, 120, 405, 478, ZC, ZC + 0.5), 'white', 'Rating plate (21): 3AE5123-2, 12 kV, 1250 A, 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg');
     if (tex) p.add(coverDecal(20, 120, 405, 478, ZC + 0.6), 'bkCoverArt', 'Rating plate (21): 3AE5123-2, 12 kV, 1250 A, 31.5 kA, tk 3 s, Ud 42 kV, Up 95 kV, 80 kg');
     if (tex) p.add(coverDecal(-110, 110, 130, 250, ZC + 1.05), 'bkCoverArt', 'Control board');
@@ -278,7 +282,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     // push buttons (move in when pressed) and indicator flags (change with the state)
     const btn = (x, mat, sym, lab) => sub('bkCover', lab, (b) => {
       b.add(RB(x - 16, x + 16, 199, 231, ZC + 1, ZC + 9, 3, 1), mat, lab);
-      b.add(C(5, 5, ZC + 1 - 138, 'z', x, 215, (ZC + 1 + 138) / 2, 12), 'steel', `${lab}: plunger`);
+      b.add(C(5, 5, ZC + 1 - 144, 'z', x, 215, (ZC + 1 + 144) / 2, 12), 'steel', `${lab}: plunger`);
       if (tex) b.add(plane(x - 16, x + 16, 199, 231, ZC + 9.1), sym, lab);
     });
     rig.btnOff = btn(-75, 'red', 'bkBtnO', 'Push button OFF (56.2)');
@@ -295,8 +299,12 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     const p = part('bkClosingSpring');
     p.add(T(9, 3, 'x', xCrank, ySpringTop + 5, zCS), 'steel', 'Spring hook (top)');
     p.add(B(xCrank - 4, xCrank + 4, ySpringTop + 14, 512, zCS - 4, zCS + 4), 'steel', 'Spring hanger');
-    p.add(B(125, 141, 226, 243, 64, 92), 'black', 'Closing latch (holds the crank pin past dead centre, released by ON / -Y9)');
     p.finish();
+    rig.closeLatch = sub('bkClosingSpring', 'Closing latch', (b) => {
+      b.add(B(-8, 8, -8.5, 8.5, 0, 28), 'black', 'Closing latch: holds the crank pin past dead centre; ON / -Y9 swing it away');
+      b.add(C(3, 3, 22, 'x', 0, 0, 0, 10), 'zinc', 'Closing-latch pivot');
+    });
+    rig.closeLatch.position.set(133, 234.5, 64);
     rig.crank = sub('bkClosingSpring', 'Charging shaft set: worm wheel, crank, closing cam', (b) => {
       b.add(C(14, 14, xDisc + 6 + 40, 'x', (xDisc + 6 - 40) / 2, 0, 0), 'steel', 'Charging shaft (ends at the crank web, clear of the spring)');
       b.add(C(38, 38, 16, 'x', 0, 0, 0, 36), 'steel', 'Charging gear wheel (inside the gear unit)');
@@ -330,7 +338,8 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
       b.add(C(4, 4, 26, 'x', xCam, DL, 0, 10), 'zinc', 'Drive lever pin');
       b.add(B(31, 39, 0, 52, -5, 5), 'steel', 'Latch lever: held closed by the opening latch');
       b.add(B(31, 39, 44, 54, 0, 12), 'steel', 'Latch lever nose');
-      b.add(B(-186, -178, 0, 26, 8, 22), 'steel', 'Auxiliary switch drive crank');
+      b.add(B(-186, -178, -4, 4, 0, 30), 'steel', 'Auxiliary switch drive crank');
+      b.add(C(3, 3, 12, 'x', -182, 0, 30, 10), 'zinc', 'Auxiliary switch drive crank pin');
       for (const s of [-1, 1]) {
         b.add(B(s * (hh + 8) - 3, s * (hh + 8) + 3, -10, 40, -8, 8), 'steel', 'Shaft end lever (covered by the optional shaft cover)');
         b.add(B(s * (hh - 30) - 3, s * (hh - 30) + 3, 30, 52, -3, 3), 'spring', 'Opening spring leg (moving)');
@@ -368,6 +377,18 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     });
     rig.bell.position.set(0, PIVY, PIVZ);
     rig.pushRod = sub('bkCloseLink', 'Push rod', (b) => b.add(C(5, 5, 1, 'y', 0, 0.5, 0, 12), 'steel', 'Push rod: closing lever → drive lever'));
+  }
+  // ------------------------------------------------------------ hand crank 3AX1530-4B (shown during the charging drill)
+  {
+    const p = part('bkTool');
+    p.finish();
+    rig.tool = sub('bkTool', 'Hand crank', (b) => {
+      b.add(C(13, 13, 30, 'z', 0, 0, 15, 20), 'steel', 'Hand crank: adapter / socket with slip clutch');
+      b.add(C(6, 6, 80, 'z', 0, 0, 70, 14), 'steel', 'Hand crank: shaft');
+      b.add(B(-8, 150, -8, 8, 104, 116), 'steel', 'Hand crank: crank arm');
+      b.add(C(9, 9, 84, 'z', 150, 0, 158, 16), 'red', 'Hand crank: handle (turn clockwise)');
+    });
+    rig.tool.position.set(0, 360, 140);
   }
   // ------------------------------------------------------------ opening latch (pawl), trip bar
   {
@@ -514,7 +535,36 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   const E = new THREE.Vector3(), Pp = new THREE.Vector3(), d = new THREE.Vector3();
   let springLen = -1;
   const phiAt = (sv) => { const tr = Math.min(1, sv * 1.15) * STROKE; return phiOf(tr + OVER * Math.max(0, sv * 1.15 - 1) / 0.15); };
-  const pose = ({c = 0, s = 0, crank = null, motor = 0, pClose = 0, pOpen = 0}) => {
+  // drill scene: hand crank in / turned, cover off, key lock, -Y7 locking screw, OFF held (see setScene)
+  const scene = {tool: 0, toolRot: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0};
+  let last = {c: 0, s: 0, pOpen: 0};
+  let countShown = 0;
+  const applyScene = () => {
+    rig.tool.visible = scene.tool > 0.01;
+    rig.tool.position.z = 140 + 220 * (1 - scene.tool);
+    rig.tool.rotation.z = -scene.toolRot;
+    // plastic cover: swing forward about its bottom edge, then lift off forward and up
+    const cg = parts.bkCover, sw = Math.min(1, scene.cover * 2), lift = Math.max(0, scene.cover * 2 - 1);
+    const a = -0.35 * sw;
+    cg.rotation.x = a;
+    const py = COVER.y0, pz = ZC;
+    cg.userData.extra = new THREE.Vector3(0, py - (py * Math.cos(a) - pz * Math.sin(a)) + 260 * lift, pz - (py * Math.sin(a) + pz * Math.cos(a)) + 480 * lift);
+    cg.position.copy(cg.userData.extra); // the app adds the explode offset on top
+    if (rig.key) { rig.key.rotation.z = (1 - scene.key) * Math.PI / 2; rig.key.visible = !scene.keyOut; }
+    for (const sc of rig.y7Screws || []) sc.g.position.x = sc.xA + (sc.xB - sc.xA) * scene.y7;
+    if (rig.ms?.S5k) rig.ms.S5k.rotation.x = -0.24 * (1 - scene.key);
+    rig.btnOff.position.z = -6 * Math.max(last.pOpen, scene.offHeld);
+  };
+  const setScene = (patch = {}) => { Object.assign(scene, patch); applyScene(); };
+  const pose = ({c = 0, s = 0, crank = null, motor = 0, pClose = 0, pOpen = 0, count = null}) => {
+    if (count != null && count !== countShown && rig.counterTex) {
+      countShown = count;
+      const cv = rig.counterTex.image, g = cv.getContext('2d');
+      g.setTransform(cv.width / 40, 0, 0, cv.height / 20, 0, 0);
+      counterArt(count)(g);
+      rig.counterTex.needsUpdate = true;
+    }
+    rig.closeLatch.rotation.x = 0.5 * pClose;
     // charging crank: 0° discharged (pin up), 170° charged and latched, 360° after the closing stroke
     const cDeg = crank ?? (c > 0.99 ? 170 : c * 170);
     const th = (cDeg * Math.PI) / 180;
@@ -584,12 +634,31 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     rig.plungerClose.position.y = 150 + 14 * pClose;
     rig.plungerOpen.position.z = 92 - 8 * pOpen;
     rig.btnOn.position.z = -6 * pClose;
-    rig.btnOff.position.z = -6 * pOpen;
+    // -S1: the drive crank on the main shaft moves the coupling rod, which turns the switching shaft of -S1
+    {
+      const cy = yMS - 30 * Math.sin(phi), cz = zMS + 30 * Math.cos(phi);
+      const beta = Math.asin(THREE.MathUtils.clamp(3 * Math.sin(phi), -1, 1));
+      rig.s1Lever.rotation.x = beta;
+      const ty = 445 - 10 * Math.sin(beta), tz = 80 + 10 * Math.cos(beta);
+      E.set(-182, cy, cz);
+      d.set(0, ty - cy, tz - cz);
+      rig.s1Rod.position.copy(E);
+      rig.s1Rod.quaternion.setFromUnitVectors(Y, d.clone().normalize());
+      rig.s1Rod.scale.set(1, d.length(), 1);
+    }
+    // position switches: -S21 / -S3 / -S4 are pressed by the charged spring mechanism, -S6 flicks on a release trip
+    const charged = THREE.MathUtils.clamp((c - 0.9) / 0.1, 0, 1);
+    // a free lever stands off the body; pressed, it lies flat on it
+    for (const k of ['S21', 'S3', 'S4']) if (rig.ms?.[k]) rig.ms[k].rotation.x = -0.24 * (1 - charged);
+    if (rig.ms?.S6) rig.ms.S6.rotation.x = -0.24 * (1 - pOpen);
+    if (rig.ms?.S12) rig.ms.S12.rotation.x = -0.24;
+    last = {c, s, pOpen};
     rig.flagI.visible = s > 0.5;
     rig.flagO.visible = s <= 0.5;
     rig.flagCh.visible = c > 0.98;
     rig.flagDis.visible = c <= 0.98;
   };
   pose({});
-  return {root, parts, pose, setEquip: rig.setEquip, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
+  applyScene();
+  return {root, parts, pose, setScene, scene, setEquip: rig.setEquip, sAtCrank: (deg) => { const dep = camDep(180 - deg); if (dep <= 0) return 0; let lo = 0, hi = 1; for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; ((ARM_R * dzOf(phiAt(m))) / ARM_Q < dep ? (lo = m) : (hi = m)); } return hi; }, touchS: 1 / 1.15, STROKE, OVER, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
 }

@@ -88,9 +88,17 @@ function microswitch(p, x0, y0, z0, tag) {
   marking(p, tag.split(' ')[0].replace(/^-/, ''), x0 + 0.5, x0 + 9.5, y0 + 0.8, y0 + 4.2, z0 + 20.1, true, `${tag}: device marking`);
   p.add(B(x0, x0 + 10, y0, y0 + 26, z0, z0 + 20), 'black', `${tag}: switch body 3AX4206-0A`);
   ['C', 'NO', 'NC'].forEach((t, i) => p.add(B(x0 + 1.2 + i * 2.9, x0 + 2.6 + i * 2.9, y0 + 26, y0 + 31, z0 + 7, z0 + 13), 'tinned', `${tag}: terminal ${t}`));
-  p.add(B(x0 + 3, x0 + 7, y0 + 4, y0 + 22, z0 + 20, z0 + 21.2), 'steel', `${tag}: roller lever`);
-  p.add(C(3, 3, 4, 'x', x0 + 5, y0 + 4, z0 + 24.2, 12), 'zinc', `${tag}: roller`);
+  // roller lever pivots at its top; pose() presses it in
+  const g = new THREE.Group();
+  g.userData.label = `${tag}: roller lever`;
+  const lb = new PartBuilder(g, LBL);
+  lb.add(B(-2, 2, -18, 0, 0, 1.2), 'steel', `${tag}: roller lever`);
+  lb.add(C(3, 3, 4, 'x', 0, -18, 4.2, 12), 'zinc', `${tag}: roller (pressed by its cam)`);
+  lb.finish();
+  g.position.set(x0 + 5, y0 + 22, z0 + 20);
+  p.group.add(g);
   p.add(C(1.4, 1.4, 11.6, 'x', x0 + 5, y0 + 18, z0 + 10, 8), 'zinc', `${tag}: fixing screw`);
+  return g;
 }
 
 export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
@@ -124,19 +132,19 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
   }
   // ---------------------------------------------------------------- position switches
   {
-    const p = part('bkS21'); microswitch(p, 95, 120, 100, '-S21 (54.2) motor cut-off'); p.finish();
+    const p = part('bkS21'); (rig.ms ||= {}).S21 = microswitch(p, 95, 120, 100, '-S21 (54.2) motor cut-off'); p.finish();
   }
   {
-    const p = part('bkS3'); microswitch(p, 107, 120, 100, '-S3 (54.3) control of -K1'); p.finish();
+    const p = part('bkS3'); rig.ms.S3 = microswitch(p, 107, 120, 100, '-S3 (54.3) control of -K1'); p.finish();
   }
   {
-    const p = part('bkS4'); microswitch(p, 119, 120, 100, '-S4 (54.4) "closing spring charged"'); p.finish();
+    const p = part('bkS4'); rig.ms.S4 = microswitch(p, 119, 120, 100, '-S4 (54.4) "closing spring charged"'); p.finish();
   }
   {
-    const p = part('bkS6'); microswitch(p, -12, 120, 100, '-S6 (54.6) breaker tripped'); p.finish();
+    const p = part('bkS6'); rig.ms.S6 = microswitch(p, -12, 120, 100, '-S6 (54.6) breaker tripped'); p.finish();
   }
   {
-    const p = part('bkS12'); microswitch(p, 62, 120, 100, '-S12 (54.1) mechanical interlock'); p.finish();
+    const p = part('bkS12'); rig.ms.S12 = microswitch(p, 62, 120, 100, '-S12 (54.1) mechanical interlock'); p.finish();
   }
   // ---------------------------------------------------------------- -K1 auxiliary contactor 3AY1420 (34)
   {
@@ -194,10 +202,13 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
     };
     row(p, 420, 1);
     marking(p, 'S1', -172, -154, 441, 449, 118.1, true, '-S1 device marking');
-    p.add(C(6, 6, 15, 'x', -182.5, 445, 80, 6), 'steel', '-S1 switching shaft (hexagon)');
-    p.add(B(-188, -176, 434, 450, 76, 84), 'steel', '-S1 operating lever');
-    p.add(C(4, 4, 345, 'y', -182, 92 + 345 / 2, 75, 10), 'steel', '-S1 coupling rod to the main shaft');
     p.finish();
+    rig.s1Lever = sub('bkS1', '-S1 switching shaft and operating lever', (b) => {
+      b.add(C(6, 6, 15, 'x', -0.5, 0, 0, 6), 'steel', '-S1 switching shaft (hexagon), turned by the coupling rod');
+      b.add(B(-6, 6, -4, 4, 0, 12), 'steel', '-S1 operating lever');
+    });
+    rig.s1Lever.position.set(-182, 445, 80);
+    rig.s1Rod = sub('bkS1', '-S1 coupling rod', (b) => b.add(C(3.5, 3.5, 1, 'y', 0, 0.5, 0, 10), 'steel', '-S1 coupling rod: the main-shaft crank moves it'));
     s1Row2.userData.label = '-S1 second row (3SV9274, 12 NO + 12 NC)';
     const p2 = new PartBuilder(s1Row2, MX);
     row(p2, 476, 7);
@@ -267,8 +278,17 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
       if (type !== 'Y6') pb.add(B(x0 + 4, x0 + 14, 284, 296, 135, 139), 'black', `${tag} rectifier (versions ≥ 100 V AC/DC${type === 'Y4' ? ', always on -Y4 / -Y5' : ''})`);
       if (type === 'Y2' || type === 'Y7') pb.add(C(4, 4, 3, 'z', xc + 8, 230, 136.5, 12), 'blue', `${tag} varistor (versions ≥ 60 V DC)`);
       if (type === 'Y7') {
-        pb.add(C(2.5, 2.5, 0.6, 'z', xc - 9, 258, 135.3, 10), 'black', '-Y7 hole A: transport position of the striker locking screw');
-        pb.add(C(3.2, 3.2, 4, 'z', xc + 9, 258, 137, 6), 'steel', '-Y7 striker locking screw, moved from A to B before commissioning');
+        pb.add(C(2.5, 2.5, 0.6, 'z', xc - 9, 258, 135.3, 10), 'black', '-Y7 position A: transport lock of the striker');
+        pb.add(C(2.5, 2.5, 0.6, 'z', xc + 9, 258, 135.3, 10), 'black', '-Y7 position B: operating position');
+        marking(pb, 'A', xc - 13, xc - 5, 262, 268, 135.6, false, '-Y7 position A (transport)');
+        marking(pb, 'B', xc + 5, xc + 13, 262, 268, 135.6, false, '-Y7 position B (operation)');
+        const sg = new THREE.Group();
+        sg.userData.label = '-Y7 striker locking screw';
+        const sb = new PartBuilder(sg, MX);
+        sb.add(C(3.2, 3.2, 4, 'z', 0, 258, 137.6, 6), 'steel', '-Y7 striker locking screw: move from A to B before commissioning');
+        sb.finish();
+        g.add(sg);
+        (rig.y7Screws ||= []).push({g: sg, xA: xc - 9, xB: xc + 9});
       }
       pb.finish();
       parts[id].add(g);
@@ -321,10 +341,14 @@ export function buildDevices({part, sub, rig, parts, MX, H, zCS}) {
     p.add(C(9, 9, 50, 'z', -25, 305, 147, 20), 'steel', 'Key lock 3AX1437, lock cylinder (59.3)');
     p.add(C(3, 3, 1, 'z', -25, 305, 172.5, 10), 'black', 'Key lock keyway');
     p.add(B(-35, -15, 290, 298, 122, 132), 'steel', 'Key lock cam: blocks the closing latch');
-    p.add(B(-27, -23, 295, 315, 173, 182), 'zinc', 'Key (vertical = locked; removable only in this position)');
-    p.add(RB(-36, -14, 299, 311, 182, 186, 3, 1), 'zinc', 'Key bow');
-    microswitch(p, -44, 316, 120, '-S5 (with the key lock)');
+
+    rig.ms.S5k = microswitch(p, -44, 316, 120, '-S5 (with the key lock)');
     p.finish();
+    rig.key = sub('bkKey', 'Key', (b) => {
+      b.add(B(-2, 2, -10, 10, 0, 9), 'zinc', 'Key (vertical = locked, removable only then; horizontal = unlocked)');
+      b.add(RB(-11, 11, -6, 6, 9, 13, 3, 1), 'zinc', 'Key bow');
+    });
+    rig.key.position.set(-25, 305, 173);
   }
   // ---------------------------------------------------------------- indicator drives and counter
   {

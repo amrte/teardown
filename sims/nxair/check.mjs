@@ -144,7 +144,10 @@ const BK_ALLOW = [
   [/^bkCloseLink:Closing lever/, /^bkCloseLink:Closing-lever pivot pin/, 'lever on its pivot pin'],
   [/^bkOpenLatch:(Opening latch|Pawl)/, /^bkOpenLatch:Opening-latch pivot pin/, 'pawl on its pivot pin'],
   [/^bkShaft:Main shaft/, /^bkShaft:Main-shaft bearing/, 'shaft in its bearings'],
-  [/^bkS1:-S1 coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
+  [/^bkS1:-S1 coupling rod/, /^bkShaft:Auxiliary switch drive crank|^bkS1:-S1 operating lever/, 'rod ends on the shaft crank pin and on the -S1 lever'],
+  [/^bkCover:Push button (ON|OFF) \(56\.[12]\)$/, /^bkCover:Cover \(20\.1\)/, 'a pressed push button sinks into its cut-out'],
+  [/^bkCover:/, /^bkCover:/, 'buttons, flags and the cover move as one unit; checked with the cover fitted'],
+  [/^bkTool:Hand crank/, /^bkCover:|^bkGear:Hand-crank coupling|^bkGear:Slip clutch/, 'crank through the cover opening onto the coupling'],
   [/^bkX0plug:/, /^bkX0:-X0 (pin|locking bow)/, 'plug pushed over the pins, held by the locking bows'],
   [/^bkKey:Key lock 3AX1437, lock cylinder/, /^bkCover:/, 'lock cylinder through its hole in the cover'],
   [/^bkInterlock:Mechanical interlock plunger/, /^bkFrame:(Housing floor|Base frame)/, 'plunger passes through the floor from below'],
@@ -198,6 +201,7 @@ if (args.includes('--breaker') || args.includes('--all')) {
     const EQ = [{}, {s1: '12', slot2: 'Y4', slot3: 'Y6', lv: 'strip', y8e: true, key: false}, {slot2: 'Y7', slot3: 'Y2', y8e: true, key: true}, {slot2: 'none', slot3: 'Y4', heater: false, s12: false}];
     for (const [c, s, crank, ei] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [0, 0, 200], [0, 0, 245], [0, 0, 275], [0, 0, 300], [0, 0, 330], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3]]) {
       bk.setEquip(EQ[ei || 0]);
+      bk.setScene(ei === 2 ? {tool: 1, toolRot: 1.3, key: 1, y7: 0, offHeld: 1} : ei === 3 ? {cover: 1} : {tool: 0, key: 0, y7: 1, offHeld: 0, cover: 0});
       bk.pose({c, s, crank});
       const res = clashes(collect(bk.root)).filter((r) => !allowIn(BK_ALLOW, r.pa, r.pb));
       if (res.length) {

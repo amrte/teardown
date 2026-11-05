@@ -10,6 +10,7 @@ import {CB_DATA, PANEL_TYPES, TROUBLE} from './ops.js';
 import {TRAVEL, boltGeometry, buildPanel, lvCableGeometry, makeMaterials, nutGeometry} from './model.js';
 import {BK_PARTS, BK_SPEC, buildBreaker} from './breaker.js';
 import {DEVICE_INFO, DEVICE_PARTS, EQUIP_DEFAULT, SLOT_TYPES} from './bkdevices.js';
+import {chartSvg, makeProfiles} from './bkcycle.js';
 import {CB_JOINTS, CB_ACCESSORIES, CB_AUX, CB_CHECKS, CB_DEPTHS, CB_MOTOR, CB_TIMES} from './ops.js';
 import {LV_PARTS, LV_SHELLS, buildLV} from './lv.js';
 import {FKEYS, FRONT_ELEMENTS, LEDS, TERMINALS} from './siprotec.js';
@@ -30,7 +31,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, equip: {...EQUIP_DEFAULT}}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -209,6 +210,7 @@ function build() {
   if (world?.bkHolder) { scene.remove(world.bkHolder); disposeTree(world.bkHolder); }
   const bk = buildBreaker(mats, BK_SPEC); // SION 3AE5 12 kV 1250 A 31.5 kA, independent of the panel width
   bk.setEquip(state.bk.equip);
+  BK_PROF = makeProfiles(bk);
   const bkHolder = new THREE.Group();
   bkHolder.scale.setScalar(0.001);
   bk.root.position.z = 75;
@@ -236,7 +238,7 @@ function build() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0};
+const anim = {ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -275,7 +277,7 @@ function applyPose(force) {
     if (c.userData.truckInd) c.rotation.z = anim.truck > 110 ? Math.PI / 2 : 0;
     if (c.userData.eswLever) { c.visible = anim.lever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.lever); c.rotation.z = -Math.PI * anim.esw; }
   }
-  if (world.bk) for (const g of Object.values(world.bk.parts)) g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx);
+  if (world.bk) for (const g of Object.values(world.bk.parts)) { g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx); if (g.userData.extra) g.position.add(g.userData.extra); }
   if (world.lv) world.lv.pose({ex: anim.lvEx, door: anim.lvDoor});
   for (const p of [subject, ...neighbors]) {
     for (const g of p.parts.shutters || []) {
@@ -361,6 +363,10 @@ const BK_VIEWS = {
   top: {p: [0.2, 2.4, 0.5], t: [0, 0.3, 0]},
   vi: {p: [-0.78, 0.5, -0.06], t: [0, 0.459, -0.039]},
   drive: {p: [0.98, 0.31, 0.16], t: [0.06, 0.27, 0.06]},
+  crank: {p: [0.5, 0.78, 1.35], t: [0.05, 0.42, 0.2]},
+  panel: {p: [0.2, 0.5, 1.4], t: [0, 0.34, 0.2]},
+  y7: {p: [0.25, 0.6, 0.95], t: [-0.07, 0.357, 0.19]},
+  key: {p: [0.15, 0.55, 0.85], t: [-0.025, 0.412, 0.22]},
 };
 // LV compartment (stand-alone, origin at the floor of the compartment, front = door plane at z = 0)
 VIEWS.door = {p: [0.8, 0.85, 2.15], t: [0.1, 0.6, 0.6]};
@@ -577,6 +583,13 @@ function frame(now) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
   if (moved) applyPose();
+  if (world?.bk) {
+    const T = state.bk.scene, A = anim.bkScene;
+    let sm = false;
+    for (const k of ['tool', 'cover', 'key', 'y7', 'offHeld']) if (Math.abs(A[k] - T[k]) > 1e-3) { A[k] += (T[k] - A[k]) * (reduced ? 1 : 1 - Math.exp(-dt * 3)); if (Math.abs(A[k] - T[k]) < 2e-3) A[k] = T[k]; sm = true; }
+    if (A.keyOut !== T.keyOut) { A.keyOut = T.keyOut; sm = true; }
+    if (sm) { world.bk.setScene(A); applyPose(); }
+  }
   bkTick(now, dt);
   if (camTween) {
     const u = Math.min(1, (now - camTween.t0) / camTween.dur);
@@ -1000,10 +1013,20 @@ function renderBreaker() {
         <button type="button" class="btn bad" data-bk="open">OFF</button>
         <button type="button" class="btn primary" data-bk="play">Play O – 0.3 s – CO</button>
       </div>
-      <label class="small check"><input type="checkbox" id="bkAux" ${state.bk.aux ? 'checked' : ''}> Supply voltage on (motor recharges after closing)</label>
+      <div class="row">
+        <label class="small check"><input type="checkbox" id="bkAux" ${state.bk.aux ? 'checked' : ''}> Control voltage on</label>
+        <label class="small check"><input type="checkbox" id="bkMcb" ${state.bk.mcb ? 'checked' : ''}> Motor MCB on (recharges after closing)</label>
+      </div>
       <div class="readout" id="bkRead"></div>
+      <div class="seg" role="group" aria-label="Timing chart">
+        <button type="button" data-bkchart="close">Closing</button>
+        <button type="button" data-bkchart="open">Opening</button>
+        <button type="button" data-bkchart="charge">Charging</button>
+      </div>
+      <div id="bkChart" class="chartbox"></div>
     </div>
-    <p class="small muted">Slow motion; the readouts give the manual's times. Contact travel is drawn larger than life (Siemens publishes no stroke; it changes slightly over the service life, which does not affect function). Use Cut for a section through the middle pole.</p>
+    <p class="small muted">The 3D model plays each operation in slow motion on the same time base as the chart; the red cursor marks the moment shown. From the manual: closing ≤ 60 ms, opening ≤ 30 ms, arcing < 15 ms, break time ≤ 45 ms, minimum commands, -S6 pulse > 10 ms, charging < 15 s. Drawn, not published by Siemens: the shape of the travel curve, the latch delay and the moments the auxiliary switch -S1 changes over. Contact travel is drawn larger than life (Siemens publishes no stroke; it changes slightly over the service life, which does not affect function). Use Cut for a section through the middle pole.</p>
+    ${bkDrillHtml()}
     <h3>Springs</h3>
     ${table(['Spring', 'Type', 'Charged by', 'Does'], [
       ['Closing spring (55)', 'helical extension, 1 per breaker, right of the mechanism plate', 'motor / hand crank via gear unit, charging shaft and crank', 'closes the breaker; also charges the opening and contact-pressure springs'],
@@ -1049,6 +1072,7 @@ function renderBreaker() {
     <h3>Breaker data</h3>${kv(CB_DATA)}`;
   for (const el of document.querySelectorAll('[data-equip]')) { const v = state.bk.equip[el.dataset.equip]; if (el.type === 'checkbox') el.checked = !!v; else el.value = String(v); }
   renderBreakerReadout();
+  renderBkChart();
 }
 function componentsOfBk(id) {
   const set = new Set();
@@ -1176,27 +1200,49 @@ function selectBk(id) {
 // ---------------------------------------------------------------- breaker cycle engine
 const bkQueue = [];
 let bkCur = null;
+let BK_PROF = null; // operation profiles on a real time base (bkcycle.js), built with the breaker
 let bkLast = 'Closing spring discharged, breaker open. Press Charge spring.';
-const BK_ACT = {
-  charge: {dur: 2.6, real: 15, unit: 's', max: '< 15 s', label: 'Charging the closing spring'},
-  close: {dur: 1.5, real: 60, unit: 'ms', max: '≤ 60 ms', label: 'Closing', pulse: 'close'},
-  open: {dur: 1.2, real: 30, unit: 'ms', max: '≤ 30 ms (-Y1)', label: 'Opening', pulse: 'open'},
-  dead: {dur: 0.9, real: 300, unit: 'ms', max: '0.3 s dead time', label: 'Dead time'},
-};
 function bkPredict() {
   // state after everything queued
   let {c, s} = state.bk;
   for (const a of [bkCur, ...bkQueue].filter(Boolean)) {
-    if (a.kind === 'charge') c = 1;
+    if (a.kind === 'charge' || a.kind === 'hand') c = 1;
     if (a.kind === 'close') { c = 0; s = 1; }
     if (a.kind === 'open') s = 0;
   }
   return {c, s};
 }
+const hasY7 = () => state.bk.equip.slot2 === 'Y7' || state.bk.equip.slot3 === 'Y7';
+const y7Active = () => hasY7() && state.bk.scene.y7 > 0.5; // locking screw in B
+const canCharge = () => state.bk.aux && state.bk.mcb;
+// why an operation cannot run now (interlocks of the 3AE5), or ''
+function bkBlocked(kind, st = state.bk) {
+  if (kind === 'close') {
+    if (st.s > 0.5) return 'The breaker is already closed.';
+    if (state.bk.keyLocked) return 'Closing blocked by the key lock (and -S5). Insert the key and turn it to horizontal.';
+    if (state.bk.equip.y8e && !state.bk.aux) return 'Closing blocked: -Y8E has no control voltage, so it blocks hand and electrical closing.';
+    if (y7Active() && !state.bk.aux) return 'Closing blocked: the undervoltage release -Y7 is not energised (control voltage off).';
+    if (state.bk.scene.tool > 0.5) return 'Take the hand crank out first.';
+    if (st.c < 0.99) return 'Closing blocked: the closing spring is not charged. Charge it first.';
+  }
+  if (kind === 'open' && st.s < 0.5) return 'The breaker is already open.';
+  if (kind === 'charge') {
+    if (st.c > 0.99) return 'The closing spring is already charged.';
+    if (!canCharge()) return `${state.bk.aux ? 'Motor MCB off' : 'No control voltage'}: the motor cannot charge. Use the hand crank (drill below) or switch it on.`;
+  }
+  if (kind === 'hand') {
+    if (st.c > 0.99) return 'The closing spring is already charged.';
+    if (state.bk.scene.tool < 0.5) return 'Insert the hand crank first.';
+  }
+  return '';
+}
 function bkDo(kind) {
   if (kind === 'play') {
     if (bkCur || bkQueue.length) return toast('Wait for the running operation.');
+    if (!canCharge()) return toast('Switch the control voltage and the motor MCB on for the automatic sequence.');
     const {c, s} = state.bk;
+    const why = bkBlocked('close', {c: 1, s: 0});
+    if (why && !/already/.test(why)) return toast(why);
     if (c < 0.99) bkQueue.push({kind: 'charge'});
     if (s < 0.5) { bkQueue.push({kind: 'close'}); bkQueue.push({kind: 'charge'}); }
     else if (c < 0.99 || bkQueue.length) bkQueue.push({kind: 'charge'});
@@ -1204,42 +1250,155 @@ function bkDo(kind) {
     return;
   }
   if (bkCur || bkQueue.length) return toast('Wait for the running operation.');
-  const {c, s} = bkPredict();
-  if (kind === 'charge' && c > 0.99) return toast('The closing spring is already charged.', 'ok');
-  if (kind === 'close' && s > 0.5) return toast('The breaker is already closed.', 'ok');
-  if (kind === 'close' && c < 0.99) return toast('Closing blocked: the closing spring is not charged. Charge it first.');
-  if (kind === 'open' && s < 0.5) return toast('The breaker is already open.', 'ok');
+  const st = bkPredict();
+  const why = bkBlocked(kind, st);
+  if (why) return toast(why, /already/.test(why) ? 'ok' : 'warn');
   bkQueue.push({kind});
 }
+// supply voltage switched: the motor starts at once on a discharged spring; -Y7 trips a closed breaker when it drops
+function bkSupply(on, which = 'both') {
+  if (which !== 'mcb') state.bk.aux = on;
+  if (which !== 'aux') state.bk.mcb = on;
+  for (const [id, k] of [['bkAux', 'aux'], ['bkMcb', 'mcb']]) { const el = $('#' + id); if (el) el.checked = state.bk[k]; }
+  if (bkCur || bkQueue.length) return;
+  if (canCharge() && state.bk.c < 0.99 && state.bk.scene.tool < 0.5) bkQueue.push({kind: 'charge'});
+  if (!state.bk.aux && y7Active() && state.bk.s > 0.5) { toast('Control voltage off: the undervoltage release -Y7 trips the breaker.'); bkQueue.push({kind: 'open'}); }
+}
 let bkReadT = 0;
+let bkChartX = () => 0;
+function renderBkChart() {
+  const el = $('#bkChart');
+  if (!el || !BK_PROF) return;
+  const kind = ['close', 'open', 'charge'].includes(state.bk.chart) ? state.bk.chart : 'close';
+  const ch = chartSvg(BK_PROF, kind, {aux: canCharge()});
+  el.innerHTML = ch.svg;
+  bkChartX = ch.xs;
+  for (const b of document.querySelectorAll('[data-bkchart]')) b.setAttribute('aria-pressed', String(b.dataset.bkchart === kind));
+}
+function bkCursor(kind, t) {
+  if (state.bk.chart !== kind) return;
+  const cur = $('#bkCursor');
+  if (!cur || !BK_PROF) return;
+  const x = bkChartX(Math.min(BK_PROF[kind].T, t));
+  cur.setAttribute('x1', x); cur.setAttribute('x2', x);
+}
 function bkTick(now, dt) {
-  if (!world?.bk) return;
+  if (!world?.bk || !BK_PROF) return;
   if (!bkCur && bkQueue.length) {
-    bkCur = {...bkQueue.shift(), t0: now, from: {...state.bk}, motor: 0};
-    if (bkCur.kind === 'close' && state.bk.c < 0.99) { toast('Closing blocked: spring not charged.'); bkCur = null; return; }
+    const next = bkQueue.shift();
+    const why = next.kind === 'dead' ? '' : bkBlocked(next.kind);
+    if (why) { if (!/already/.test(why)) toast(why); bkQueue.length = 0; return; }
+    bkCur = {...next, t0: now, from: {...state.bk}, motor: 0};
+    if (['close', 'open', 'charge'].includes(next.kind) && state.bk.chart !== next.kind) { state.bk.chart = next.kind; renderBkChart(); }
   }
   if (!bkCur) return;
-  const A = BK_ACT[bkCur.kind];
-  const u = Math.min(1, (now - bkCur.t0) / 1000 / (reduced ? 0.2 : A.dur));
-  const m = THREE.MathUtils.clamp((u - 0.2) / 0.8, 0, 1); // movement after the release pulse
-  let c = state.bk.c, sv = state.bk.s, pClose = 0, pOpen = 0;
-  let crank = c > 0.99 ? 170 : 0;
-  if (bkCur.kind === 'charge') { c = bkCur.from.c + (1 - bkCur.from.c) * u; crank = 170 * c; bkCur.motor += dt * 40; }
-  if (bkCur.kind === 'close') { pClose = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = m * m; sv = Math.min(1, e * 1.3); c = 1 - e; crank = 170 + 190 * e; }
-  if (bkCur.kind === 'open') { pOpen = Math.sin(Math.min(1, u / 0.2) * Math.PI); const e = 1 - (1 - m) * (1 - m); sv = 1 - e; }
-  world.bk.pose({c, s: sv, crank, motor: bkCur.motor, pClose, pOpen});
-  const realT = bkCur.kind === 'charge' ? u * A.real : bkCur.kind === 'dead' ? u * A.real : m * A.real;
-  bkCur.live = `${A.label} … ${A.unit === 's' ? realT.toFixed(1) : Math.round(realT)} ${A.unit} (${A.max})`;
+  const P = BK_PROF[bkCur.kind];
+  const u = Math.min(1, (now - bkCur.t0) / 1000 / (reduced ? 0.25 : P.anim));
+  const t = u * P.T;
+  const a = P.at(t, bkCur.from);
+  let c = a.c ?? state.bk.c, sv = a.s ?? state.bk.s;
+  let crank = a.crank ?? (c > 0.99 ? 170 : 0);
+  if (a.motor) bkCur.motor += dt * 40;
+  if (a.toolRot != null) world.bk.setScene({toolRot: a.toolRot});
+  world.bk.pose({c, s: sv, crank, motor: bkCur.motor, pClose: a.pClose || 0, pOpen: a.pOpen || 0, count: state.bk.count});
+  bkCursor(bkCur.kind, t);
+  bkCur.live = `${P.label} … ${P.unit === 's' ? t.toFixed(1) : Math.round(t)} ${P.unit}`;
   if (u >= 1) {
     state.bk.c = c; state.bk.s = sv;
-    if (bkCur.kind === 'close') { state.bk.count++; bkLast = 'Closed. Contacts pressed by the contact-pressure springs; opening spring charged.'; if (state.bk.aux && !bkCur.noAuto && !bkQueue.length) bkQueue.unshift({kind: 'charge'}); }
-    if (bkCur.kind === 'open') bkLast = 'Opened. Arc extinguished at current zero (arcing < 15 ms, break time ≤ 45 ms with -Y1).';
+    if (bkCur.kind === 'close') { state.bk.count++; bkLast = `Closed: contacts touched at ${Math.round(BK_PROF.close.ev.touch)} ms (≤ 60 ms), pressed by the contact-pressure springs; opening springs wound; the opening latch holds the main shaft.`; if (canCharge() && !bkCur.noAuto && !bkQueue.length) bkQueue.unshift({kind: 'charge'}); }
+    if (bkCur.kind === 'open') bkLast = `Opened: contacts parted at ${Math.round(BK_PROF.open.ev.sep)} ms (≤ 30 ms), arc out at current zero after < 15 ms, break time ≤ 45 ms.`;
     if (bkCur.kind === 'charge') bkLast = 'Closing spring charged and latched; motor switched off by -S21. Next charge ≥ 60 s later.';
+    if (bkCur.kind === 'hand') bkLast = 'Closing spring charged by hand; take the crank out.';
+    world.bk.pose({c, s: sv, crank: c > 0.99 ? 170 : 0, count: state.bk.count});
     bkCur = null;
     renderBreakerReadout();
+    if (bkDrill) drillBkNote();
     return;
   }
   if (now - bkReadT > 90) { bkReadT = now; renderBreakerReadout(); }
+}
+// ------------------------------------------------------------------------------------- breaker drills
+// Manual procedures of the SION operating instructions, step by step on the model. A step either moves the scene
+// (crank, cover, key, -Y7 screw) or runs an operation; the next step waits until the operation has finished.
+const bkBusy = () => !!(bkCur || bkQueue.length);
+const bkScene = (patch) => Object.assign(state.bk.scene, patch);
+const bkRun = (kind) => { const why = bkBlocked(kind); if (why) return {block: why}; bkQueue.push({kind}); return null; };
+const BK_DRILL = {
+  hand: {name: 'Charge by hand', steps: [
+    {t: 'Switch the motor MCB off. Spring DISCHARGED, so the hand crank is needed.', view: 'panel', act() { bkSupply(false, 'mcb'); if (state.bk.c > 0.99) return {note: 'The spring is already charged: discharge it first (drill "Discharge spring"), then charge it by hand.'}; }},
+    {t: 'Put the hand crank 3AX1530-4B through the opening in the cover onto the coupling 57.2.', view: 'crank', act() { bkScene({tool: 1}); }},
+    {t: 'Turn clockwise, about 50 turns, until the spring indicator shows CHARGED. The slip clutch protects the drive; turning on is harmless.', view: 'crank', act() { if (state.bk.c > 0.99) return; return bkRun('hand'); }},
+    {t: 'Pull the crank out. Never leave it in: racking with the crank inserted damages the breaker.', view: 'crank', act() { bkScene({tool: 0}); }},
+  ], done: 'Spring charged by hand. ON now closes the breaker.'},
+  discharge: {name: 'Discharge spring', steps: [
+    {t: 'Motor MCB off, otherwise the motor recharges at once. Keep the control voltage on if -Y7 or -Y8E is fitted: they allow ON only with voltage.', view: 'panel', act() { bkSupply(false, 'mcb'); }},
+    {t: 'Push OFF.', view: 'panel', act() { if (state.bk.s < 0.5) return {note: 'Already open.'}; return bkRun('open'); }},
+    {t: 'Push ON: the closing spring releases and closes the breaker.', view: 'panel', act() { if (state.bk.c < 0.99) return {note: 'Spring already discharged: nothing to release.'}; return bkRun('close'); }},
+    {t: 'Push OFF again. Breaker OPEN, spring DISCHARGED, indicator shows the discharged spring.', view: 'panel', act() { if (state.bk.s < 0.5) return; return bkRun('open'); }},
+  ], done: 'Open and discharged: the state needed before work on the drive.'},
+  lock: {name: 'Key lock: lock', need: 'key', steps: [
+    {t: 'The breaker must be OFF. Push OFF if it shows ON.', view: 'key', act() { if (state.bk.s < 0.5) return; return bkRun('open'); }},
+    {t: 'Hold OFF pressed.', view: 'key', act() { bkScene({offHeld: 1}); }},
+    {t: 'Turn the key to vertical. The cam blocks the closing latch, -S5 interrupts the closing circuit.', view: 'key', act() { bkScene({key: 1}); state.bk.keyLocked = true; }},
+    {t: 'Release OFF and pull the key out: it only comes out locked.', view: 'key', act() { bkScene({offHeld: 0, keyOut: true}); }},
+    {t: 'Try ON.', view: 'panel', act() { const why = bkBlocked('close'); return {note: why || 'ON would close: the lock is not effective!'}; }},
+  ], done: 'Locked against hand and electrical closing. Delivered like this: unlock before tests and commissioning.'},
+  unlock: {name: 'Key lock: unlock', need: 'key', steps: [
+    {t: 'Insert the key (vertical).', view: 'key', act() { bkScene({keyOut: false, key: 1}); }},
+    {t: 'Turn the key to horizontal: closing latch and -S5 free. The key stays in.', view: 'key', act() { bkScene({key: 0}); state.bk.keyLocked = false; }},
+  ], done: 'Unlocked: the breaker can be closed again.'},
+  y7: {name: '-Y7 screw A → B', need: 'y7', steps: [
+    {t: 'Breaker OFF, spring discharged (drill "Discharge spring"), then control voltage and motor MCB off. As delivered the locking screw of -Y7 sits in hole A: the striker is blocked.', view: 'panel', act() { if (state.bk.s > 0.5 || state.bk.c > 0.99) return {block: 'Discharge the breaker first (drill "Discharge spring"): it must be OFF with the spring discharged.'}; bkSupply(false); bkScene({y7: 0}); }},
+    {t: 'Plastic cover off: pull the bottom forward and lift it off the two snap hooks.', view: 'iso', act() { bkScene({cover: 1}); }},
+    {t: 'Move the locking screw of -Y7 from A to B. Now the striker can act: with no voltage -Y7 trips and blocks closing.', view: 'y7', act() { bkScene({y7: 1}); }},
+    {t: 'Cover back on, snap hooks engaged.', view: 'iso', act() { bkScene({cover: 0}); }},
+    {t: 'Control voltage and motor MCB on: -Y7 picks up, the motor charges the spring. Closing is possible only now.', view: 'panel', act() { bkSupply(true); }},
+  ], done: '-Y7 ready for service. Switching the control voltage off now trips a closed breaker.'},
+  cover: {name: 'Cover off / on', steps: [
+    {t: 'Breaker OFF and discharged. Pull the bottom of the plastic cover forward and lift it up off the snap hooks.', view: 'iso', act() { if (state.bk.s > 0.5 || state.bk.c > 0.99) toast('Discharge first: OFF, ON, OFF with the motor MCB off.'); bkScene({cover: 1}); }},
+    {t: 'Refit: hang it on the snap hooks at the top, press the bottom in. The push buttons, indicators and the crank opening must line up.', view: 'iso', act() { bkScene({cover: 0}); }},
+  ], done: 'Cover on.'},
+};
+let bkDrill = null; // {id, i, note}
+function bkDrillHtml() {
+  const id = bkDrill?.id || 'hand';
+  const d = BK_DRILL[id], i = bkDrill?.i ?? 0;
+  const busy = bkBusy();
+  return `<div class="drill" id="bkDrill">
+    <h3>Do it on the model</h3>
+    <div class="seg wrap" role="group" aria-label="Procedure">${Object.entries(BK_DRILL).map(([k, x]) => `<button type="button" data-bkdrill="${k}" aria-pressed="${k === id}">${esc(x.name)}</button>`).join('')}</div>
+    <ol class="dsteps">${d.steps.map((st, k) => `<li class="${k < i ? 'done' : k === i ? 'on' : ''}">${esc(st.t)}</li>`).join('')}</ol>
+    <div class="row">
+      <button type="button" class="btn primary" data-bkdrillgo="next" ${i >= d.steps.length || busy ? 'disabled' : ''}>${busy ? 'Running …' : i >= d.steps.length ? 'Done' : `Do step ${i + 1}`}</button>
+      <button type="button" class="btn" data-bkdrillgo="reset">Restart</button>
+    </div>
+    <p class="small muted" id="bkDrillNote">${esc(bkDrill?.note || 'Each step acts on the 3D model with the interlocks of the real breaker; the readout above follows.')}</p>
+  </div>`;
+}
+function drillBkNote() {
+  const el = $('#bkDrill');
+  if (el) el.outerHTML = bkDrillHtml();
+}
+function bkDrillAct(cmd, id) {
+  if (id) { bkDrill = {id, i: 0}; drillBkNote(); return; }
+  bkDrill ||= {id: 'hand', i: 0};
+  const d = BK_DRILL[bkDrill.id];
+  if (cmd === 'reset') { bkDrill = {id: bkDrill.id, i: 0}; bkScene({tool: 0, offHeld: 0}); drillBkNote(); goView(d.steps[0].view); return; }
+  if (bkBusy()) return;
+  const st = d.steps[bkDrill.i];
+  if (!st) return;
+  // the drill needs the option fitted
+  const eq = state.bk.equip;
+  if (bkDrill.i === 0 && d.need === 'key' && !eq.key) { eq.key = true; world.bk.setEquip(eq); toast('Key lock 3AX1437 fitted for this drill.', 'ok'); renderBreaker(); }
+  if (bkDrill.i === 0 && d.need === 'y7' && !hasY7()) { eq.slot2 = 'Y7'; world.bk.setEquip(eq); toast('Undervoltage release -Y7 fitted in position 51.2 for this drill.', 'ok'); renderBreaker(); }
+  if (state.mode === 'breaker') goView(st.view);
+  const r = st.act() || {};
+  if (r.block) { bkDrill.note = r.block; drillBkNote(); return; }
+  bkDrill.note = r.note || `Step ${bkDrill.i + 1} done.`;
+  bkDrill.i++;
+  if (bkDrill.i >= d.steps.length) bkDrill.note = (r.note ? r.note + ' ' : '') + d.done;
+  renderBreakerReadout();
+  drillBkNote();
 }
 function renderBreakerReadout() {
   const el = $('#bkRead');
@@ -1253,6 +1412,7 @@ function renderBreakerReadout() {
     <div><span>Contacts</span><b class="${s > 0.5 ? 'badc' : 'okc'}">${contactTxt}</b></div>
     <div><span>Opening spring</span><b>${s > 0.5 ? 'charged' : 'released'}</b></div>
     <div><span>Operations counter</span><b>${count}</b></div>
+    <div><span>Supply</span><b>${state.bk.aux ? 'control on' : 'control OFF'} · ${state.bk.mcb ? 'motor on' : 'motor OFF'}${state.bk.keyLocked ? ' · key LOCKED' : ''}</b></div>
     <div class="wide"><span>Now</span><b>${esc(live || bkLast)}</b></div>`;
 }
 
@@ -1278,7 +1438,7 @@ function variantNote() {
 function wire() {
   $('#views').innerHTML = VIEW_BUTTONS.map(([k, l]) => `<button type="button" data-view="${k}" aria-pressed="false">${l}</button>`).join('');
   document.addEventListener('change', (e) => {
-    if (e.target.id === 'bkAux') state.bk.aux = e.target.checked;
+    if (e.target.id === 'bkAux' || e.target.id === 'bkMcb') { bkSupply(e.target.checked, e.target.id === 'bkAux' ? 'aux' : 'mcb'); renderBkChart(); renderBreakerReadout(); }
     const k = e.target.dataset?.equip;
     if (k) {
       state.bk.equip[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -1302,6 +1462,9 @@ function wire() {
     else if (t.dataset.drill) drillAct(t.dataset.drill);
     else if (t.dataset.drilldir) { drill = {dir: t.dataset.drilldir, i: 0}; renderStep(); }
     else if (t.dataset.bk) bkDo(t.dataset.bk);
+    else if (t.dataset.bkchart) { state.bk.chart = t.dataset.bkchart; renderBkChart(); }
+    else if (t.dataset.bkdrill) bkDrillAct(null, t.dataset.bkdrill);
+    else if (t.dataset.bkdrillgo) bkDrillAct(t.dataset.bkdrillgo);
     else if (t.dataset.bkpart) { selectBk(t.dataset.bkpart); framePart(t.dataset.bkpart); }
     else if (t.dataset.lvpart) { selectLv(t.dataset.lvpart); framePart(t.dataset.lvpart); }
     else if (t.dataset.lvtour) lvTourGo(+t.dataset.lvtour);
