@@ -27,12 +27,15 @@ const ALLOW = [
   [/^connBars:Cable connection bar/, /^cts:Block-type current transformer/, 'primary conductor passes through the CT window'],
   [/^busbars:Main busbar/, /^transPart:Transverse partition plate/, 'busbars pass through the openings (12 mm clearance)'],
   [/^bushL:Lower bushing/, /^partition:Vertical partition/, 'bushing passes through the partition hole (r spoutRo + 3)'],
-  [/^lvPlug:LV plug cable/, /^mech:LV plug carrier/, 'cable is clamped in the carrier'],
+  [/^lvPlug(#[^:]*)?:LV plug cable/, /^mech:LV plug carrier|^lvPlug:LV plug \(64-pole/, 'cable is clamped in the carrier and moulded into the plug'],
+  [/^hvdoor:Operating slide/, /^hvdoor:Actuating opening/, 'the slide covers the actuating opening (it is the shutter of that opening)'],
   [/^breaker:(Tulip|Contact system)/, /^bush[UL]:/, 'tulip inside the bushing bore: verified radially below'],
   [/^rails:/, /^base:/, 'frame stands on the rails'],
   [/^rails:Floor cut-outs/, /./, 'floor slab under everything'],
 ];
-const allowed = (a, b) => ALLOW.some(([x, y]) => (x.test(a) && y.test(b)) || (x.test(b) && y.test(a)));
+// moving sub-assemblies carry '#label' in their key; allow-list patterns match the key without it
+const allowIn = (list, a, b) => list.some(([x, y]) => (x.test(a) && y.test(b)) || (x.test(b) && y.test(a)));
+const allowed = (a, b) => allowIn(ALLOW, a, b);
 
 const VIS = Number(process.env.VIS || 1.6);
 function boltBoxes(panel) {
@@ -49,12 +52,12 @@ function boltBoxes(panel) {
         const a = p.clone(), b = p.clone().addScaledVector(nn, h);
         const box = new THREE.Box3().setFromPoints([a, b]).expandByVector(new THREE.Vector3(r, r, r).multiply(new THREE.Vector3(1 - Math.abs(nn.x), 1 - Math.abs(nn.y), 1 - Math.abs(nn.z))));
         box.applyMatrix4(group.matrixWorld);
-        out.push({part: 'bolt', own, label: jid, key: `bolt:${jid}`, box});
+        out.push({part: 'bolt', own, label: jid, key: `bolt:${jid}`, pkey: `bolt:${jid}`, box});
         if (nut) {
           const na = p.clone().addScaledVector(nn, -nut), nb = na.clone().addScaledVector(nn, -h);
           const nbox = new THREE.Box3().setFromPoints([na, nb]).expandByVector(new THREE.Vector3(r, r, r).multiply(new THREE.Vector3(1 - Math.abs(nn.x), 1 - Math.abs(nn.y), 1 - Math.abs(nn.z))));
           nbox.applyMatrix4(group.matrixWorld);
-          out.push({part: 'bolt', own, label: jid + ' nut', key: `bolt:${jid} nut`, box: nbox});
+          out.push({part: 'bolt', own, label: jid + ' nut', key: `bolt:${jid} nut`, pkey: `bolt:${jid} nut`, box: nbox});
         }
       }
     }
@@ -71,8 +74,12 @@ function collect(root) {
     let vis = true;
     for (let p = o; p; p = p.parent) if (p.visible === false) vis = false;
     if (!vis) return;
-    let part = null;
-    for (let p = o; p && !part; p = p.parent) part = p.userData?.part;
+    // moving sub-assemblies (rig groups with their own label, e.g. the charging-shaft set, the spring, the main
+    // shaft) count as separate assemblies, so they are checked against the static parts of their own part too
+    let part = null, sub = null;
+    for (let p = o; p && !part; p = p.parent) { part = p.userData?.part; if (!part && !sub && p.userData?.label) sub = p.userData.label; }
+    const base = part;
+    if (sub) part = `${part}#${sub}`;
     for (const pr of prims) {
       let box;
       if (pr.geo) {
@@ -81,7 +88,7 @@ function collect(root) {
         const pos = pr.geo.attributes.position, v = new THREE.Vector3();
         for (let i = 0; i < pos.count; i++) box.expandByPoint(v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld));
       } else box = pr.box.clone().applyMatrix4(o.matrixWorld);
-      out.push({part, label: pr.label, key: `${part}:${pr.label}`, box});
+      out.push({part, label: pr.label, key: `${part}:${pr.label}`, pkey: `${base}:${pr.label}`, box});
     }
   });
   return out;
@@ -101,8 +108,8 @@ function clashes(list, sameKeyOk = true) {
       const iz = Math.min(a.box.max.z, b.box.max.z) - Math.max(a.box.min.z, b.box.min.z);
       const pen = Math.min(ix, iy, iz);
       if (pen <= TOL) continue;
-      if (allowed(a.key, b.key)) continue;
-      res.push({a: a.key, b: b.key, pen: Math.round(pen), at: [Math.round((Math.max(a.box.min.x, b.box.min.x) + Math.min(a.box.max.x, b.box.max.x)) / 2), Math.round((Math.max(a.box.min.y, b.box.min.y) + Math.min(a.box.max.y, b.box.max.y)) / 2), Math.round((Math.max(a.box.min.z, b.box.min.z) + Math.min(a.box.max.z, b.box.max.z)) / 2)]});
+      if (allowed(a.pkey, b.pkey)) continue;
+      res.push({a: a.key, b: b.key, pa: a.pkey, pb: b.pkey, pen: Math.round(pen), at: [Math.round((Math.max(a.box.min.x, b.box.min.x) + Math.min(a.box.max.x, b.box.max.x)) / 2), Math.round((Math.max(a.box.min.y, b.box.min.y) + Math.min(a.box.max.y, b.box.max.y)) / 2), Math.round((Math.max(a.box.min.z, b.box.min.z) + Math.min(a.box.max.z, b.box.max.z)) / 2)]});
     }
   }
   return res;
@@ -132,6 +139,10 @@ const BK_ALLOW = [
   [/^bkClosingSpring:Charging shaft/, /^bkFrame:Mechanism mounting plate|^bkMotor:Gear unit/, 'charging shaft runs through the mechanism plate into the gear unit'],
   [/^bkClosingSpring:Charging gear wheel/, /^bkMotor:Gear unit/, 'gear wheel inside the gear-unit housing'],
   [/^bkAux:Auxiliary switch coupling rod/, /^bkShaft:Auxiliary switch drive crank/, 'rod end on its crank'],
+  [/^bkClosingSpring:Spring hook/, /^bkClosingSpring:Closing spring \(55\)/, 'top hook through the end coil of the spring'],
+  [/^bkClosingSpring:Spring eye/, /^bkClosingSpring:(Closing spring \(55\)|Link rod|Crank pin)/, 'bottom eye in the spring, link rod in the eye'],
+  [/^bkClosingSpring:Link rod/, /^bkClosingSpring:Crank pin/, 'link rod on the crank pin'],
+  [/^bkCover:Push button (ON|OFF) \(56\.[12]\): plunger/, /^bkCover:Cover \(20\.1\)/, 'plunger passes through its hole in the cover'],
 ];
 const mats = makeMaterials([]);
 let total = 0;
@@ -177,7 +188,7 @@ if (args.includes('--breaker') || args.includes('--all')) {
     if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
     for (const [c, s, crank] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360]]) {
       bk.pose({c, s, crank});
-      const res = clashes(collect(bk.root)).filter((r) => !BK_ALLOW.some(([x, y]) => (x.test(r.a) && y.test(r.b)) || (x.test(r.b) && y.test(r.a))));
+      const res = clashes(collect(bk.root)).filter((r) => !allowIn(BK_ALLOW, r.pa, r.pb));
       if (res.length) {
         console.log(`\n== breaker W${W} spring ${c} contacts ${s}: ${res.length}`);
         const seen = new Set();
@@ -211,7 +222,7 @@ if (args.includes('--lv') || args.includes('--all')) {
     // with the door open, door-mounted parts are rotated and their boxes inflate: they were checked against each other
     // with the door closed, so only door-mounted vs fixed parts are checked open
     const doorIds = new Set(LV_PARTS.filter((p) => p.door).map((p) => p.id).concat(['loom']));
-    const res = clashes(collect(lv.root)).filter((r) => !LV_ALLOW.some(([x, y]) => (x.test(r.a) && y.test(r.b)) || (x.test(r.b) && y.test(r.a))))
+    const res = clashes(collect(lv.root)).filter((r) => !allowIn(LV_ALLOW, r.pa, r.pb))
       .filter((r) => !(door && doorIds.has(r.a.split(':')[0]) && doorIds.has(r.b.split(':')[0])));
     if (res.length) {
       console.log(`\n== LV W${W} door ${door ? 'open' : 'closed'}: ${res.length}`);

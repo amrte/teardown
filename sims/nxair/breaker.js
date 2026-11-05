@@ -146,7 +146,7 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   const STROKE = 14, OVER = 6; // drawn contact travel and over-travel (larger than life)
   const yMS = 66, zMS = 60, LEVER = zMS - zPole; // main shaft, pole-lever length
   const yCS = 290, zCS = 70; // charging shaft
-  const xCrank = 150, xCam = 60, xDisc = 104, CR = 40; // closing crank, closing cam, crank radius
+  const xCrank = 150, xCam = 60, xDisc = 116, CR = 40; // spring axis, cam, crank web (beside the spring, not under it) // closing crank, closing cam, crank radius
   const ySpringTop = 495;
   const ROD_TOP = yLo - 41.5; // top of the insulator coupling, contacts closed
 
@@ -303,10 +303,10 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     const p = part('bkClosingSpring');
     p.add(T(9, 3, 'x', xCrank, ySpringTop + 5, zCS), 'steel', 'Spring hook (top)');
     p.add(B(xCrank - 4, xCrank + 4, ySpringTop + 14, 512, zCS - 4, zCS + 4), 'steel', 'Spring hanger');
-    p.add(B(168, 184, 300, 330, 95, 110), 'black', 'Closing latch (holds the crank past dead centre, released by ON / -Y9)');
+    p.add(B(125, 141, 226, 243, 64, 92), 'black', 'Closing latch (holds the crank pin past dead centre, released by ON / -Y9)');
     p.finish();
     rig.crank = sub('bkClosingSpring', 'Charging shaft set: worm wheel, crank, closing cam', (b) => {
-      b.add(C(14, 14, 230, 'x', 75, 0, 0), 'steel', 'Charging shaft');
+      b.add(C(14, 14, xDisc + 6 + 40, 'x', (xDisc + 6 - 40) / 2, 0, 0), 'steel', 'Charging shaft (ends at the crank web, clear of the spring)');
       b.add(C(38, 38, 16, 'x', 0, 0, 0, 36), 'steel', 'Charging gear wheel (inside the gear unit)');
       b.add(C(46, 46, 12, 'x', xDisc, 0, 0, 28), 'steel', 'Closing crank disc');
       b.add(C(7, 7, xCrank + 6 - xDisc, 'x', (xDisc + xCrank + 6) / 2, CR, 0, 12), 'zinc', 'Crank pin');
