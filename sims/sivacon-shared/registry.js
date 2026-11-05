@@ -53,6 +53,8 @@ export function createRegistry() {
       // an exploded view of the device itself (the 3WL's own teardown): offset [x, y, z] mm and its start 0..0.5
       fly: o.fly ? new THREE.Vector3(...o.fly) : null,
       flyAt: o.flyAt ?? 0,
+      // or a numbered maintenance step: the part leaves while the step counter runs from flyStep to flyStep + 1
+      flyStep: o.flyStep ?? null,
       openCur: 0,
       drawCur: 0,
       base: g.position.clone(),
@@ -84,7 +86,8 @@ export function createRegistry() {
         r.g.position.z += r.drawCur;
       }
       if (r.fly && opts.fly) {
-        const k = smoother((opts.fly(r) - r.flyAt) / (1 - r.flyAt));
+        const v = opts.fly(r);
+        const k = r.flyStep !== null && opts.flySteps ? smoother(v * opts.flySteps - r.flyStep) : smoother((v - r.flyAt) / (1 - r.flyAt));
         if (k > 0) r.g.position.addScaledVector(r.fly, k);
       }
       if (r.sub) continue;
