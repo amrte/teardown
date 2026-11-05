@@ -347,7 +347,10 @@ export function buildPanel(mats, opts) {
       const pp = new PartBuilder(new THREE.Group(), mats);
       pp.add(B(-(hw - 78), hw - 78, y - 100, y + 100, zSh, zSh + 3), 'galv', name);
       pp.add(B(-(hw - 78), hw - 78, s > 0 ? y - 100 : y + 85, s > 0 ? y - 85 : y + 100, zSh + 3, zSh + 8), 'galvDark', name + ' edge');
-      pp.add(B(-30, 30, y - 25, y + 25, zSh + 3, zSh + 4), 'yellow', 'Warning label');
+      for (const dy of [-55, 55]) pp.add(B(-(hw - 84), hw - 84, y + dy - 6, y + dy + 6, zSh + 3, zSh + 6), 'galvDark', name + ': stiffening bead');
+      for (const sx of [-1, 1]) pp.add(C(5, 5, 10, 'x', sx * (hw - 73), y + s * -70, zSh + 2), 'steel', name + ': guide pin in the shutter guide');
+      pp.add(B(-30, 30, y - 25, y + 25, zSh + 3, zSh + 4), 'yellow', 'Warning label (lightning arrow)');
+      pp.add(B(-hw + 100, -hw + 160, y - 12, y + 12, zSh + 3, zSh + 3.6), 'white', s > 0 ? 'Shutter marking: busbar side' : 'Shutter marking: feeder side');
       const m = pp.finish();
       m.userData.shut = s;
       m.userData.part = 'shutters';
@@ -358,14 +361,18 @@ export function buildPanel(mats, opts) {
     const xSM = Math.max(hw - 55, cbd.truck.a / 2 + 12);
     for (const s of [-1, 1]) {
       const x = s * xSM;
-      // drive slide beside the truck (pushed by it in the last part of the travel), levers between shutters and breaker
-      lk.add(B(x - 5, x + 5, yShelf + 20, yShelf + 150, zP + 24, zP + 88), 'steel', 'Drive slide');
-      lk.add(TU([[x, yShelf + 140, zP + 80], [x, yL - 30, zP + 55], [x, yL + 40, zP + 24]], 6), 'steel', 'Shutter lever');
-      lk.add(TU([[x, yShelf + 140, zP + 70], [x, yU - 80, zP + 50], [x, yU + 60, zP + 24]], 6), 'steel', 'Shutter lever');
-      lk.add(C(12, 12, 10, 'x', x, yL - 30, zP + 55), 'steel', 'Pivot');
-      lk.add(C(12, 12, 10, 'x', x, yU - 80, zP + 50), 'steel', 'Pivot');
+      // drive slide beside the truck (pushed by it in the last part of the travel), lever between shutter and breaker.
+      // O §22: the left mechanism opens the upper shutter (busbar side, slip-on lever marked L), the right one the lower
+      // shutter (feeder side); each can be padlocked.
+      const up = s < 0, ys = up ? yU : yL, side = up ? 'left, upper shutter' : 'right, lower shutter';
+      lk.add(B(x - 5, x + 5, yShelf + 20, yShelf + 150, zP + 24, zP + 88), 'steel', `Drive slide (${side})`);
+      lk.add(B(x - 6, x + 6, yShelf + 150, yShelf + 166, zP + 70, zP + 86), 'steel', `Coupling for the slip-on shutter lever${up ? ' L' : ' R'}`);
+      lk.add(TU(up ? [[x, yShelf + 140, zP + 70], [x, yU - 80, zP + 50], [x, yU + 60, zP + 24]] : [[x, yShelf + 140, zP + 80], [x, yL - 30, zP + 55], [x, yL + 40, zP + 24]], 6), 'steel', `Shutter lever (${side})`);
+      lk.add(C(12, 12, 10, 'x', x, up ? yU - 80 : yL - 30, up ? zP + 50 : zP + 55), 'steel', 'Pivot');
+      lk.add(B(x - 2, x + 2, yShelf + 100, yShelf + 130, zP + 88, zP + 92), 'steel', 'Padlock hasp');
       const xc = x + s * 8;
       lk.add(B(Math.min(xc, xc + s * 3), Math.max(xc, xc + s * 3), yShelf + 10, yU + 320, zP + 18, zP + 92), 'galv', 'Shutter mechanism cover');
+      lk.add(B(Math.min(xc + s * 3, xc + s * 3.5), Math.max(xc + s * 3, xc + s * 3.5), yShelf + 200, yShelf + 240, zP + 40, zP + 80), 'yellow', 'Warning label: danger of crushing');
     }
     lk.finish();
   }
@@ -435,21 +442,35 @@ export function buildPanel(mats, opts) {
   // ================================================================ CONNECTION COMPARTMENT
   {
     const p = part('cts', V(0, 0, -260));
-    const zCT0 = zTerm - 155, zCT1 = zTerm - 15; // on the cable side of the lower bushings, the connection bar passes through
+    const zCT0 = zTerm - 155, zCT1 = zTerm - 15; // on the cable side of the lower bushings, under the connection bar
+    // support-type block CTs, narrow design (DIN 42600 Part 8; catalog HA 25.71 p. 22): cast-resin body tapering to the
+    // top, primary terminals P1 / P2 on top that carry the cable connection bar, secondary terminal box at the foot,
+    // base plate with four slots. DIN main dimensions are not public: sizes are drawn from the catalog photo.
+    const zm = (zCT0 + zCT1) / 2, yTop = yL - 11, yBase = yTop - 190;
     for (const x of xs) {
-      p.add(RB(x - 70, x + 70, yL - 95, yL + 95, zCT0, zCT1, 10, 2), 'resin', 'Block-type current transformer');
-      p.add(RB(x - 75, x + 75, yL - 100, yL - 95, zCT0 - 10, zCT1 + 10, 2, 1), 'resinLight', 'CT foot');
-      p.add(RB(x - 40, x + 40, yL + 95, yL + 125, zCT0 + 30, zCT1 - 30, 4, 1), 'black', 'Secondary terminal box');
-      p.add(B(x - 35, x + 35, yL + 10, yL + 50, zCT0 - 1, zCT0), 'white', 'CT rating plate');
-      for (const dz of [45, 85]) p.add(C(5, 5, 14, 'y', x - 20, yL + 132, zCT0 + dz), 'zinc', 'Secondary terminal');
+      const hwCT = Math.min(68, pitch / 2 - 6);
+      p.add(RB(x - hwCT - 4, x + hwCT + 4, yBase, yBase + 8, zCT0 - 12, zCT1 + 12, 2, 1), 'galvDark', 'CT base plate');
+      for (const dx of [-(hwCT - 12), hwCT - 12]) for (const dz of [-1, 1]) p.add(B(x + dx - 4, x + dx + 4, yBase + 7.5, yBase + 8.2, zm + dz * ((zCT1 - zCT0) / 2) - 6, zm + dz * ((zCT1 - zCT0) / 2) + 6), 'black', 'CT fixing slot');
+      p.add(RB(x - hwCT, x + hwCT, yBase + 8, yBase + 120, zCT0, zCT1, 8, 2), 'resin', 'Block-type current transformer (cast resin, support type)');
+      p.add(RB(x - hwCT + 8, x + hwCT - 8, yBase + 116, yTop, zCT0 + 8, zCT1 - 8, 10, 2), 'resin', 'Block-type current transformer (cast resin, support type)');
+      for (const [z, lab] of [[zCT1 - 30, 'P1'], [zCT0 + 30, 'P2']]) {
+        p.add(RB(x - 26, x + 26, yTop - 14, yTop, z - 20, z + 20, 3, 1), 'resin', `CT primary terminal plinth ${lab}`);
+        p.add(B(x - 25, x + 25, yTop - 0.1, yTop + 6, z - 19, z + 19), 'tinned', `Primary terminal ${lab} (the connection bar is bolted on, 2 × M12)`);
+      }
+      p.add(RB(x - 45, x + 45, yBase + 8, yBase + 48, zCT1, zCT1 + 16, 3, 1), 'black', 'Secondary terminal box (1S1, 1S2, 2S1, 2S2)');
+      p.add(B(x - 41, x + 41, yBase + 12, yBase + 44, zCT1 + 16, zCT1 + 17), 'glass', 'Secondary terminal cover (transparent, sealable)');
+      for (let k = 0; k < 4; k++) p.add(C(3.5, 3.5, 6, 'z', x - 30 + k * 20, yBase + 28, zCT1 + 13), 'zinc', `Secondary terminal ${['1S1', '1S2', '2S1', '2S2'][k]}`);
+      p.add(B(x + hwCT, x + hwCT + 0.5, yBase + 30, yBase + 90, zm - 40, zm + 40), 'white', 'CT rating plate (copy inside the HV door)');
     }
-    p.add(B(-(hw - 22), hw - 22, yL - 115, yL - 100, zCT0 - 10, zCT1 + 10), 'galvDark', 'CT mounting frame');
+    for (const [z0, z1] of [[zCT0 + 4, zCT0 + 24], [zCT1 - 24, zCT1 - 4]]) p.add(B(-(hw - 22), hw - 22, yBase - 15, yBase, z0, z1), 'galvDark', 'CT mounting rail');
     p.finish();
   }
   {
     const p = part('connBars', V(0, 0, -400));
     for (const x of xs) {
-      for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar');
+      // in two pieces: bushing → CT terminal P1, CT terminal P2 → cable (the CT primary carries the current between them)
+      for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zTerm - 15 - 50]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (bushing to CT P1)');
+      for (const g of BAR([[x, yL, zTerm - 155 + 50], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (CT P2 to the cables)');
       p.add(B(x - 22, x + 22, yS - 25, yS + 25, zC - 22, zC - 5), 'silver', 'Earthing switch fixed contact');
     }
     anchor('lugM12', p, xs.map((x) => ({p: N(x, yLug, zC - 17), n: N(0, 0, -1)})), {nut: 22});
@@ -539,9 +560,21 @@ export function buildPanel(mats, opts) {
   {
     const p = part('vt', V(0, 140, -700));
     for (const x of xs) {
-      p.add(RB(x - 60, x + 60, 760, 960, 25, 175, 12, 2), 'resin', 'Voltage transformer (cast resin)');
-      p.add(L([[26, 0], [32, 15], [24, 25], [32, 40], [24, 50], [20, 70]], 'y', x, 960, 100), 'resin', 'VT primary terminal');
-      p.add(B(x - 45, x + 45, 800, 840, 175, 177), 'white', 'VT rating plate');
+      // single-pole cast-resin VT, fixed-mounted (catalog HA 25.71 p. 23 photo): base plate with feet, body tapering to the
+      // HV terminal head, secondary terminal box with transparent cover at the front foot. Sizes drawn.
+      const hv = Math.min(58, pitch / 2 - 8);
+      p.add(RB(x - hv - 8, x + hv + 8, 760, 766, 22, 178, 2, 1), 'galvDark', 'VT base plate');
+      for (const dx of [-(hv - 4), hv - 4]) for (const z of [32, 168]) p.add(B(x + dx - 4, x + dx + 4, 765.5, 766.2, z - 5, z + 5), 'black', 'VT fixing slot');
+      p.add(RB(x - hv, x + hv, 766, 880, 30, 170, 10, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
+      p.add(RB(x - hv + 10, x + hv - 10, 876, 950, 40, 160, 12, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
+      p.add(RB(x - 30, x + 30, 946, 962, 70, 130, 8, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
+      p.add(L([[26, 0], [32, 15], [24, 25], [32, 40], [24, 50], [20, 70]], 'y', x, 960, 100), 'resin', 'VT primary terminal (A)');
+      p.add(C(9, 9, 8, 'y', x, 1034, 100, 6), 'zinc', 'VT primary terminal nut');
+      p.add(RB(x - 46, x + 46, 768, 808, 170, 186, 3, 1), 'black', 'VT secondary terminal box (a, n, da, dn)');
+      p.add(B(x - 42, x + 42, 772, 804, 186, 187), 'glass', 'VT secondary terminal cover (transparent)');
+      for (let k = 0; k < 4; k++) p.add(C(3.5, 3.5, 6, 'z', x - 30 + k * 20, 788, 183), 'zinc', `VT secondary terminal ${['a', 'n', 'da', 'dn'][k]}`);
+      p.add(C(4, 4, 10, 'x', x - hv - 4, 763, 160, 8), 'zinc', 'VT earthing terminal (base plate)');
+      p.add(B(x - 40, x + 40, 820, 860, 170, 171), 'white', 'VT rating plate');
       cyl(p, 5, [x, 1030, 100], [x, 1060, 100], 'copper', 'VT primary lead');
       p.add(TU([[x, 1060, 100], [x, 1062, 106], [x, yL + 10, zC + 8]], 5, 12, 8), 'copper', 'VT primary lead');
     }
