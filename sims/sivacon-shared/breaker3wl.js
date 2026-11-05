@@ -440,7 +440,7 @@ export function breakerWL(ctx, m, j, box, out, B) {
   });
 
   // ---------------------------------------------------------------- the trip unit (stays on the breaker), drawn live
-  const etu = sub(`Overcurrent release ${E.name}`, [U(0.155), V(0.445), bd / 2 - 12], [`${E.name}${hasG(o) ? ' + ground-fault protection' : ''} · type ${(hasG(o) ? E.codeG : E.code) ?? '—'} (COM Format 412)`, `IR ${Math.round(set.Ir * o.wlIn)} A · ${set.Isd !== null ? `Isd ${Math.round(set.Isd * o.wlIn)} A · ` : ''}${set.Ii !== null ? `Ii ${Math.round(set.Ii * o.wlIn)} A` : 'Ii OFF'}`, 'Click its keys, switches, TEST / QUERY / CLEAR, RESET']);
+  const etu = sub(`Overcurrent release ${E.name}`, [U(0.155), V(0.445), bd / 2 - 12], [`${E.name}${hasG(o) ? ' + ground-fault protection' : ''} · type ${(hasG(o) ? E.codeG : E.code) ?? '—'} (COM Format 412)`, `${set.Ir !== null ? `IR ${Math.round(set.Ir * o.wlIn)} A` : 'L OFF'} · ${set.Isd !== null ? `Isd ${Math.round(set.Isd * o.wlIn)} A · ` : ''}${set.Ii !== null ? `Ii ${Math.round(set.Ii * o.wlIn)} A` : 'Ii OFF'}`, 'Click its keys, switches, TEST / QUERY / CLEAR, RESET']);
   bx(etu, 84, PH * 0.55, 40, M.devDark, 0, 0, 0);
   const etuCanvas = document.createElement('canvas');
   etuCanvas.width = ETU_W * 2;

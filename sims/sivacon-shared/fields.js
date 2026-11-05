@@ -23,7 +23,7 @@ const dspTex = (o) => {
     c.fillText(`3WL · ${o.acb} · ${o.wlIn} A`, 20, 34);
     c.font = '600 14px Inter, sans-serif';
     ['L1', 'L2', 'L3'].forEach((p, i) => c.fillText(`I ${p}  ${Math.round(o.wlIn * (0.61 + i * 0.03))} A`, 20, 58 + i * 20));
-    c.fillText(`IR ${Math.round(P.Ir * o.wlIn)} A · set ${P.set}`, 20, 122);
+    c.fillText(`${P.Ir !== null ? 'IR ' + Math.round(P.Ir * o.wlIn) + ' A' : 'L OFF'} · set ${P.set}`, 20, 122);
     c.fillStyle = '#c9cfd3';
     for (let k = 0; k < 4; k++) c.fillRect(20 + k * 40, 150, 30, 22);
     c.fillStyle = '#e8eef2';

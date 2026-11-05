@@ -35,11 +35,22 @@ export const hasG = (o) => WL_ETU[o.wlEtu].g === 'std' || (WL_ETU[o.wlEtu].g ===
 export const IG_TABLE = {small: {A: 100, B: 300, C: 600, D: 900, E: 1200}, large: {A: 400, B: 600, C: 800, D: 1000, E: 1200}};
 export const igA = (o, letter) => IG_TABLE[WL_SIZES[o.acb].size === 3 ? 'large' : 'small'][letter];
 
+// Icw (1 s) is not printed in the operating instructions; it only limits the ETU76B's Isd (0.8 x Icw, OI 8-22) [inferred]
+export const icwOf = (o) => Math.min({1: 50, 2: 80, 3: 100}[WL_SIZES[o.acb].size], WL_SIZES[o.acb].icu[o.wlClass]);
+const range = (a, b, d) => {
+  const r = [];
+  for (let v = a; v <= b + 1e-9; v += d) r.push(Math.round(v * 1000) / 1000);
+  return r;
+};
+// ETU76B pickups are set in amps over continuous ranges (OI 8-22…8-25); the display steps them, coarser at the top [inferred]
+const ladder = (a, max) => [...range(1.25, 4, 0.25), ...range(4.5, 8, 0.5), ...range(9, 20, 1), ...range(22, 40, 2), ...range(45, 100, 5)].filter((v) => v >= a - 1e-9 && v <= max + 1e-9);
+
 /** the settings this trip unit has, with its real switch positions (OI 8-3…8-29) and data points (COM Tab. 4-10) */
 export function settingsFor(o) {
   const e = o.wlEtu;
   const S = [];
   const add = (key, label, unit, dp, steps, fmt) => S.push({key, label, unit, dp, steps, fmt});
+  if (e === '76B') return settings76(o, add, S);
   add('wlIr', 'IR', '× In', 333, e === '15B' ? [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 1] : [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.8, 0.9, 1]);
   if (['45B', '45BD', '76B'].includes(e)) add('wltR', 'tR', 's', 335, [2, 3.5, 5.5, 8, 10, 14, 17, 21, 25, 30]);
   if (e !== '15B') {
@@ -57,7 +68,57 @@ export function settingsFor(o) {
   }
   return S;
 }
-export const WL_DEFAULT = {wlIr: 1, wltR: 10, wlIsd: 4, wltsd: 0.2, wlIi: 12, wlIN: 1, wlIg: 'C', wltg: 0.2};
+export const WL_DEFAULT = {wlIr: 1, wltR: 10, wlIsd: 4, wltsd: 0.2, wlIi: 12, wlIN: 1, wlIg: 'C', wltg: 0.2, wlLst: 'On', wlLit: 'I2t', wlSit: 'off', wlGit: 'off', wlTM: 'off', wlPS: 'off'};
+
+/**
+ * ETU76B (OI 8-17…8-29, display 8-56): L with status on/off and I²t / I⁴t, S with I²t, I with MAX, N, G with I²t,
+ * thermal memory and phase-failure sensitivity. o may be the set-B view ({...o, ...o.wlB}).
+ */
+function settings76(o, add, S) {
+  const In = o.wlIn;
+  const icu = WL_SIZES[o.acb].icu[o.wlClass];
+  add('wlLst', 'L Status', '', 333, ['On', 'Off']);
+  add('wlIr', 'IR', '× In', 333, range(0.4, 1, 0.05));
+  add('wlLit', 'L I*t', '', 335, ['I2t', 'I4t']);
+  // tR 2…30 s with I²t, 1…5 s with I⁴t (OI 8-22, 8-27)
+  add('wltR', 'tR', 's', 335, o.wlLit === 'I4t' ? range(1, 5, 0.5) : range(2, 30, 1));
+  // Isd 1.25 x In … 0.8 x Icw; with tsd > 0.4 s at most 15 / 20 / 30 kA by frame size (OI 8-22, 8-23)
+  const cap = Number(o.wltsd) > 0.4 ? {1: 15, 2: 20, 3: 30}[WL_SIZES[o.acb].size] : Infinity;
+  add('wlIsd', 'Isd', '× In', 337, ladder(1.25, Math.min(0.8 * icwOf(o), cap) * 1000 / In));
+  add('wlSit', 'S I*t', '', 338, ['off', 'on']);
+  // tsd: 0.02 s = M (motor protection), 0.08…4 s, OFF; with I²t 0.1 / 0.2 / 0.3 / 0.4 s at 12 x In (OI 8-23, 8-28)
+  add('wltsd', 'tsd', 's', 338, o.wlSit === 'on' ? [0.1, 0.2, 0.3, 0.4] : [0.02, 0.08, ...range(0.1, 0.4, 0.05), 0.5, 0.6, 0.8, 1, 1.5, 2, 2.5, 3, 3.5, 4, 'OFF']);
+  // Ii 1.5 x In … 0.8 x Ics, MAX, OFF (OI 8-24)
+  add('wlIi', 'Ii', '× In', 336, [...ladder(1.5, (0.8 * icu * 1000) / In).filter((v) => v >= 1.5), 'MAX', 'OFF']);
+  // IN 0.2…2 x In; above 1 x In only for 3-pole breakers (OI 8-25 footnote)
+  add('wlIN', 'IN', '× In', 334, ['OFF', ...range(0.2, o.wlPoles === 4 ? 1 : 2, 0.1)]);
+  if (hasG(o)) {
+    add('wlIg', 'Ig', '', 339, ['A', 'B', 'C', 'D', 'E', 'OFF']);
+    add('wlGit', 'G I*t', '', 340, ['off', 'on']);
+    add('wltg', 'tg', 's', 340, range(0.1, 0.5, 0.05));
+  }
+  add('wlTM', 'ThermMem', '', null, ['off', 'on']);
+  add('wlPS', 'PhaseSen', '', null, ['off', 'on']);
+  return S;
+}
+/** snap a set of values to the steps (the steps of one setting can depend on another, so twice) */
+function snap(o, src, fallback) {
+  for (let pass = 0; pass < 2; pass++) {
+    for (const s of settingsFor(o)) {
+      const hit = s.steps.find((v) => String(v) === String(src[s.key]));
+      if (hit !== undefined) {
+        o[s.key] = hit;
+        continue;
+      }
+      const d = fallback[s.key] ?? WL_DEFAULT[s.key];
+      const num = s.steps.filter((v) => typeof v === 'number');
+      o[s.key] = s.steps.includes(d) ? d : typeof d === 'number' && num.length ? num.reduce((a, b) => (Math.abs(b - d) < Math.abs(a - d) ? b : a)) : s.steps[Math.floor(s.steps.length / 2)];
+    }
+    src = o;
+  }
+}
+/** the values of parameter set B (ETU76B stores two complete sets, OI 8-29) */
+export const setB = (o) => ({...o, ...(o.wlB || {})});
 
 // the options a 3WL adds to the circuit-breaker field (the console shows those whose `when` holds)
 const isWL = (f) => String(f.opts?.acb || '').startsWith('3WL');
@@ -91,14 +152,16 @@ export function normaliseWL(o) {
   else if (!['COM35', 'none'].includes(o.wlCom)) o.wlCom = 'COM35';
   if (!(o.wlEtu === '76B' && o.wlCom === 'COM35')) o.wlDas = 'off';
   else if (!['off', 'on'].includes(o.wlDas)) o.wlDas = 'off';
-  for (const s of settingsFor(o)) {
-    const hit = s.steps.find((v) => String(v) === String(o[s.key]));
-    if (hit !== undefined) {
-      o[s.key] = hit;
-      continue;
-    }
-    const d = WL_DEFAULT[s.key];
-    o[s.key] = s.steps.includes(d) ? d : s.steps[Math.floor(s.steps.length / 2)];
+  snap(o, o, {});
+  if (o.wlEtu === '76B') {
+    // set B starts as a copy of set A with a lower instantaneous pickup (example values; COM p.29)
+    const b = {...o, ...(o.wlB && typeof o.wlB === 'object' ? o.wlB : {wlIi: 2})};
+    snap(b, b, o);
+    o.wlB = Object.fromEntries(settingsFor(b).map((s) => [s.key, b[s.key]]));
+    if (!['A', 'B'].includes(o.wlPar)) o.wlPar = 'A';
+  } else {
+    delete o.wlB;
+    delete o.wlPar;
   }
   return o;
 }
@@ -140,6 +203,7 @@ export function orderNo(o) {
 export function activeSettings(o) {
   const e = o.wlEtu;
   const num = (v) => (v === 'OFF' || v === undefined ? null : v);
+  if (e === '76B') return active76(o, num);
   const A = {
     Ir: o.wlIr,
     tR: ['45B', '45BD', '76B'].includes(e) ? o.wltR : 10,
@@ -159,6 +223,34 @@ export function activeSettings(o) {
   return {...A, tsd: A.tsd === null ? null : 0.02, Ii: Math.min(A.Ii ?? 2.2, 2.2), set: 'B'};
 }
 
+/** ETU76B: set A or B, chosen on the display (Select Par. Set), by the COM35 or by DAS (OI 8-29, COM p.24–29) */
+function active76(o, num) {
+  const set = o.wlPar === 'B' || o.wlDas === 'on' ? 'B' : 'A';
+  const v = set === 'B' ? setB(o) : o;
+  const icu = WL_SIZES[o.acb].icu[o.wlClass];
+  const P = {
+    Ir: v.wlLst === 'Off' ? null : v.wlIr,
+    tR: v.wltR,
+    Lit: v.wlLit,
+    Isd: v.wlIsd,
+    tsd: num(v.wltsd),
+    Sit: v.wlSit === 'on',
+    // MAX = 0.8 x Ics, at most 100 kA (OI 8-24)
+    Ii: v.wlIi === 'MAX' ? Math.round(Math.min(0.8 * icu, 100) * 1000 / o.wlIn * 10) / 10 : num(v.wlIi),
+    IN: num(v.wlIN),
+    Ig: hasG(o) && v.wlIg !== 'OFF' ? igA(o, v.wlIg) : null,
+    tg: hasG(o) ? v.wltg : null,
+    Git: v.wlGit === 'on',
+    TM: v.wlTM === 'on',
+    PS: v.wlPS === 'on' || v.wltsd === 0.02,
+    set,
+  };
+  if (P.tsd === null) P.Isd = null;
+  // tsd OFF and Ii OFF together are corrected to Ii = 1.5 x In (OI 8-24)
+  if (P.Ii === null && P.tsd === null) P.Ii = 1.5;
+  return P;
+}
+
 /** tripping time (s) at current I (A): L as I²t through tR at 6 IR, S definite time, I instantaneous */
 export function tripTime(o, I) {
   const P = activeSettings(o);
@@ -167,8 +259,10 @@ export function tripTime(o, I) {
   // ETU25B/27B: I fixed at 20 x In, max 50 kA (OI 8-6)
   const Ii = P.Ii !== null ? Math.min(P.Ii * In, o.wlEtu === '25B' || o.wlEtu === '27B' ? 50000 : Infinity) : Infinity;
   if (I >= Ii) return 0.03;
-  if (P.Isd !== null && P.tsd !== null && I >= P.Isd * In) return Math.max(0.03, P.tsd);
-  if (I > 1.05 * Ir) return P.tR * ((6 * Ir) / I) ** 2;
+  // S definite time, or I²t up to 12 x In (ETU76B, OI 8-28)
+  if (P.Isd !== null && P.tsd !== null && I >= P.Isd * In) return Math.max(0.03, P.Sit && I < 12 * In ? P.tsd * ((12 * In) / I) ** 2 : P.tsd);
+  // L as I²t, or I⁴t (ETU45B/76B), through tR at 6 x IR; switched off on the ETU76B
+  if (P.Ir !== null && I > 1.05 * Ir) return P.tR * ((6 * Ir) / I) ** (P.Lit === 'I4t' ? 4 : 2);
   return Infinity;
 }
 
@@ -197,7 +291,7 @@ export function com35Data(o, pos) {
       ['DP 412 · trip unit', live ? `${(hasG(o) ? E.codeG : E.code) ?? 'n/a'} · ${E.name}${hasG(o) ? ' + G' : ''}` : '—'],
       ['DP 377 · rating plug', live ? `${o.wlIn} A` : '—'],
       ['DP 370 · parameter set', live ? A.set : '—'],
-      ['DP 333 · IR', live ? `${Math.round(A.Ir * o.wlIn)} A` : '—'],
+      ['DP 333 · IR', live ? (A.Ir !== null ? `${Math.round(A.Ir * o.wlIn)} A` : 'OFF') : '—'],
       ['DP 336 · Ii', live ? (A.Ii === null ? 'OFF' : `${Math.round(A.Ii * o.wlIn)} A`) : '—'],
     ],
     leds: {PN: 'green', TCP: 'green', CUB: live ? 'green' : pos === 'disconnected' ? 'flash' : 'off'},

@@ -4,7 +4,8 @@
 // electronic trip unit: load and fault currents, the LEDs (OI 8-20), TEST / QUERY / CLEAR (OI 8-74), the ETU45B
 // alphanumeric display (OI 8-30…8-41) and the ETU76B menu (OI 8-42…8-64). No three.js in here; the geometry reads the
 // state every frame, the console drives it.
-import {activeSettings, hasG, igA, settingsFor, WL_ETU, WL_SIZES, orderNo, WL_CLASS} from './wl.js';
+import {activeSettings, hasG, tripTime, WL_ETU, WL_SIZES} from './wl.js';
+import {key76, onTrip76, step76} from './etu76.js';
 
 // racking geometry [inferred]: travel from CONNECT in mm; crank turns counted from DISCON
 export const RACK = {connected: 0, test: 60, disconnected: 115, rails: 520, removed: 1000};
@@ -249,21 +250,19 @@ export function currents(st) {
 export function faults(o) {
   const P = activeSettings(o);
   const In = o.wlIn;
-  const list = [{kind: 'L', label: 'Overload 1.5 × IR', I: 1.5 * P.Ir * In}];
+  const list = P.Ir !== null ? [{kind: 'L', label: 'Overload 1.5 × IR', I: 1.5 * P.Ir * In}] : [];
   if (P.Isd !== null && P.tsd !== null) list.push({kind: 'S', label: 'Short circuit 1.2 × Isd', I: 1.2 * P.Isd * In});
   if (P.Ii !== null) list.push({kind: 'I', label: `Short circuit 1.2 × Ii`, I: Math.min(1.2 * P.Ii * In, WL_SIZES[o.acb].icu[o.wlClass] * 1000)});
-  if (hasG(o)) list.push({kind: 'G', label: 'Ground fault 1.5 × Ig', I: 1.5 * P.Ig});
+  if (P.Ig !== null) list.push({kind: 'G', label: 'Ground fault 1.5 × Ig', I: 1.5 * P.Ig});
   return list;
 }
 /** time to trip (s) for a fault */
 function faultTime(o, f) {
   const P = activeSettings(o);
   const In = o.wlIn;
-  if (f.kind === 'G') return P.tg ?? 0.1;
-  const Ii = P.Ii !== null ? P.Ii * In : Infinity;
-  if (f.I >= Ii) return 0.03;
-  if (P.Isd !== null && P.tsd !== null && f.I >= P.Isd * In) return Math.max(0.03, P.tsd);
-  return P.tR * ((6 * P.Ir * In) / f.I) ** 2;
+  // G definite time, or I²t from the pickup up to 2 x Ig on the ETU76B (OI 8-29) [shape inferred]
+  if (f.kind === 'G') return P.Git ? (P.tg ?? 0.1) * 4 / (f.I / P.Ig) ** 2 : P.tg ?? 0.1;
+  return tripTime(o, f.I);
 }
 export const TIME_X = 20; // overload trips are shown 20 x faster than real time
 export function injectFault(st, kind) {
@@ -273,7 +272,7 @@ export function injectFault(st, kind) {
   st.fault = {...f, phase: 1, t: 0, tTrip: faultTime(st.o, f)};
   return null;
 }
-function trip(st, cause, I, phase) {
+function trip(st, cause, I, phase, dur = 0) {
   st.closed = false;
   st.tripped = true;
   st.cause = cause;
@@ -281,9 +280,10 @@ function trip(st, cause, I, phase) {
   st.tripI = I;
   st.fault = null;
   const e = st.etu;
-  e.log.unshift({cause, I: Math.round(I), phase: ['L1', 'L2', 'L3', 'N'][phase] || 'L2', t: e.t});
+  e.log.unshift({cause, I: Math.round(I), phase: cause === 'G' ? 'g' : cause === 'N' ? 'N' : ['L1', 'L2', 'L3'][phase] || 'L2', t: e.t, d: new Date()});
+  if (st.o.wlEtu === '76B') onTrip76(st, cause, I, phase, dur);
   e.log.length = Math.min(e.log.length, 5);
-  if (WL_ETU[st.o.wlEtu].display) {
+  if (WL_ETU[st.o.wlEtu].display && st.o.wlEtu !== '76B') {
     e.screen = 'trip';
     e.msg = null;
   }
@@ -292,13 +292,15 @@ function trip(st, cause, I, phase) {
 /** the trip unit is active with load current above its minimum, or with the external 24 V supply (here: with the COM35 / CubicleBUS) */
 export function etuActive(st) {
   const c = currents(st);
-  return Math.max(...c.I) > WL_SIZES[st.o.acb].imin || st.o.wlCom === 'COM35';
+  return Math.max(...c.I) > WL_SIZES[st.o.acb].imin || v24(st);
 }
+/** the external 24 V DC supply: with the COM35 over the CubicleBUS, or switched on the replica panel */
+export const v24 = (st) => st.aux24 ?? st.o.wlCom === 'COM35';
 /** the self-test conditions (OI 8-74): trip unit active, current not in the overload range */
 function testRefusal(st) {
   const c = currents(st);
   if (!etuActive(st)) return 'Self-test not possible: the trip unit is not active (needs load current or the 24 V supply, OI 8-74)';
-  if (Math.max(...c.I) >= activeSettings(st.o).Ir * st.o.wlIn) return 'Self-test not possible: the current is in the overload range (OI 8-74)';
+  if (Math.max(...c.I) >= (activeSettings(st.o).Ir ?? Infinity) * st.o.wlIn) return 'Self-test not possible: the current is in the overload range (OI 8-74)';
   return null;
 }
 const tRof = (o) => activeSettings(o).tR || 10;
@@ -319,7 +321,7 @@ export function leds(st, now) {
   const q = e.query > 0 && !e.test;
   return {
     ACTIVE: powered && flash,
-    ALARM: imax >= P.Ir * o.wlIn,
+    ALARM: imax >= (P.Ir ?? Infinity) * o.wlIn,
     COMM: o.wlCom === 'COM35',
     EXTEND: false,
     L: (q && st.cause === 'L') || testL,
@@ -332,41 +334,6 @@ export function leds(st, now) {
   };
 }
 
-// ETU76B menu tree (OI 8-42…8-64)
-export function menuTree(st) {
-  const o = st.o;
-  const P = activeSettings(o);
-  const c = currents(st);
-  const In = o.wlIn;
-  const A = (x) => `${Math.round(x)} A`;
-  const params = settingsFor(o).map((s) => ({label: s.label, key: s.key, steps: s.steps, value: () => o[s.key], unit: s.unit}));
-  return {
-    label: 'Main menu',
-    items: [
-      {label: 'Metering', items: [
-        {label: 'Currents', lines: () => [`IL1 ${A(c.I[0])}`, `IL2 ${A(c.I[1])}`, `IL3 ${A(c.I[2])}`, `IN  ${A(c.IN)}`, `Ig  ${A(c.Ig)}`]},
-        {label: 'Voltages', lines: () => (c.live ? ['V12 400 V', 'V23 401 V', 'V31 399 V'] : ['V12 0 V', 'V23 0 V', 'V31 0 V'])},
-        {label: 'Power', lines: () => {
-          const p = c.live ? (Math.sqrt(3) * 400 * (c.I[0] + c.I[1] + c.I[2]) / 3 * 0.92) / 1000 : 0;
-          return [`P  ${p.toFixed(0)} kW`, `Q  ${(p * 0.43).toFixed(0)} kvar`, `S  ${(p / 0.92).toFixed(0)} kVA`, `PF ${c.live ? '0.92' : '—'}`];
-        }},
-        {label: 'Frequency', lines: () => [`f  ${c.live ? '50.00' : '—'} Hz`]},
-      ]},
-      {label: 'Diagnostic', items: [
-        {label: 'Trip log', lines: () => (st.etu.log.length ? st.etu.log.map((l, i) => `${i + 1} ${l.cause}  ${l.phase}  ${l.I} A`) : ['No trips'])},
-        {label: 'Maintenance', lines: () => ['Operations     214', 'Trips            ' + st.etu.log.length, 'Contacts       OK']},
-      ]},
-      {label: 'View Parameter', items: [
-        {label: `Protection set ${P.set}`, lines: () => [`IR  ${A(P.Ir * In)}`, `tR  ${P.tR} s`, `Isd ${P.Isd !== null ? A(P.Isd * In) : '—'}`, `tsd ${P.tsd ?? 'OFF'} s`, `Ii  ${P.Ii !== null ? A(P.Ii * In) : 'OFF'}`, `IN  ${P.IN ?? 'OFF'}`, ...(P.Ig ? [`Ig  ${P.Ig} A`] : [])]},
-      ]},
-      {label: 'Change Parameter', items: [{label: 'Protection parameter', params}]},
-      {label: 'Identification', lines: () => [`${WL_ETU[o.wlEtu].name}`, `${orderNo(o)}`, `In ${In} A (plug)`, `FS ${['I', 'II', 'III'][WL_SIZES[o.acb].size - 1]} · ${o.wlPoles}-pole`, `${WL_CLASS[o.wlClass].name.split(' ·')[0]} class`]},
-      {label: 'Clear', items: [{label: 'Trip log', action: (s) => (s.etu.log = [], 'Trip log cleared')}, {label: 'Min/max values', action: () => 'Min/max cleared'}]},
-      {label: 'Display Setup', lines: () => ['Contrast      60 %', 'Backlight    60 s', 'Default  Metering']},
-    ],
-  };
-}
-const nodeAt = (st) => st.etu.menu.reduce((n, i) => (n.items || n.params)[i], menuTree(st));
 
 /** a key on the trip unit: up, down, esc, enter (ETU76B), up / down (ETU45B display), test, query, clear */
 export function etuKey(st, k, setOpt) {
@@ -399,6 +366,7 @@ export function etuKey(st, k, setOpt) {
   if (k === 'clear') {
     e.query = 0;
     if (e.test || e.combo) {
+      if (e.test) e.lastTest = {mode: e.test.mode === 'trip' ? 'with trip' : 'w/o trip', ok: false, d: new Date()};
       e.test = null;
       e.combo = null;
       return 'Self-test ended with CLEAR';
@@ -419,51 +387,11 @@ export function etuKey(st, k, setOpt) {
     }
     return;
   }
-  // ETU76B
-  if (e.screen === 'oper' || e.screen === 'trip') {
-    if (k === 'enter') {
-      e.screen = 'menu';
-      e.menu = [];
-      e.cur = 0;
-    }
-    return;
-  }
-  const node = nodeAt(st);
-  if (e.edit) {
-    const p = node.params[e.edit.i];
-    if (k === 'up' || k === 'down') e.edit.j = Math.max(0, Math.min(p.steps.length - 1, e.edit.j + (k === 'up' ? 1 : -1)));
-    else if (k === 'enter') {
-      setOpt(p.key, p.steps[e.edit.j]);
-      e.msg = `${p.label} saved`;
-      e.msgT = 2;
-      e.edit = null;
-    } else if (k === 'esc') e.edit = null;
-    return;
-  }
-  const list = node.items || node.params || null;
-  if (k === 'esc') {
-    if (e.menu.length) {
-      e.cur = e.menu.pop();
-    } else e.screen = 'oper';
-    return;
-  }
-  if (!list) return;
-  if (k === 'up') e.cur = (e.cur + list.length - 1) % list.length;
-  else if (k === 'down') e.cur = (e.cur + 1) % list.length;
-  else if (k === 'enter') {
-    const it = list[e.cur];
-    if (node.params) {
-      e.edit = {i: e.cur, j: Math.max(0, it.steps.map(String).indexOf(String(it.value())))};
-    } else if (it.action) {
-      e.msg = it.action(st);
-      e.msgT = 2;
-    } else {
-      e.menu.push(e.cur);
-      e.cur = 0;
-    }
-  }
+  // ETU76B: the graphical display has its own menu (etu76.js)
+  return key76(st, k, setOpt);
 }
 
+const wrapText = (t, n) => t.split(' ').reduce((a, w) => ((a[a.length - 1] + ' ' + w).trim().length > n ? a.push(w) : (a[a.length - 1] = (a[a.length - 1] + ' ' + w).trim()), a), ['']);
 /** what the display shows now: {title, lines, sel (highlighted line), status} */
 export function displayModel(st) {
   const e = st.etu;
@@ -472,7 +400,7 @@ export function displayModel(st) {
   const c = currents(st);
   const P = activeSettings(o);
   const A = (x) => `${Math.round(x)} A`;
-  if (e.msg && e.msgT > 0) return {title: E.face === 'graphic' ? 'Message' : '', lines: [e.msg], status: ''};
+  if (e.msg && e.msgT > 0) return {title: E.face === 'graphic' ? 'Message' : '', lines: E.face === 'graphic' ? wrapText(e.msg, 22) : [e.msg], status: ''};
   if (e.screen === 'trip' && st.tripped) {
     const lines = [`Trip.Cause    ${st.cause}`, `Tripped.Phase ${['L1', 'L2', 'L3', 'N'][st.phase] || 'L2'}`, `I = ${Math.round(st.tripI)} A`, 'Press RESET'];
     return {title: 'Tripping info', lines, status: `Set ${P.set}`};
@@ -489,27 +417,11 @@ export function displayModel(st) {
       [`I1 ${A(c.I[0]).padStart(10)}`, `I2 ${A(c.I[1]).padStart(10)}`, `I3 ${A(c.I[2]).padStart(10)}`, `IN ${A(c.IN).padStart(10)}`],
       [`Ig ${A(c.Ig).padStart(10)}`, '', 'Autoscroll', ''],
       [`Trips      ${e.log.length}`, 'Operations   214', '', ''],
-      [`IR = ${P.Ir} x In`, `   = ${A(P.Ir * o.wlIn)}`, `tR = ${P.tR} s`, ''],
+      [`IR = ${P.Ir ?? 'OFF'} x In`, `   = ${P.Ir !== null ? A(P.Ir * o.wlIn) : 'OFF'}`, `tR = ${P.tR} s`, ''],
     ];
     return {title: '', lines: pages[e.page], status: ''};
   }
-  if (e.screen === 'oper') {
-    return {title: 'Metering', bars: [['IL1', c.I[0]], ['IL2', c.I[1]], ['IL3', c.I[2]], ['IN', c.IN]].map(([k, v]) => ({k, v, max: o.wlIn * 1.2, text: A(v)})), lines: [], status: `Set ${P.set}${o.wlDas === 'on' ? ' DAS' : ''} · ENTER: menu`};
-  }
-  const node = nodeAt(st);
-  if (node.lines) return {title: node.label, lines: node.lines(), status: 'ESC: back'};
-  if (node.params) {
-    return {
-      title: node.label,
-      lines: node.params.map((p, i) => {
-        const v = e.edit && e.edit.i === i ? p.steps[e.edit.j] : p.value();
-        return `${p.label.padEnd(5)} ${String(v).padStart(6)}${e.edit && e.edit.i === i ? ' ◄' : ''}`;
-      }),
-      sel: e.cur,
-      status: e.edit ? '▲▼ change · ENTER save · ESC' : 'ENTER: edit',
-    };
-  }
-  return {title: node.label, lines: node.items.map((it) => it.label), sel: e.cur, status: 'ENTER · ESC'};
+  return {title: '', lines: [], status: ''};
 }
 
 /** rotate a rotary coding switch (ETU15B…45B): the parameter-change display shows it for 4 s (OI 8-41) */
@@ -521,6 +433,7 @@ export function noteChange(st, label, text, sub) {
 export function step(st, dt) {
   const e = st.etu;
   e.t += dt;
+  if (st.o.wlEtu === '76B') step76(st, dt);
   if (e.msgT > 0) e.msgT -= dt;
   if (e.change) e.change.t -= dt;
   if (e.query > 0) e.query -= dt;
@@ -546,6 +459,7 @@ export function step(st, dt) {
     if (e.test.phase === 'run' && e.test.t > e.test.dur) {
       e.test.phase = 'ok';
       e.test.t = 0;
+      e.lastTest = {mode: e.test.mode === 'trip' ? 'with trip' : 'w/o trip', ok: e.test.mode !== 'trip' || st.closed, d: new Date()};
       // with tripping: the trip unit fires the tripping magnet; the breaker opens, cause L
       if (e.test.mode === 'trip') {
         // test OK = the breaker trips; the trip cause can then be queried as after any trip (OI 8-75 step 4-5)
@@ -563,7 +477,7 @@ export function step(st, dt) {
     else {
       const k = st.fault.kind === 'L' ? TIME_X : 1;
       st.fault.t += dt * k;
-      if (st.fault.t >= st.fault.tTrip) trip(st, st.fault.kind, st.fault.I, st.fault.phase);
+      if (st.fault.t >= st.fault.tTrip) trip(st, st.fault.kind, st.fault.I, st.fault.phase, st.fault.tTrip);
     }
   }
   // the procedure

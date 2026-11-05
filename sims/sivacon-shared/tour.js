@@ -29,7 +29,8 @@ export const TOUR = [
   {t: 37.4, at: '[data-a="opt:acb:3WL12"]', do: (act) => act('opt', 'acb:3WL12')},
   {t: 39.0, at: '[data-a="wlsolo"]', do: (act) => act('wlsolo', '1')},
   {t: 40.6, at: '[data-a="wletu"]', do: (act) => act('wletu')},
-  {t: 42.2, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
+  // ETU76B: ESC opens MAIN MENU, ENTER Metering, ENTER Iavg → CURRENT with its bars (OI 8-44, 8-55)
+  {t: 42.2, at: (ui) => ui.etuSpot('esc'), do: (act) => act('etuhit', 'esc:1')},
   {t: 43.4, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
   {t: 44.6, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
   {t: 46.6, at: (ui) => ui.etuSpot('esc'), do: (act) => act('etuhit', 'esc:1')},

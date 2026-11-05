@@ -5,8 +5,8 @@
 // configuration on every change (refresh) and the live parts (callouts, slider, hover card) move every frame (frame).
 import {FIELD_TYPES, MODULE_KINDS, SYSTEM} from './catalog.js';
 import {STAGES} from './registry.js';
-import {activeSettings, com35Data, hasG, isWL, NMAINT, orderNo, settingsFor, tripTime, WL_ETU, WL_MAINT} from './wl.js';
-import {currents, faults, posAt, RACK, TIME_X} from './wl_sim.js';
+import {activeSettings, com35Data, hasG, igA, isWL, NMAINT, orderNo, setB, settingsFor, tripTime, WL_ETU, WL_MAINT} from './wl.js';
+import {currents, faults, posAt, RACK, TIME_X, v24} from './wl_sim.js';
 import {drawETU, ETU_H, ETU_W, hitAt} from './etu_display.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', copper: '#c8784a', blue: '#3d8fe0'};
@@ -431,18 +431,26 @@ export function createConsole(app, act) {
     const P = activeSettings(o);
     const In = o.wlIn;
     const amps = (k, x) => (x === null || x === undefined ? 'OFF' : `${Math.round(x * In)} A`);
-    const val = {
-      wlIr: `${o.wlIr} × In · ${amps('', P.Ir)}`,
-      wltR: `${o.wltR} s`,
-      wlIsd: `${o.wlIsd} × In · ${amps('', P.Isd)}`,
-      wltsd: o.wltsd === 'OFF' ? 'OFF' : `${o.wltsd} s${o.wltsd === 0.02 ? ' · motor' : ''}`,
-      wlIi: o.wlIi === 'OFF' ? 'OFF' : o.wlIi === 'MAX' ? `MAX · ${amps('', P.Ii)}` : `${o.wlIi} × In · ${amps('', P.Ii)}`,
-      wlIN: o.wlIN === 'OFF' ? 'OFF' : `${o.wlIN} × In`,
-      wlIg: `${o.wlIg} · ${P.Ig} A`,
-      wltg: `${o.wltg} s`,
+    // the ETU76B stores two complete parameter sets; the steppers edit the one chosen here (OI 8-29)
+    const is76 = o.wlEtu === '76B';
+    const eb = is76 && S.wlEditB;
+    const v = eb ? setB(o) : o;
+    const show = (s) => {
+      const x = v[s.key];
+      if (x === 'OFF' || x === 'MAX' && s.unit !== '× In') return x;
+      if (s.key === 'wlIi' && x === 'MAX') return `MAX · ${amps('', activeSettings({...o, wlPar: eb ? 'B' : 'A', wlDas: 'off'}).Ii)}`;
+      if (s.unit === '× In') return `${x} × In · ${Math.round(x * In)} A`;
+      if (s.key === 'wlIg') return `${x} · ${igA(o, x)} A`;
+      if (s.unit === 's') return `${x} s${x === 0.02 ? (is76 ? ' · M' : ' · motor') : ''}`;
+      return String(x);
     };
-    const steps = settingsFor(o)
-      .map((s) => `<div class="srow"><span class="lb">${s.label} · DP ${s.dp}</span><div class="stp"><div class="tb" data-a="optstep:${s.key}:-1">−</div><span>${val[s.key]}</span><div class="tb" data-a="optstep:${s.key}:1">+</div></div></div>`)
+    const pre = eb ? 'wlB.' : '';
+    const setRow = is76
+      ? `<div class="srow"><span class="lb">ACTIVE SET</span>${gr(2, ['A', 'B'].map((x) => `<div class="tb ${P.set === x ? 'on' : ''} ${o.wlDas === 'on' ? 'dis' : ''}" data-a="optset:wlPar:${x}">Par. Set ${x}</div>`).join(''))}</div>
+        <div class="srow"><span class="lb">EDIT SET</span>${gr(2, ['A', 'B'].map((x) => `<div class="tb ${(x === 'B') === !!eb ? 'on' : ''}" data-a="wleditset:${x}">${x}</div>`).join(''))}</div>`
+      : '';
+    const steps = setRow + settingsFor(v)
+      .map((s) => `<div class="srow"><span class="lb">${s.label}${s.dp ? ` · DP ${s.dp}` : ''}</span><div class="stp"><div class="tb" data-a="optstep:${pre}${s.key}:-1">−</div><span>${show(s)}</span><div class="tb" data-a="optstep:${pre}${s.key}:1">+</div></div></div>`)
       .join('');
     // the time-current curve, log-log: I / In from 0.5 to 50, t from 0.01 to 10 000 s
     const Wd = 238;
@@ -464,7 +472,7 @@ export function createConsole(app, act) {
       <div class="hd" style="margin-bottom:4px"><span class="cp">${o.wlEtu.replace('D', '')} TRIP UNIT · SET ${P.set}</span><span class="cp mu">${P.Ig ? 'LSIG' : P.IN !== null ? 'LSIN' : P.Isd !== null ? 'LSI' : 'LI'}</span></div>
       ${steps}
       <svg width="${Wd}" height="${Hd}" style="display:block;margin-top:6px;background:#fafafa;border:1px solid ${C.line}">${grid}<path d="${d}" fill="none" stroke="${C.red}" stroke-width="1.6"/></svg>
-      <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Switch positions from the 3WL1 manual (8-22…8-29), data points from the COM35 guide (Tab. 4-10). Curve: L as I²t through tR at 6 IR, S definite time.</div>
+      <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Switch positions from the 3WL1 manual (8-22…8-29), data points from the COM35 guide (Tab. 4-10). Curve: L as I²t (or I⁴t) through tR at 6 IR, S definite time (or I²t to 12 × In). ETU76B: two stored sets, ranges in amps (8-22…8-29).</div>
     </div>
     <div class="wl">
       ${C35 ? '<div data-k="com35"></div>' : '<div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">NOT FITTED</span></div><div class="mu" style="font-size:9.4px">No COM35 at X7: the breaker has no PROFINET / Modbus TCP connection. X7 is a plain terminal block.</div>'}
@@ -474,8 +482,9 @@ export function createConsole(app, act) {
   // ------------------------------------------------------------ live 3WL readouts and the trip unit replica
   const etuP = add(`<div class="pn" style="left:306px;top:84px;width:250px;height:678px;padding:8px 10px;display:none;z-index:4"></div>`);
   etuP.innerHTML = `<div class="hd"><span class="cp">TRIP UNIT</span><span class="cp mu" data-k="etun"></span></div>
-    <canvas width="${ETU_W * 2}" height="${ETU_H * 2}" style="width:216px;height:540px;display:block;cursor:pointer;margin:0 auto"></canvas>
-    <div class="srow" style="margin-top:5px"><span class="lb">SELF-TEST</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;flex:1"><div class="tb" data-a="etuhit:test:1" title="OI 8-74: running light for tR, then the L LED; CLEAR ends it">TEST · no trip</div><div class="tb" data-a="etuhit:testTrip:1" title="OI 8-75: press TEST and CLEAR, release CLEAR, then TEST; the breaker trips">TEST+CLEAR · trip</div></div></div>
+    <canvas width="${ETU_W * 2}" height="${ETU_H * 2}" style="width:208px;height:520px;display:block;cursor:pointer;margin:0 auto"></canvas>
+    <div class="srow" style="margin-top:5px"><span class="lb">24 V DC</span><div data-k="etu24"></div></div>
+    <div class="srow"><span class="lb">SELF-TEST</span><div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;flex:1"><div class="tb" data-a="etuhit:test:1" title="OI 8-74: running light for tR, then the L LED; CLEAR ends it">TEST · no trip</div><div class="tb" data-a="etuhit:testTrip:1" title="OI 8-75: press TEST and CLEAR, release CLEAR, then TEST; the breaker trips">TEST+CLEAR · trip</div></div></div>
     <div class="srow" style="margin-top:6px"><span class="lb">LOAD</span><div class="stp"><div class="tb" data-a="wlload:-0.1">−</div><span data-k="etuload"></span><div class="tb" data-a="wlload:0.1">+</div></div></div>
     <div class="srow"><span class="lb">FAULT</span><div data-k="etuf"></div></div>
     <div data-k="etus" class="mu" style="font-size:8.6px;line-height:11px;margin-top:3px"></div>`;
@@ -503,7 +512,7 @@ export function createConsole(app, act) {
       etuHits = drawETU(g, ws, now);
       const o = ws.o;
       etuP.querySelector('[data-k=etun]').textContent = `${WL_ETU[o.wlEtu].name} · ${o.wlIn} A`;
-      const fk = o.wlEtu + o.wlGf + o.wlIn;
+      const fk = o.wlEtu + o.wlGf + o.wlIn + JSON.stringify(activeSettings(o));
       if (fk !== etuFKey) {
         etuFKey = fk;
         const fl = faults(o);
@@ -512,6 +521,15 @@ export function createConsole(app, act) {
     }
     if (now - wlT < 150) return;
     wlT = now;
+    if (S.etuOpen) {
+      const on = v24(ws);
+      const k24 = `${on}${ws.o.wlCom}`;
+      const n24 = etuP.querySelector('[data-k=etu24]');
+      if (n24.dataset.v !== k24) {
+        n24.dataset.v = k24;
+        n24.innerHTML = gr(2, `<div class="tb ${on ? 'on' : ''}" data-a="wl24:on" title="External 24 V DC supply (with the COM35 it comes over the CubicleBUS)">on${ws.o.wlCom === 'COM35' ? ' · COM35' : ''}</div><div class="tb ${on ? '' : 'on'}" data-a="wl24:off">off</div>`);
+      }
+    }
     const c = currents(ws);
     const p = ws.rack >= RACK.removed - 1 ? 'maintenance' : posAt(ws.rack);
     const live = insp.querySelector('[data-k=wllive]');
@@ -537,9 +555,11 @@ export function createConsole(app, act) {
       const f = ws.fault;
       etuP.querySelector('[data-k=etus]').innerHTML = f
         ? `<b style="color:#d6182b">${f.label}: ${Math.round(f.I)} A</b> · trips in ${Math.max(0, f.tTrip - f.t).toFixed(f.tTrip > 5 ? 0 : 2)} s${f.kind === 'L' ? ` (shown ${TIME_X}× faster)` : ''}`
+        : ws.o.wlEtu === '76B'
+        ? 'ESC: main menu · ▲▼ mark or change · ENTER select / accept · password 0000. TEST self-test, QUERY last trip cause, CLEAR ends a test or clears the cause.'
         : c.live
-        ? 'TEST: self-test without tripping (running light for tR, then L LED = OK). Shift- or right-click TEST: with tripping. QUERY: last trip cause while pressed. CLEAR: ends a test, or deletes the stored trip cause. Right-click a switch to turn it back.'
-        : 'Close the breaker in CONNECT to load it. The trip unit is powered from its CTs above Imin, or with 24 V via the COM35.';
+        ? 'TEST: self-test (running light for tR, then L LED = OK). Right-click TEST: with tripping. QUERY: last trip cause. CLEAR: ends a test or clears the cause. Right-click a switch to turn it back.'
+        : 'Close the breaker in CONNECT to load it. The trip unit is powered from its CTs above Imin, or with 24 V DC.';
     }
   };
 

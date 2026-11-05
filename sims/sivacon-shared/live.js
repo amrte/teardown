@@ -12,7 +12,7 @@ import {layout} from './layout.js';
 import {NSTAGE} from './registry.js';
 import {createStage} from './stage.js';
 import {TOUR, TOUR_LEN} from './tour.js';
-import {NMAINT, settingsFor} from './wl.js';
+import {NMAINT, setB, settingsFor} from './wl.js';
 import {etuKey, injectFault, noteChange, PROCS, posAt, RACK, resetStates, startProc, step as simStep, TURNS} from './wl_sim.js';
 
 const W = 1600;
@@ -387,7 +387,8 @@ export function runLive() {
       }
       case 'optset': {
         const v = a1 === 'OFF' || a1 === 'MAX' || isNaN(Number(a1)) ? a1 : Number(a1);
-        f.opts = {...f.opts, [a0]: v};
+        if (a0.startsWith('wlB.')) f.opts = {...f.opts, wlB: {...f.opts.wlB, [a0.slice(4)]: v}};
+        else f.opts = {...f.opts, [a0]: v};
         rb = true;
         break;
       }
@@ -426,6 +427,11 @@ export function runLive() {
         if (why) ui.say(why);
         break;
       }
+      case 'wl24': {
+        const ws = wlOf();
+        if (ws) ws.aux24 = arg === 'on';
+        break;
+      }
       case 'wlload': {
         const ws = wlOf();
         if (ws) ws.load = clamp(Math.round((ws.load + Number(arg)) * 100) / 100, 0, 1.3);
@@ -439,13 +445,23 @@ export function runLive() {
         break;
       }
       case 'optstep': {
-        const st = settingsFor(f.opts).find((x) => x.key === a0);
+        // 'wlB.<key>' steps parameter set B of an ETU76B
+        const b = a0.startsWith('wlB.');
+        const k = b ? a0.slice(4) : a0;
+        const v = b ? setB(f.opts) : f.opts;
+        const st = settingsFor(v).find((x) => x.key === k);
         if (!st) break;
-        const i = st.steps.map(String).indexOf(String(f.opts[a0]));
-        f.opts[a0] = st.steps[Math.max(0, Math.min(st.steps.length - 1, i + Number(a1)))];
+        const i = st.steps.map(String).indexOf(String(v[k]));
+        const nv = st.steps[Math.max(0, Math.min(st.steps.length - 1, i + Number(a1)))];
+        if (b) f.opts = {...f.opts, wlB: {...f.opts.wlB, [k]: nv}};
+        else f.opts[k] = nv;
         rb = true;
         break;
       }
+      case 'wleditset':
+        S.wlEditB = arg === 'B';
+        ui.refresh(S, R);
+        break;
       case 'mod':
         S.mod = S.mod === Number(arg) ? -1 : Number(arg);
         ui.refresh(S, R);

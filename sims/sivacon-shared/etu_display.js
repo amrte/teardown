@@ -4,6 +4,7 @@
 // face and the full-size replica panel share it, and so do their click zones (hits), so a press on either works.
 import {activeSettings, hasG, igA, settingsFor, WL_ETU} from './wl.js';
 import {displayModel, leds} from './wl_sim.js';
+import {draw76} from './etu76.js';
 
 export const ETU_W = 240;
 export const ETU_H = 600;
@@ -127,32 +128,7 @@ export function drawETU(g, st, now) {
     const y0 = 166;
     const dw = W - 52;
     const dh = 158;
-    rrect(g, x0, y0, dw, dh, 3, '#b9e3d8');
-    txt(g, dm.title || '', x0 + 6, y0 + 11, 10.5, '#16303a', 800);
-    g.fillStyle = '#16303a';
-    g.fillRect(x0 + 4, y0 + 20, dw - 8, 1);
-    if (dm.bars) {
-      dm.bars.forEach((b, i) => {
-        const y = y0 + 34 + i * 26;
-        txt(g, b.k, x0 + 6, y, 10, '#16303a', 700, 'left', mono);
-        rrect(g, x0 + 36, y - 6, dw - 100, 12, 1, null, '#16303a');
-        g.fillStyle = '#16303a';
-        g.fillRect(x0 + 37, y - 5, Math.min(1, b.v / b.max) * (dw - 102), 10);
-        txt(g, b.text, x0 + dw - 6, y, 9.5, '#16303a', 700, 'right', mono);
-      });
-    } else {
-      dm.lines.slice(0, 8).forEach((l, i) => {
-        const y = y0 + 32 + i * 14.5;
-        if (dm.sel === i) {
-          g.fillStyle = '#16303a';
-          g.fillRect(x0 + 3, y - 7, dw - 6, 14);
-        }
-        txt(g, l, x0 + 7, y, 9.5, dm.sel === i ? '#b9e3d8' : '#16303a', 700, 'left', mono);
-      });
-    }
-    g.fillStyle = '#16303a';
-    g.fillRect(x0 + 4, y0 + dh - 17, dw - 8, 1);
-    txt(g, dm.status || '', x0 + 6, y0 + dh - 8, 8, '#16303a', 700);
+    draw76(g, st, x0, y0, dw, dh, {txt, rrect, mono, setOpt: () => {}});
     // rating plug, T.U. ERROR, keys
     rrect(g, 16, 336, 118, 32, 3, '#9aa3aa');
     txt(g, `In = ${o.wlIn} A`, 75, 352, 12.5, '#16181b', 700, 'center');

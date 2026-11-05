@@ -65,7 +65,13 @@ Sources:
 | COM35 body, LEDs, ports, terminals, position detection, data points, DAS parameter set B | COM p.11–50 |
 | Operating sequences (`wl_sim.js`): OFF/ON, spring charging, racking with handle, control lever and crank, withdrawing onto the rails, re-inserting; refusals when an action is not allowed | OI 6-1…6-11, 17-1, 23-3 |
 | Trip unit front (`etu_display.js`): keys, rotary and slide switches, TEST / QUERY / CLEAR, the LED row and the trip-cause LEDs, RESET pin (BREAKER TRIPPED) | OI 8-1…8-29, 8-34 |
-| ETU76B / 45B display menus: operating screen, Metering, Diagnostic (trip log), View / Change Parameter, Identification | OI 8-40…8-60 |
+| TEST: self-test without tripping (only with the trip unit active and the current below the overload range; running light for tR, then the L LED for 30 s); TEST + CLEAR, release CLEAR, then TEST: self-test with tripping; QUERY: last stored trip cause while pressed; CLEAR: ends a test or deletes the trip cause | OI 6-7, 8-21, 8-74, 8-75 |
+| Reset after a trip: QUERY, remedy, CLEAR, RESET pin (reclosing lockout), charge | OI 6-7 |
+| ETU76B display (`etu76.js`): operating screen CURRENT with min/max markers; ESC opens MAIN MENU; status line key · wrench · PAR A/B · pencil · TRIG A/B · navigation; backlight off after Default SCR; "Version" on power-up | OI 8-42…8-44 |
+| ETU76B menu tree: Metering (Iavg → CURRENT, P → REAL POWER, freq → FREQUENCY / HARMONICS, min/max with time stamps); Diagnostic (Warnings, Trip Log, Setpoints, Maintenance with 12 counters and Contact Erosion, CubicleBUS, Waveform with triggers A/B, event upload and graph); View / Change Parameter (System Config., Prot. Par. Set A, Set B, Metering, Setpoints, Communication); Identification; Clear; Display Setup | OI 8-55…8-64 |
+| Parameter change: value inverted, "Save Parameter Changes? ENTER = YES ESC = NO", "Parameter Change Saved." / "NOT saved!!"; clearing with "Are You Sure You Want To Clear?"; 4-digit password (default 0000) | OI 8-62…8-64 |
+| ETU76B settings in amps: L on/off, IR 0.4–1 × In, tR 2–30 s (I²t) or 1–5 s (I⁴t); Isd 1.25 × In – 0.8 × Icw (15/20/30 kA with tsd > 0.4 s); tsd 0.02 (M) / 0.08–4 s / OFF, I²t 0.1–0.4 s at 12 × In; Ii 1.5 × In – 0.8 × Ics, MAX, OFF; IN 0.2–2 × In (above 1 only 3-pole); Ig A–E / OFF, tg 0.1–0.5 s, I²t; ThermMem; PhaseSen; two stored sets A/B; display parameterising needs 24 V DC | OI 8-17…8-29 |
+| ETU45B display: autoscroll pages, ▲▼ | OI 8-30…8-41 |
 
 Not in the manuals:
 - the breaker's height and depth, and the FS III width;
@@ -74,6 +80,7 @@ Not in the manuals:
 - the number of splitter plates.
 
 - the timing of the animations, and the overload acceleration (× 20) used so that an L trip happens within seconds;
-- the exact wording and layout of the display menu pages, which follow the manual's menu tree but are condensed.
+- the step sizes of the ETU76B settings (the manual gives ranges only), and Icw (50 / 80 / 100 kA by frame size, at most Icu);
+- on the ETU76B display: the password prompt, the contents of Warnings, Setpoints, CubicleBUS and Communication, the Uavg / S / Q / pf / W / Temp sub-screens, the System Config. values, the waveform window (±100 ms) and the example counters and service history.
 
 These are marked `[inferred]` in the code; apart from the last two, they only shape the geometry. The trip curve on screen is an L-S-I characteristic drawn from the settings (L as I²t through tR at 6 × IR, S as definite time).
