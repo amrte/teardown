@@ -5,7 +5,9 @@
 // configuration on every change (refresh) and the live parts (callouts, slider, hover card) move every frame (frame).
 import {FIELD_TYPES, MODULE_KINDS, SYSTEM} from './catalog.js';
 import {STAGES} from './registry.js';
-import {activeSettings, com35Data, isWL, NMAINT, orderNo, settingsFor, tripTime, WL_MAINT} from './wl.js';
+import {activeSettings, com35Data, hasG, isWL, NMAINT, orderNo, settingsFor, tripTime, WL_ETU, WL_MAINT} from './wl.js';
+import {currents, faults, posAt, RACK, TIME_X} from './wl_sim.js';
+import {drawETU, ETU_H, ETU_W, hitAt} from './etu_display.js';
 
 export const C = {ink: '#16181b', mute: '#8b8f95', faint: '#c9ccd0', line: '#e1e3e6', panel: 'rgba(248,248,249,.94)', red: '#d6182b', copper: '#c8784a', blue: '#3d8fe0'};
 export const VIEWS = ['iso', 'front', 'rear', 'side', 'top', 'field'];
@@ -51,6 +53,9 @@ const CSS = `
 .call{position:absolute;white-space:nowrap;pointer-events:none}
 .call b{display:block;font-size:11px;font-weight:600;letter-spacing:.1px}
 .call span{display:block;font-size:8.4px;font-weight:500;letter-spacing:1.3px;color:${C.mute};text-transform:uppercase;margin-top:2px}
+.call.proc{background:rgba(255,255,255,.94);border-left:3px solid #e7c11e;padding:6px 9px;box-shadow:0 2px 10px rgba(0,0,0,.18);white-space:normal;max-width:300px;width:max-content}
+.call.proc b{font-size:12.5px}
+.call.proc span{color:#8a6d00}
 .cur{position:absolute;left:0;top:0;z-index:50;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));pointer-events:none}
 .ring{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1.5px solid ${C.red};opacity:0;z-index:49;pointer-events:none}
 .tick{position:absolute;top:13px;width:1px;height:7px;background:${C.faint}}
@@ -333,7 +338,7 @@ export function createConsole(app, act) {
             .join(''))}`;
           // the 3WL's own teardown sits right under the breaker choice
           return o.key === 'acb' && wl
-            ? row + maintRow(S, f)
+            ? row + operateBlock(S, f) + maintRow(S, f)
             : row;
         })
         .join('') + (wl ? wlPanel(S, f) : '');
@@ -395,6 +400,19 @@ export function createConsole(app, act) {
     tdBtns.scope.classList.toggle('on', S.scope === 'all');
   };
 
+  // ------------------------------------------------------------ operate the 3WL (wl_sim.js): the procedures of OI 6
+  const operateBlock = (S, f) => {
+    const fixed = f.opts.wlMount === 'fixed';
+    return `<div class="wl">
+      <div class="hd" style="margin-bottom:4px"><span class="cp">OPERATE</span><span class="cp mu">OR CLICK THE PARTS IN 3D</span></div>
+      <div data-k="wllive" style="font-size:9.2px;line-height:13px;min-height:52px"></div>
+      ${gr(4, `<div class="tb" data-a="wlproc:close" title="Mechanical ON">I · on</div><div class="tb" data-a="wlproc:open" title="Mechanical OFF">O · off</div><div class="tb" data-a="wlproc:charge" title="9 strokes of the lever">charge</div><div class="tb" data-a="wlproc:reset" title="RESET pin">reset</div>`)}
+      ${fixed ? '' : `<div class="lb" style="margin-top:6px">RACK TO · WITH THE HANDLE AND THE CRANK</div>${gr(4, [['connected', 'connect'], ['test', 'test'], ['disconnected', 'discon'], ['removed', 'maint.']].map(([p, t]) => `<div class="tb" data-a="wlproc:to:${p}">${t}</div>`).join(''))}`}
+      <div style="height:4px"></div>
+      ${gr(2, `<div class="tb ${S.solo ? 'on' : ''}" data-a="wlsolo">${['solo · off', 'solo · frame', 'solo · breaker'][S.solo]}</div><div class="tb ${S.etuOpen ? 'on' : ''}" data-a="wletu">${S.etuOpen ? 'close' : 'open'} trip unit</div>`)}
+    </div>`;
+  };
+
   // ------------------------------------------------------------ the 3WL maintenance teardown, OI chapter 23
   const maintRow = (S, f) => {
     const n = Math.round((S.wlx || 0) * NMAINT);
@@ -439,9 +457,7 @@ export function createConsole(app, act) {
     let grid = '';
     for (const k of [1, 10]) grid += `<line x1="${X(k)}" x2="${X(k)}" y1="0" y2="${Hd}" stroke="${C.line}"/><text x="${X(k) + 2}" y="${Hd - 3}" font-size="7" fill="${C.mute}">${k}× In</text>`;
     for (const t of [0.1, 1, 10, 100, 1000]) grid += `<line x1="0" x2="${Wd}" y1="${Y(t)}" y2="${Y(t)}" stroke="${C.line}"/><text x="2" y="${Y(t) - 2}" font-size="7" fill="${C.mute}">${t} s</text>`;
-    const pos = f.modules.find((m) => m.kind === 'acb')?.pos || 'connected';
-    const C35 = o.wlCom === 'COM35' ? com35Data(o, pos) : null;
-    const ledc = (s) => (s === 'green' ? '#2fbf55' : s === 'flash' ? '#9fe3b0' : '#c9ccd0');
+    const C35 = o.wlCom === 'COM35';
     return `<div class="wl">
       <div class="hd" style="margin-bottom:4px"><span class="cp">${o.wlEtu.replace('D', '')} TRIP UNIT · SET ${P.set}</span><span class="cp mu">${P.Ig ? 'LSIG' : P.IN !== null ? 'LSIN' : P.Isd !== null ? 'LSI' : 'LI'}</span></div>
       ${steps}
@@ -449,12 +465,79 @@ export function createConsole(app, act) {
       <div class="mu" style="font-size:8.4px;margin-top:3px;line-height:11px">Switch positions from the 3WL1 manual (8-22…8-29), data points from the COM35 guide (Tab. 4-10). Curve: L as I²t through tR at 6 IR, S definite time.</div>
     </div>
     <div class="wl">
-      <div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">${C35 ? (C35.live ? 'BREAKER DATA LIVE' : 'NO BREAKER DATA') : 'NOT FITTED'}</span></div>
-      ${C35
-        ? `<div style="display:flex;gap:10px;margin:2px 0 5px">${['PN', 'TCP', 'CUB'].map((k) => `<span style="font-size:8.6px;font-weight:700;display:flex;align-items:center;gap:4px"><i style="width:8px;height:8px;border-radius:50%;background:${ledc(C35.leds[k])};display:block"></i>${k}</span>`).join('')}</div>
-          ${C35.rows.map(([k, v]) => `<div class="kv" style="font-size:9.4px;line-height:14px"><span class="mu">${k}</span><b>${v}</b></div>`).join('')}`
-        : '<div class="mu" style="font-size:9.4px">No COM35 at X7: the breaker has no PROFINET / Modbus TCP connection. X7 is a plain terminal block.</div>'}
+      ${C35 ? '<div data-k="com35"></div>' : '<div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">NOT FITTED</span></div><div class="mu" style="font-size:9.4px">No COM35 at X7: the breaker has no PROFINET / Modbus TCP connection. X7 is a plain terminal block.</div>'}
     </div>`;
+  };
+
+  // ------------------------------------------------------------ live 3WL readouts and the trip unit replica
+  const etuP = add(`<div class="pn" style="left:306px;top:84px;width:250px;height:678px;padding:8px 10px;display:none;z-index:4"></div>`);
+  etuP.innerHTML = `<div class="hd"><span class="cp">TRIP UNIT</span><span class="cp mu" data-k="etun"></span></div>
+    <canvas width="${ETU_W * 2}" height="${ETU_H * 2}" style="width:228px;height:570px;display:block;cursor:pointer;margin:0 auto"></canvas>
+    <div class="srow" style="margin-top:6px"><span class="lb">LOAD</span><div class="stp"><div class="tb" data-a="wlload:-0.1">−</div><span data-k="etuload"></span><div class="tb" data-a="wlload:0.1">+</div></div></div>
+    <div class="srow"><span class="lb">FAULT</span><div data-k="etuf"></div></div>
+    <div data-k="etus" class="mu" style="font-size:8.6px;line-height:11px;margin-top:3px"></div>`;
+  const etuC = etuP.querySelector('canvas');
+  let etuHits = [];
+  let etuFKey = '';
+  const etuXY = (e) => {
+    const r = etuC.getBoundingClientRect();
+    return [((e.clientX - r.left) / r.width) * ETU_W, ((e.clientY - r.top) / r.height) * ETU_H];
+  };
+  etuC.addEventListener('contextmenu', (e) => e.preventDefault());
+  etuC.addEventListener('pointerdown', (e) => {
+    e.stopPropagation();
+    const h = hitAt(etuHits, ...etuXY(e));
+    if (h) act('etuhit', `${h.id}:${e.button === 2 || e.shiftKey ? -1 : 1}`);
+  });
+  let wlT = 0;
+  const wlFrame = (S, ws) => {
+    const now = performance.now();
+    etuP.style.display = S.etuOpen && ws ? '' : 'none';
+    if (!ws) return;
+    if (S.etuOpen) {
+      const g = etuC.getContext('2d');
+      g.setTransform(2, 0, 0, 2, 0, 0);
+      etuHits = drawETU(g, ws, now);
+      const o = ws.o;
+      etuP.querySelector('[data-k=etun]').textContent = `${WL_ETU[o.wlEtu].name} · ${o.wlIn} A`;
+      const fk = o.wlEtu + o.wlGf + o.wlIn;
+      if (fk !== etuFKey) {
+        etuFKey = fk;
+        const fl = faults(o);
+        etuP.querySelector('[data-k=etuf]').innerHTML = gr(fl.length, fl.map((x) => `<div class="tb" data-a="wlfault:${x.kind}" title="${x.label} · ${Math.round(x.I)} A">${x.kind} ${x.kind === 'L' ? '1.5 IR' : x.kind === 'G' ? '1.5 Ig' : x.kind === 'S' ? '1.2 Isd' : '1.2 Ii'}</div>`).join(''));
+      }
+    }
+    if (now - wlT < 150) return;
+    wlT = now;
+    const c = currents(ws);
+    const p = ws.rack >= RACK.removed - 1 ? 'maintenance' : posAt(ws.rack);
+    const live = insp.querySelector('[data-k=wllive]');
+    if (live) {
+      const st = [
+        `<b>${ws.closed ? 'CLOSED' : 'OPEN'}</b>${ws.tripped ? ' · <b style="color:#d6182b">TRIPPED ' + (ws.cause || '') + '</b>' : ''} · spring <b>${ws.charged ? 'charged' : 'discharged'}</b> · READY <b>${!ws.closed && ws.charged && !ws.tripped ? 'OK' : '—'}</b>`,
+        `Position <b>${p.toUpperCase()}</b> · crank ${ws.turns.toFixed(1)} turns · travel ${Math.round(ws.rack)} mm`,
+        `<span style="color:${ws.proc ? '#16181b' : '#8b8f95'};font-weight:${ws.proc ? 700 : 500}">${ws.caption || 'Choose an operation, or click a button, the lever, the racking handle or RESET on the model'}</span>`,
+      ];
+      live.innerHTML = st.map((l) => `<div>${l}</div>`).join('');
+    }
+    const com = insp.querySelector('[data-k=com35]');
+    if (com) {
+      const pp = p === 'maintenance' ? 'removed' : p === 'between' ? 'removed' : p;
+      const C35 = com35Data(ws.o, pp);
+      const ledc = (s) => (s === 'green' ? '#2fbf55' : s === 'flash' ? (Math.floor(now / 400) % 2 ? '#2fbf55' : '#c9ccd0') : '#c9ccd0');
+      com.innerHTML = `<div class="hd" style="margin-bottom:4px"><span class="cp">COM35 · PROFINET / MODBUS</span><span class="cp mu">${C35.live ? 'BREAKER DATA LIVE' : 'NO BREAKER DATA'}</span></div>
+        <div style="display:flex;gap:10px;margin:2px 0 5px">${['PN', 'TCP', 'CUB'].map((k) => `<span style="font-size:8.6px;font-weight:700;display:flex;align-items:center;gap:4px"><i style="width:8px;height:8px;border-radius:50%;background:${ledc(C35.leds[k])};display:block"></i>${k}</span>`).join('')}</div>
+        ${C35.rows.map(([k, v]) => `<div class="kv" style="font-size:9.4px;line-height:14px"><span class="mu">${k}</span><b>${v}</b></div>`).join('')}`;
+    }
+    if (S.etuOpen) {
+      etuP.querySelector('[data-k=etuload]').textContent = `${Math.round(ws.load * 100)} % In · ${Math.round(Math.max(...c.I))} A`;
+      const f = ws.fault;
+      etuP.querySelector('[data-k=etus]').innerHTML = f
+        ? `<b style="color:#d6182b">${f.label}: ${Math.round(f.I)} A</b> · trips in ${Math.max(0, f.tTrip - f.t).toFixed(f.tTrip > 5 ? 0 : 2)} s${f.kind === 'L' ? ` (shown ${TIME_X}× faster)` : ''}`
+        : c.live
+        ? 'Keys, rotary and slide switches, TEST · QUERY · CLEAR and RESET work. Right-click a switch to turn it back. Inject a fault to trip the breaker.'
+        : 'Close the breaker in CONNECT to load it. The trip unit is powered from its CTs above Imin, or with 24 V via the COM35.';
+    }
   };
 
   // ------------------------------------------------------------ the hovered/pinned part card
@@ -488,6 +571,7 @@ export function createConsole(app, act) {
       stgName.title = nameText;
     }
     setCard(live.card);
+    wlFrame(S, live.wl);
     // callouts with leaders
     let html = '';
     let lines = '';
@@ -497,7 +581,7 @@ export function createConsole(app, act) {
       const a = c.alpha ?? 1;
       if (a <= 0.01 || !c.at || !(ax === ax)) continue;
       const left = lx < ax;
-      html += `<div class="call" style="left:${left ? lx - 4 : lx + 4}px;top:${ly - 10}px;opacity:${a};transform:translateX(${left ? '-100%' : '0'});text-align:${left ? 'right' : 'left'}"><b>${c.title}</b><span>${c.sub || ''}</span></div>`;
+      html += `<div class="call${c.proc ? ' proc' : ''}" style="left:${left ? lx - 4 : lx + 4}px;top:${ly - 10}px;opacity:${a};transform:translateX(${left ? '-100%' : '0'});text-align:${left ? 'right' : 'left'}"><b>${c.title}</b><span>${c.sub || ''}</span></div>`;
       lines += `<path d="M${ax} ${ay} L${lx} ${ly}" stroke="${C.ink}" stroke-width="0.8" fill="none" opacity="${a * 0.8}"/><circle cx="${ax}" cy="${ay}" r="2.4" fill="${C.red}" opacity="${a}"/>`;
     }
     calls.innerHTML = html;
@@ -532,5 +616,14 @@ export function createConsole(app, act) {
     const s = a.width / 1600;
     return [(r.left + r.width * k - a.left) / s, (r.top + 16 - a.top) / s];
   };
-  return {root: ui, refresh, frame, say, spot, trackSpot};
+  // a click zone on the trip unit replica, in stage px (the tour's cursor aims at it)
+  const etuSpot = (id) => {
+    const h = etuHits.find((x) => x.id === id);
+    if (!h) return null;
+    const r = etuC.getBoundingClientRect();
+    const a = app.getBoundingClientRect();
+    const s = a.width / 1600;
+    return [(r.left + ((h.x + h.w / 2) / ETU_W) * r.width - a.left) / s, (r.top + ((h.y + h.h / 2) / ETU_H) * r.height - a.top) / s];
+  };
+  return {root: ui, refresh, frame, say, spot, trackSpot, etuSpot};
 }

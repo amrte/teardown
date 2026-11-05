@@ -400,12 +400,13 @@ export const BUILD = {
       } else if (m.kind === 'acb') {
         const r = br.wl ? breakerWL(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out, br) : breaker(ctx, m, j, {x0: POST, x1: W - POST, ...b}, out);
         if (br.wl && r.com) com35Cables(ctx, r);
+        const wst = br.wl ? r.st : null;
         acbs.push({...r, b, j});
         // the 3WL door cut-out is 300 x 350 for every frame size (OI 21-1); the 3WA cut-out follows its front
         const cyc = br.wl ? r.cut.y - (b.y0 + h / 2) : r.yb + 8 + br.h / 2 - (b.y0 + h / 2);
-        buildDoor(ctx, {
+        const bdoor = buildDoor(ctx, {
           name: `Breaker door ${loc}`, module: j, x: 0, y: b.y0, w: W, h, lock: 'handle', dist: 1100,
-          open: () => (m.pos === 'removed' ? 1 : 0),
+          open: wst ? () => wst.door : () => (m.pos === 'removed' ? 1 : 0),
           cut: [br.wl ? [0, cyc, r.cut.w, r.cut.h] : [0, cyc, br.w + 10, br.h + 10]],
           lines: ['Door with cut-out for the breaker front', 'Racking with the door closed', br.wl ? 'Door sealing frame around the cut-out' : 'Door frame seal for IP54'],
           // the 3WL door sealing frame around the cut-out
@@ -417,6 +418,10 @@ export const BUILD = {
               }
             : null,
         });
+        if (wst) {
+          wst.targets.door = bdoor;
+          ctx.wlStates.push(wst);
+        }
       } else {
         // the louvred compartment: cable connection behind it
         buildDoor(ctx, {name: `Louvred door ${loc}`, module: j, x: 0, y: b.y0, w: W, h, lock: 'quarter', vent: [[0, h - 80]], dist: 1100, lines: ['Ventilated compartment', 'Cable connection behind it', 'Optional fans (forced ventilation)']});

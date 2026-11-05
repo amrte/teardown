@@ -63,6 +63,9 @@ Sources:
 | Maintenance sequence and torques: front panel 2 × PH2 at 2.5 Nm, arc chutes hex 4 at 8 Nm, main shaft retainer, racking shaft, CTs at 10 Nm, feet at 10 Nm, rear wall at 18/12 (FS III 25/18) Nm, fixed contacts at 10 Nm, pole assemblies | OI 23-3…23-26 |
 | Order-number positions 14/15 (releases) and 16 (auxiliary switches); class digit; ETU letter | OI 10-9, 10-10, 11-5 · COM Format 103 |
 | COM35 body, LEDs, ports, terminals, position detection, data points, DAS parameter set B | COM p.11–50 |
+| Operating sequences (`wl_sim.js`): OFF/ON, spring charging, racking with handle, control lever and crank, withdrawing onto the rails, re-inserting; refusals when an action is not allowed | OI 6-1…6-11, 17-1, 23-3 |
+| Trip unit front (`etu_display.js`): keys, rotary and slide switches, TEST / QUERY / CLEAR, the LED row and the trip-cause LEDs, RESET pin (BREAKER TRIPPED) | OI 8-1…8-29, 8-34 |
+| ETU76B / 45B display menus: operating screen, Metering, Diagnostic (trip log), View / Change Parameter, Identification | OI 8-40…8-60 |
 
 Not in the manuals:
 - the breaker's height and depth, and the FS III width;
@@ -70,4 +73,7 @@ Not in the manuals:
 - the order-number codes for position 12 (installation) and the ETU letter for ETU15B/25B/27B (shown as •);
 - the number of splitter plates.
 
-These are marked `[inferred]` in the code, and they only shape the geometry. The trip curve on screen is an L-S-I characteristic drawn from the settings (L as I²t through tR at 6 × IR, S as definite time).
+- the timing of the animations, and the overload acceleration (× 20) used so that an L trip happens within seconds;
+- the exact wording and layout of the display menu pages, which follow the manual's menu tree but are condensed.
+
+These are marked `[inferred]` in the code; apart from the last two, they only shape the geometry. The trip curve on screen is an L-S-I characteristic drawn from the settings (L as I²t through tR at 6 × IR, S as definite time).

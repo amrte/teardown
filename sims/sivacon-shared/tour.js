@@ -23,11 +23,26 @@ export const TOUR = [
   {t: 30.4, at: '[data-a="modpos:connected"]', do: (act) => act('modpos', 'connected')},
   {t: 32.2, at: '[data-a="fieldadd:1"]', do: (act) => act('fieldadd', '1')},
   {t: 34.0, at: '[data-a="type:fc"]', do: (act) => act('type', 'fc')},
-  // the infeed becomes a 3WL with a COM35, is drawn out of its guide frame and comes apart
+  // the infeed becomes a 3WL with a COM35: solo, its trip unit menu, a short circuit, QUERY and RESET, racking to TEST
+  // with the handle and the crank, the maintenance teardown and back
   {t: 36.0, at: '[data-a="field:0"]', do: (act) => act('field', '0')},
   {t: 37.4, at: '[data-a="opt:acb:3WL12"]', do: (act) => act('opt', 'acb:3WL12')},
-  {t: 39.4, at: '[data-a="wlstep:all"]', do: (act) => act('wlstep', 'all')},
-  {t: 51.0, at: '[data-a="wlstep:0"]', do: (act) => act('wlstep', '0')},
-  {t: 54.0, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
+  {t: 39.0, at: '[data-a="wlsolo"]', do: (act) => act('wlsolo', '1')},
+  {t: 40.6, at: '[data-a="wletu"]', do: (act) => act('wletu')},
+  {t: 42.2, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
+  {t: 43.4, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
+  {t: 44.6, at: (ui) => ui.etuSpot('enter'), do: (act) => act('etuhit', 'enter:1')},
+  {t: 46.6, at: (ui) => ui.etuSpot('esc'), do: (act) => act('etuhit', 'esc:1')},
+  {t: 47.6, at: (ui) => ui.etuSpot('esc'), do: (act) => act('etuhit', 'esc:1')},
+  {t: 48.6, at: (ui) => ui.etuSpot('esc'), do: (act) => act('etuhit', 'esc:1')},
+  {t: 49.8, at: '[data-a="wlfault:S"]', do: (act) => act('wlfault', 'S')},
+  {t: 52.0, at: (ui) => ui.etuSpot('query'), do: (act) => act('etuhit', 'query:1')},
+  {t: 54.0, at: '[data-a="wlproc:reset"]', do: (act) => act('wlproc', 'reset')},
+  {t: 57.4, at: '[data-a="wletu"]', do: (act) => act('wletu')},
+  {t: 58.6, at: '[data-a="wlproc:to:test"]', do: (act) => act('wlproc', 'to:test')},
+  {t: 71.0, at: '[data-a="wlstep:all"]', do: (act) => act('wlstep', 'all')},
+  {t: 84.0, at: '[data-a="wlstep:0"]', do: (act) => act('wlstep', '0')},
+  {t: 87.0, at: '[data-a="wlsolo"]', do: (act) => act('wlsolo', '0')},
+  {t: 88.6, at: '[data-a="layer:enclosure"]', do: (act) => act('layer', 'enclosure')},
 ];
-export const TOUR_LEN = 58;
+export const TOUR_LEN = 93;

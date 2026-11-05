@@ -50,6 +50,7 @@ export function createRegistry() {
       hinge: o.hinge || null,
       open: o.open || null,
       draw: o.draw || null,
+      action: o.action || null,
       // an exploded view of the device itself (the 3WL's own teardown): offset [x, y, z] mm and its start 0..0.5
       fly: o.fly ? new THREE.Vector3(...o.fly) : null,
       flyAt: o.flyAt ?? 0,

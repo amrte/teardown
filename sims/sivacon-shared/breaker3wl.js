@@ -25,13 +25,13 @@ import * as THREE from 'three';
 import {DOOR_T} from './catalog.js';
 import {bx, cy, label, mk, part} from './cabinet.js';
 import {cableGeo, faceTex, plateGeo} from './parts.js';
-import {activeSettings, com35Data, hasG, igA, orderNo, PANEL, POSITION, settingsFor as settingsOf, WL_CLASS, WL_ETU, WL_SIZES} from './wl.js';
+import {activeSettings, com35Data, hasG, igA, orderNo, PANEL, POSITION, WL_CLASS, WL_ETU, WL_SIZES} from './wl.js';
+import {posAt, wlState} from './wl_sim.js';
+import {drawETU, ETU_H, ETU_W} from './etu_display.js';
 
 // mm [inferred]; 'removed' is the breaker lifted off the rails onto the bench in front of the field (OI 23-4)
-const TRAVEL = {connected: 0, test: 60, disconnected: 115, removed: 1000};
 const CHUTE = 60; // arc chute height above the body [inferred]
 const FOOT = 28; // feet under the body [inferred]
-const posOf = (m) => m.pos || 'connected';
 
 // ------------------------------------------------------------ textures
 const texCache = new Map();
@@ -69,126 +69,6 @@ const knob = (g, cx, cy, r, frac) => {
   g.lineTo(cx + Math.cos(a) * r * 0.6, cy + Math.sin(a) * r * 0.6);
   g.stroke();
 };
-
-/** the trip unit's front after OI 8-3…8-17: tall slate panel, live settings */
-function etuTex(o, S) {
-  const E = WL_ETU[o.wlEtu];
-  const P = activeSettings(o);
-  const key = JSON.stringify(['etu2', o.wlEtu, o.wlGf, o.wlIn, o.acb, P, S.map((s) => o[s.key])]);
-  return cachedTex(key, 240, 600, (g, W, H) => {
-    g.fillStyle = '#3d4a56';
-    g.fillRect(0, 0, W, H);
-    // top strip: BREAKER TRIPPED, the reset pin, the optional safety lock
-    rrect(g, 10, 10, W - 20, 58, 4, '#33404b');
-    txt(g, 'BREAKER TRIPPED', 18, 24, 12, '#e8eef2', 700);
-    g.fillStyle = '#c9d1d6';
-    g.beginPath();
-    g.arc(36, 48, 10, 0, Math.PI * 2);
-    g.fill();
-    txt(g, 'RESET', 54, 48, 11, '#e8eef2', 700);
-    g.fillStyle = '#1b2126';
-    g.beginPath();
-    g.arc(W - 36, 42, 15, 0, Math.PI * 2);
-    g.fill();
-    // type name and the LED row
-    txt(g, E.name.replace(' with display', ''), W - 14, 92, 22, '#e8eef2', 800, 'right');
-    txt(g, 'Release 2', W - 14, 110, 9, '#c9d1d6', 600, 'right');
-    const leds = E.face === 'graphic' ? ['ACTIVE', 'ALARM', 'COMM.', 'EXTEND.', 'TRIP L', 'TRIP N', 'TRIP S', 'TRIP I'] : E.display || o.wlEtu === '45B' ? ['ACTIVE', 'ALARM', 'COMM.', 'EXTEND.'] : ['ACTIVE', 'ALARM'];
-    leds.forEach((s, i) => {
-      g.fillStyle = i === 0 ? '#7fe39a' : '#5a6670';
-      g.fillRect(16 + i * 26, 150, 10, 8);
-      g.save();
-      g.translate(20 + i * 26, 144);
-      g.rotate(-Math.PI / 4);
-      txt(g, s, 0, 0, 8, '#c9d1d6', 600);
-      g.restore();
-    });
-    const dispY = 172;
-    if (E.face === 'graphic') {
-      rrect(g, 30, dispY, W - 60, 150, 3, '#b9e3d8');
-      txt(g, `Set ${P.set}${P.set === 'B' ? ' · DAS' : ''}`, 40, dispY + 16, 12, '#16303a', 700);
-      const rows = [
-        ['IR', `${Math.round(P.Ir * o.wlIn)} A`],
-        ['tR', `${P.tR} s`],
-        ['Isd', P.Isd !== null ? `${Math.round(P.Isd * o.wlIn)} A` : '—'],
-        ['tsd', P.tsd !== null ? `${P.tsd} s` : 'OFF'],
-        ['Ii', P.Ii !== null ? `${Math.round(P.Ii * o.wlIn)} A` : 'OFF'],
-      ];
-      if (P.Ig) rows.push(['Ig', `${P.Ig} A`]);
-      rows.forEach(([k, v], i) => {
-        txt(g, k, 40, dispY + 38 + i * 19, 12, '#16303a', 600);
-        txt(g, v, W - 40, dispY + 38 + i * 19, 13, '#16303a', 700, 'right');
-      });
-      // rating plug, T.U. ERROR, keys ▲ ▼ ESC ENTER
-      rrect(g, 18, 340, 120, 34, 3, '#9aa3aa');
-      txt(g, `In = ${o.wlIn} A`, 78, 357, 13, '#16181b', 700, 'center');
-      rrect(g, 146, 340, 30, 34, 2, '#5a6670');
-      txt(g, 'T.U.', 161, 351, 8, '#e8eef2', 700, 'center');
-      for (const [k, x, y] of [['▲', 196, 338], ['▼', 196, 376], ['ESC', 60, 398], ['ENTER', 120, 398]]) {
-        rrect(g, x - 20, y - 14, k.length > 1 ? 46 : 34, 28, 4, '#9aa3aa');
-        txt(g, k, x - 20 + (k.length > 1 ? 23 : 17), y, 11, '#16181b', 700, 'center');
-      }
-    } else {
-      if (E.display) {
-        rrect(g, 30, dispY - 4, W - 60, 60, 3, '#b9e3d8');
-        txt(g, `I1 ${Math.round(o.wlIn * 0.62)} A`, 40, dispY + 12, 12, '#16303a', 700);
-        txt(g, `I2 ${Math.round(o.wlIn * 0.6)} A`, 40, dispY + 30, 12, '#16303a', 700);
-        txt(g, '▲               ▼', W / 2, dispY + 72, 12, '#e8eef2', 700, 'center');
-      }
-      // rating plug and T.U. ERROR
-      rrect(g, 18, 270, 120, 34, 3, '#9aa3aa');
-      txt(g, `In = ${o.wlIn} A`, 78, 287, 13, '#16181b', 700, 'center');
-      rrect(g, 146, 270, 30, 34, 2, '#5a6670');
-      txt(g, 'T.U.', 161, 281, 8, '#e8eef2', 700, 'center');
-      // the rotary coding switches: L S I on the left, the delays on the right (OI 8-12)
-      const pos = (k) => {
-        const s = S.find((x) => x.key === k);
-        return s ? Math.max(0, s.steps.indexOf(o[k])) / Math.max(1, s.steps.length - 1) : null;
-      };
-      const rows = [['L', 'wlIr', 'wltR'], ['S', 'wlIsd', 'wltsd'], ['I', 'wlIi', null]];
-      rows.forEach(([n, a, b], i) => {
-        const y = 340 + i * 62;
-        txt(g, n, 16, y, 14, '#e8eef2', 800);
-        const pa = pos(a);
-        if (pa !== null) knob(g, 56, y, 22, pa);
-        else {
-          rrect(g, 34, y - 14, 70, 28, 3, '#33404b');
-          txt(g, n === 'I' ? '≥ 20 × In' : 'fix', 69, y, 9, '#c9d1d6', 700, 'center');
-        }
-        const pb = b ? pos(b) : null;
-        if (pb !== null) knob(g, 186, y, 22, pb);
-        else if (b === 'wltR') {
-          rrect(g, 150, y - 14, 74, 28, 3, '#33404b');
-          txt(g, 'tR = 10 s', 187, y, 9, '#c9d1d6', 700, 'center');
-        }
-      });
-      // trip-cause LEDs
-      ['L', 'N', 'S', 'I'].forEach((s, i) => {
-        g.fillStyle = '#5a6670';
-        g.beginPath();
-        g.arc(110 + (i % 2) * 18, 350 + Math.floor(i / 2) * 24, 5, 0, Math.PI * 2);
-        g.fill();
-      });
-    }
-    // the ground-fault module zone (GFM AT 45B / 55B-76B) or the ETU27B G switch
-    if (hasG(o)) {
-      rrect(g, 14, 470, W - 28, 64, 3, '#33404b');
-      txt(g, o.wlEtu === '27B' ? 'G' : E.face === 'graphic' ? 'GFM AT 55B-76B' : 'GFM AT 45B', 22, 484, 10, '#e8eef2', 700);
-      knob(g, 46, 512, 16, ['A', 'B', 'C', 'D', 'E'].indexOf(o.wlIg) / 4);
-      knob(g, W - 46, 512, 16, [0.1, 0.2, 0.3, 0.4, 0.5].indexOf(o.wltg) / 4);
-      txt(g, `Ig ${o.wlIg} = ${igA(o, o.wlIg)} A`, W / 2, 512, 10, '#e8eef2', 700, 'center');
-    }
-    // TEST · QUERY · CLEAR and the test connector
-    ['TEST', 'QUERY', 'CLEAR'].forEach((s, i) => {
-      g.fillStyle = '#e4e5e2';
-      g.beginPath();
-      g.arc(46 + i * 74, 556, 13, 0, Math.PI * 2);
-      g.fill();
-      txt(g, s, 46 + i * 74, 576, 8, '#e8eef2', 700, 'center');
-    });
-    rrect(g, 40, 584, W - 80, 12, 2, '#9aa3aa');
-  });
-}
 
 /** the front panel print: indicator field, type label column, racking pictogram */
 function panelTex(o, fixed) {
@@ -245,7 +125,7 @@ const posInd = (p) =>
     g.fillRect(0, 0, W, H);
     const rows = [['CONNECT', '#d6182b'], ['TEST', '#2f6fc2'], ['DISCON', '#2e9d4a']];
     rows.forEach(([t, c], i) => {
-      const on = POSITION[p].ind === t;
+      const on = POSITION[p]?.ind === t;
       g.fillStyle = on ? c : '#2c2f33';
       g.fillRect(4, 4 + i * 40, W - 8, 34);
       txt(g, t, W / 2, 21 + i * 40, 11, on ? '#fff' : '#7d858c', 700, 'center');
@@ -317,7 +197,10 @@ export function breakerWL(ctx, m, j, box, out, B) {
   const h = box.y1 - box.y0;
   const cx = (box.x0 + box.x1) / 2;
   const fixed = o.wlMount === 'fixed';
-  const pos = () => (fixed ? 'connected' : posOf(m));
+  // the machine state (wl_sim.js): where the breaker is, contacts, spring, handle, crank; kept across rebuilds
+  const st = wlState(`${f.tag}:${j}`, m, o);
+  if (fixed) st.rack = 0;
+  const pos = () => (fixed ? 'connected' : posAt(st.rack));
   const np = o.wlPoles;
   const w = B.w;
   const bh = B.h;
@@ -352,7 +235,7 @@ export function breakerWL(ctx, m, j, box, out, B) {
       sw.castShadow = true;
       // the telescopic guide rail: the outer rail fixed, the inner rail runs out to the maintenance position
       bx(gf, 10, 28, gd - 30, M.zinc, sx * (gw / 2 - 12), 22, 0);
-      const rail = part(ctx, {parent: gf, sub: true, name: `Guide rail ${sx < 0 ? 'left' : 'right'}`, layer: 'unit', stage: 'devices', module: j, at: [sx * (gw / 2 - 20), 22, 0], draw: () => (pos() === 'removed' ? 380 : 0), lines: ['Telescopic guide rail (OI 1-2 item 12)', 'Pulled out to the maintenance position', 'Rated-current coding bolts M5 × 12 (OI 17-7)']});
+      const rail = part(ctx, {parent: gf, sub: true, name: `Guide rail ${sx < 0 ? 'left' : 'right'}`, layer: 'unit', stage: 'devices', module: j, at: [sx * (gw / 2 - 20), 22, 0], draw: () => st.rails * 380, lines: ['Telescopic guide rail (OI 1-2 item 12)', 'Pulled out to the maintenance position', 'Rated-current coding bolts M5 × 12 (OI 17-7)']});
       bx(rail, 7, 20, gd - 40, M.bolt, 0, 0, 0);
       for (const yy of [6, -6]) cy(rail, 3, 6, M.black, 0, yy, gd / 2 - 40, {rz: Math.PI / 2, seg: 8});
       for (const zz of [-gd / 2 + 60, gd / 2 - 60]) hw.screw(gf, [sx * gw / 2, 40, zz], [sx, 0, 0], 6, 'Guide frame');
@@ -377,7 +260,7 @@ export function breakerWL(ctx, m, j, box, out, B) {
     for (const sx of [-1, 1]) for (const sy of [-1, 1]) bx(gf, 18, 30, 14, M.black, sx * (w * 0.3), FOOT + bh / 2 + sy * bh * 0.05, -gd / 2 + 60);
     // the shutter closes as soon as the breaker reaches TEST (OI 17-1)
     ctx.ticks.push(() => {
-      const shut = pos() !== 'connected';
+      const shut = st.rack > 40;
       straps.forEach(([sp, yy], k) => (sp.position.y = shut ? yy : yy + (k ? -46 : 46)));
     });
     // the disconnecting contacts behind the windows
@@ -446,12 +329,12 @@ export function breakerWL(ctx, m, j, box, out, B) {
       return pl;
     });
     ctx.ticks.push(() => {
-      const d = com35Data(o, pos()).leds;
+      const d = com35Data(o, pos() === 'between' ? 'removed' : pos()).leds;
       const on = Math.floor(performance.now() / 400) % 2 === 0;
       leds[0].material = led(d.PN === 'green' ? '#2fbf55' : '#2a2c30');
       leds[1].material = led(d.TCP === 'green' ? '#2fbf55' : '#2a2c30');
       leds[2].material = led(d.CUB === 'green' || (d.CUB === 'flash' && on) ? '#2fbf55' : '#2a2c30');
-      const s = POSITION[pos()].s; // S46 S47 S48
+      const s = (POSITION[pos()] || {s: [0, 0, 0]}).s; // S46 S47 S48 · between positions none is operated (COM p.30)
       [s[2], s[1], s[0]].forEach((v, k) => {
         plungers[k].position.y = v ? -37 : -41;
         plungers[k].material = v ? M.green : M.bolt;
@@ -465,10 +348,12 @@ export function breakerWL(ctx, m, j, box, out, B) {
     layer: 'unit', stage: 'units', module: j,
     at: [cx, yb + FOOT + bh / 2, zf - bd / 2],
     dir: [0, 0.05, 1], dist: 1100,
-    draw: fixed ? null : () => TRAVEL[pos()],
+    draw: fixed ? null : () => st.rack,
     lines: [`SENTRON ${o.acb} · frame size ${['I', 'II', 'III'][S.size - 1]} · ${np}-pole · ${S.kg[np === 4 ? 1 : 0]} kg (OI 4-2)`, `In ${o.wlIn} A · ${WL_CLASS[o.wlClass].name} · Icu ${S.icu[o.wlClass]} kA`, `${E.name}${hasG(o) ? ' + G' : ''} · ${o.wlMech === 'motor' ? 'motor operator' : 'manual'} · Y1 ${o.wlRel}`, `Position: %POS%`],
   });
   g.userData.part.posOf = pos;
+  g.userData.part.wl = 'breaker';
+  gf.userData.part.wl = 'frame';
   const sub = (name, at, lines, opts = {}, parent = g) => part(ctx, {parent, sub: true, name, layer: 'unit', stage: 'units', module: j, at, lines, ...opts});
   const zN = bd / 2 - 130; // the full-width housing begins here; the 296 x 346 nose in front of it carries the panel
   // the panel bottom sits PANEL.bottom above the mounting surface (the guide-frame floor)
@@ -545,28 +430,48 @@ export function breakerWL(ctx, m, j, box, out, B) {
     const mf = sub('Metering function PLUS', [U(0.15), V(0.4), zM - 20], ['Plugged onto the back of the ETU (OI 8-92)', 'U, P, Q, S, PF, f, THD · I ±1 %', 'Extended protection: voltage, frequency, power']);
     bx(mf, 70, 90, 24, M.devLight, 0, 0, 0);
   }
-  // the spring charging lever between the centre and the right column; it swings down for the panel to come off
-  const lev = sub('Spring charging lever', [U(0.71), V(0.19), bd / 2 + 10], ['9 full strokes down to the stop (OI 6-4)', 'Padlockable, Ø8 shackle (OI 14-26)', 'Swung down before the front panel comes off (OI 23-11)']);
-  const levBar = bx(lev, 30, PH * 0.52, 18, M.black, 0, -PH * 0.26, 0, 0, {keep: true});
+  // the spring charging lever between the centre and the right column: pumped 9 times to charge (OI 6-4), swung down
+  // for the front panel to come off (OI 23-11)
+  const lev = sub('Spring charging lever', [U(0.71), V(0.19), bd / 2 + 10], ['9 full strokes down to the stop (OI 6-4)', 'Padlockable, Ø8 shackle (OI 14-26)', 'Click to charge the spring'], {action: 'charge'});
+  bx(lev, 30, PH * 0.52, 18, M.black, 0, -PH * 0.26, 0, 0, {keep: true});
   bx(lev, 24, 22, 26, M.devDark, 0, -PH * 0.5, 6);
   ctx.ticks.push((TS) => {
-    const k = smooth(step(TS) - 1.6);
-    lev.rotation.x = k * 1.25;
-    levBar.visible = true;
+    lev.rotation.x = smooth(step(TS) - 1.6) * 1.25 + st.lever * 0.95;
   });
 
-  // ---------------------------------------------------------------- the trip unit (stays on the breaker)
-  const sets = settingsOf(o);
-  const etu = sub(`Overcurrent release ${E.name}`, [U(0.155), V(0.445), bd / 2 - 12], [`${E.name}${hasG(o) ? ' + ground-fault protection' : ''} · type ${(hasG(o) ? E.codeG : E.code) ?? '—'} (COM Format 412)`, `IR ${Math.round(set.Ir * o.wlIn)} A · ${set.Isd !== null ? `Isd ${Math.round(set.Isd * o.wlIn)} A · ` : ''}${set.Ii !== null ? `Ii ${Math.round(set.Ii * o.wlIn)} A` : 'Ii OFF'}`, 'Fixed with PH3 screws · 5 Nm (OI 8-71)']);
+  // ---------------------------------------------------------------- the trip unit (stays on the breaker), drawn live
+  const etu = sub(`Overcurrent release ${E.name}`, [U(0.155), V(0.445), bd / 2 - 12], [`${E.name}${hasG(o) ? ' + ground-fault protection' : ''} · type ${(hasG(o) ? E.codeG : E.code) ?? '—'} (COM Format 412)`, `IR ${Math.round(set.Ir * o.wlIn)} A · ${set.Isd !== null ? `Isd ${Math.round(set.Isd * o.wlIn)} A · ` : ''}${set.Ii !== null ? `Ii ${Math.round(set.Ii * o.wlIn)} A` : 'Ii OFF'}`, 'Click its keys, switches, TEST / QUERY / CLEAR, RESET']);
   bx(etu, 84, PH * 0.55, 40, M.devDark, 0, 0, 0);
-  const ef = new THREE.Mesh(new THREE.PlaneGeometry(82, PH * 0.55 - 2), new THREE.MeshStandardMaterial({map: etuTex(o, sets), roughness: 0.5}));
+  const etuCanvas = document.createElement('canvas');
+  etuCanvas.width = ETU_W * 2;
+  etuCanvas.height = ETU_H * 2;
+  const etuTexture = new THREE.CanvasTexture(etuCanvas);
+  etuTexture.colorSpace = THREE.SRGBColorSpace;
+  etuTexture.anisotropy = 4;
+  const ef = new THREE.Mesh(new THREE.PlaneGeometry(82, PH * 0.55 - 2), new THREE.MeshStandardMaterial({map: etuTexture, roughness: 0.5, emissive: '#ffffff', emissiveMap: etuTexture, emissiveIntensity: 0.12}));
   ef.position.set(0, 0, 20.8);
   ef.userData.keep = true;
+  ef.userData.etu = st;
   etu.add(ef);
-  const plug = sub(`Rating plug ${o.wlIn} A`, [-14, PH * 0.55 * 0.5 - PH * 0.55 * (E.face === 'graphic' ? 0.6 : 0.475), 22], [`In = ${o.wlIn} A · data point 377`, 'Exchange only in DISCON or with the ETU unpowered (OI 8-66)', `${o.acb}: ${S.size === 3 ? '1250–6300' : S.size === 2 ? '250–4000' : '250–2000'} A plugs`], {}, etu);
-  bx(plug, 46, 15, 6, M.devLight, 0, 0, 0);
-  // the BREAKER TRIPPED reset pin
-  cy(etu, 4.5, 8, M.accent, -24, PH * 0.55 * 0.5 - 20, 23, {rx: Math.PI / 2, seg: 10});
+  let etuDrawn = -1;
+  const redraw = (now) => {
+    const g2 = etuCanvas.getContext('2d');
+    g2.setTransform(2, 0, 0, 2, 0, 0);
+    ef.userData.hits = drawETU(g2, st, now);
+    etuTexture.needsUpdate = true;
+  };
+  redraw(0);
+  ctx.ticks.push(() => {
+    const now = performance.now();
+    if (now - etuDrawn > 220) {
+      etuDrawn = now;
+      redraw(now);
+    }
+  });
+  // the BREAKER TRIPPED reset pin pops out after a trip
+  const pinG = sub('BREAKER TRIPPED · RESET pin', [-41 + 36 * (82 / ETU_W), (PH * 0.55) / 2 - 48 * ((PH * 0.55) / ETU_H), 22], ['Pops out on an overcurrent trip (OI 6-7)', 'Press to reset the reclosing lockout (OI 6-8)'], {action: 'reset'}, etu);
+  const pin = cy(pinG, 4, 8, M.accent, 0, 0, 0, {rx: Math.PI / 2, seg: 10, keep: true});
+  ctx.ticks.push(() => (pin.position.z = (st.tripped ? 7 : 0) - st.resetPress * 4));
 
   // ---------------------------------------------------------------- the front panel (step 2: 2 × PH2, 2.5 Nm)
   const pan = sub('Front panel', [0, pcy, bd / 2 - 4], ['Moulded front panel, common to FS I–III', '2 × PH2 · refit 2.5 Nm (OI 23-11, 23-26)', 'Door cut-out 300 × 350 mm (OI 21-1)'], {flyStep: 2, fly: [0, 40, 380]});
@@ -581,41 +486,63 @@ export function breakerWL(ctx, m, j, box, out, B) {
   cy(pan, 19, 4, M.devLight, ...at(0.38, 0.11, 4), {rx: Math.PI / 2, seg: 24});
   cy(pan, 13, 4, M.devLight, ...at(0.59, 0.13, 4), {rx: Math.PI / 2, seg: 20});
   // CONTACTS · READY · SPRING windows (OI 6-6)
+  const winG = sub('Indicator windows CONTACTS · READY · SPRING', at(0.48, 0.36, 3.2), ['CONTACTS: O OPEN / I CLOSED', 'READY: OK when it can be closed', 'SPRING: CHARGED / DISCHARGED (OI 6-6)'], {}, pan);
   const wins = [['contacts', 0.385, 28], ['ready', 0.48, 14], ['spring', 0.585, 28]].map(([kind, u, ww]) => {
     const mm = new THREE.Mesh(new THREE.PlaneGeometry(ww, 15), stateMat(kind, 0));
-    mm.position.set(...at(u, 0.36, 3.2));
+    mm.position.set(U(u) - U(0.48), 0, 0);
     mm.userData.keep = true;
-    pan.add(mm);
+    winG.add(mm);
     return [kind, mm];
   });
-  // Mechanical OFF (O) and ON (I) buttons
-  for (const [u, t] of [[0.38, 'O'], [0.59, 'I']]) {
-    cy(pan, 15, 8, M.devDark, ...at(u, 0.44, 6), {rx: Math.PI / 2, seg: 24});
-    label(pan, t, 12, 12, ...at(u, 0.44, 10.3), {pw: 48, ph: 48, size: 40, bg: '#24262a', fg: '#ffffff'});
-  }
-  // the mechanical release of the racking handle, the position indicator, the racking handle in its drawer
+  // Mechanical OFF (O) and ON (I) buttons: click them
+  const btn = (u, t, name, action) => {
+    const g3 = sub(name, at(u, 0.44, 6), [name, action === 'open' ? 'Opens the main contacts' : 'Closes when READY shows OK', 'Click to operate'], {action}, pan);
+    const cap = cy(g3, 15, 8, M.devDark, 0, 0, 0, {rx: Math.PI / 2, seg: 24, keep: true});
+    const lb = label(g3, t, 12, 12, 0, 0, 4.3, {pw: 48, ph: 48, size: 40, bg: '#24262a', fg: '#ffffff'});
+    return [cap, lb];
+  };
+  const offB = btn(0.38, 'O', 'Mechanical OFF button', 'open');
+  const onB = btn(0.59, 'I', 'Mechanical ON button', 'close');
+  ctx.ticks.push(() => {
+    offB[0].position.z = -st.offPress * 5;
+    offB[1].position.z = 4.3 - st.offPress * 5;
+    onB[0].position.z = -st.onPress * 5;
+    onB[1].position.z = 4.3 - st.onPress * 5;
+  });
+  // the control lever (mechanical release of the racking handle), the position indicator, the racking handle
+  let rh = null;
+  let latch = null;
+  let piG = null;
   if (!fixed) {
-    bx(pan, 12, 18, 6, M.devDark, ...at(0.32, 0.65, 5));
-    const pi = new THREE.Mesh(new THREE.PlaneGeometry(14, 40), posInd(pos()));
-    pi.position.set(...at(0.32, 0.82, 3.2));
+    latch = sub('Control lever (racking handle release)', at(0.32, 0.65, 5), ['Lift and hold to release the racking handle (OI 6-3)', 'Mechanical release, option 19'], {}, pan);
+    const latchM = bx(latch, 12, 18, 6, M.devDark, 0, 0, 0, 0, {keep: true});
+    piG = sub('Position indicator', at(0.32, 0.82, 3.2), ['CONNECT red · TEST blue · DISCON green (OI 6-2)'], {}, pan);
+    const pi = new THREE.Mesh(new THREE.PlaneGeometry(14, 40), posInd('connected'));
     pi.userData.keep = true;
-    pan.add(pi);
-    ctx.ticks.push(() => (pi.material = posInd(pos())));
-    const rh = sub('Racking handle', [U(0.645), V(0.815) - pcy, 6], ['Stowed in its drawer; pull out only with the breaker OFF', 'Clockwise to the stop: DISCON → TEST → CONNECT (OI 6-3)', 'No movement during the first ~6 turns (OI 6-11)'], {}, pan);
-    bx(rh, PW * 0.49, 26, 8, M.devDark, 0, 0, 0);
-    for (const sx of [-1, 1]) cy(rh, 10, 8, M.black, sx * PW * 0.2, 0, 6, {rx: Math.PI / 2, seg: 14});
+    piG.add(pi);
+    rh = sub('Racking handle', [U(0.645), V(0.815) - pcy, 6], ['Pull out only with the breaker OFF (OI 6-11)', 'Clockwise: DISCON → TEST → CONNECT; first ~6 turns no movement', 'Click: rack to the next position'], {action: 'rackNext'}, pan);
+    const crankG = new THREE.Group();
+    rh.add(crankG);
+    bx(crankG, PW * 0.49, 26, 8, M.devDark, 0, 0, 0, 0, {keep: true});
+    for (const sx of [-1, 1]) cy(crankG, 10, 8, M.black, sx * PW * 0.2, 0, 6, {rx: Math.PI / 2, seg: 14, keep: true});
+    cy(crankG, 6, 40, M.bolt, -PW * 0.2, 0, -20, {rx: Math.PI / 2, seg: 10, keep: true});
+    ctx.ticks.push(() => {
+      latchM.position.y = st.latch * 7;
+      pi.material = posInd(posAt(st.rack) === 'removed' ? 'disconnected' : posAt(st.rack));
+      // pulled out of its drawer the handle becomes a crank on the racking shaft: it turns with the crank count
+      crankG.position.z = st.handle * 70;
+      crankG.position.x = st.handle * PW * 0.2;
+      crankG.rotation.z = st.handle > 0.95 ? -st.turns * Math.PI * 2 : 0;
+    });
   }
   // the operations counter window (with motor) in the right column
   if (o.wlMech === 'motor') bx(pan, 20, 10, 2, M.black, ...at(0.835, 0.67, 3));
   for (const [u, v] of [[0.02, 0.55], [0.98, 0.55]]) hw.screw(pan, at(u, v, 2.4), [0, 0, 1], 6, 'Front panel PH2 · 2.5 Nm (OI 23-26)');
-  // the indicator windows follow the state: closed in CONNECTED; springs charged with a motor; discharged after the
-  // preparation step (OFF · ON · OFF)
-  ctx.ticks.push((TS) => {
-    const v = step(TS);
-    const closed = pos() === 'connected' && v < 0.5;
-    const charged = v < 0.5 && (o.wlMech === 'motor' || !closed);
-    for (const [kind, mm] of wins) mm.material = stateMat(kind, kind === 'contacts' ? closed : kind === 'ready' ? !closed && charged : charged);
+  // the windows follow the simulation
+  ctx.ticks.push(() => {
+    for (const [kind, mm] of wins) mm.material = stateMat(kind, kind === 'contacts' ? st.closed : kind === 'ready' ? !st.closed && st.charged && !st.tripped : st.charged);
   });
+  st.targets = {off: offB[0].parent, on: onB[0].parent, lever: lev, handle: rh, crank: rh, latch, indicator: piG, windows: winG, reset: pinG, etu, breaker: g, handles: g};
 
   // ---------------------------------------------------------------- arc chutes, one per pole (step 3: hex 4, 8 Nm)
   poleX.forEach((px, p) => {
@@ -692,7 +619,7 @@ export function breakerWL(ctx, m, j, box, out, B) {
 
   out.push({j, y: yb + 40, h: 120, amps: o.wlIn, label: m.label, loc, acb: true});
   const cutBottom = yb + PANEL.bottom;
-  return {yb, gd, br: B, zTerm: gz - gd / 2 - 10, px: phaseX, com, gf, gh, gz, rw, rx: rx(1), cut: {y: cutBottom + PANEL.cutH / 2, w: PANEL.cutW, h: PANEL.cutH}};
+  return {st, yb, gd, br: B, zTerm: gz - gd / 2 - 10, px: phaseX, com, gf, gh, gz, rw, rx: rx(1), cut: {y: cutBottom + PANEL.cutH / 2, w: PANEL.cutW, h: PANEL.cutH}};
 }
 
 // the cut-out mask for the panel print: transparent where the ETU and the lever pass through

@@ -74,6 +74,7 @@ export function buildBoard(cfg, R) {
   const reg = createRegistry();
   const hw = createHardware(M);
   const ticks = [];
+  const wlStates = [];
   const fields = [];
   const H = cfg.height;
   const B = cfg.base;
@@ -86,7 +87,7 @@ export function buildBoard(cfg, R) {
     g.position.x = R.side + R.xs[i];
     root.add(g);
     const ctx = {
-      cfg, R, M, hw, reg, ticks, f, T, i, g,
+      cfg, R, M, hw, reg, ticks, wlStates, f, T, i, g,
       W: f.width, D, H, B, y0: B, yt: B + H,
       yDb: B + FOOT, yDt: B + FOOT + devHeight(H),
       dev: Math.min(f.width, T.dev(f.width) + (T.dev(f.width) < f.width ? 0 : 0)),
@@ -133,7 +134,38 @@ export function buildBoard(cfg, R) {
       });
     }
     for (const m of Object.values(hw.meshes)) m.visible = layers.hardware !== false;
+    applySolo();
     dirty = true;
+  };
+  // solo: only the selected field's 3WL, with its guide frame (1) or the breaker alone (2)
+  let solo = {field: -1, mode: 0};
+  const applySolo = () => {
+    if (!solo.mode) return;
+    for (const r of reg.parts) {
+      if (r.sub) continue;
+      r.g.visible = r.field === solo.field && (r.wl === 'breaker' || (solo.mode === 1 && r.wl === 'frame'));
+    }
+  };
+  const setSolo = (field, mode) => {
+    solo = {field, mode};
+    if (mode) applySolo();
+    else setLayers(layers);
+    dirty = true;
+  };
+  const wp2 = new THREE.Vector3();
+  /** world position of a field's 3WL breaker, or null */
+  const wlCenter = (field) => {
+    const r = reg.parts.find((p) => p.field === field && p.wl === 'breaker');
+    if (!r) return null;
+    return r.g.getWorldPosition(wp2).clone();
+  };
+  /** the box around the part a procedure step asks the operator to use */
+  const targetBox = (st) => {
+    const t = st?.target && st.targets?.[st.target];
+    if (!t) return null;
+    const b = new THREE.Box3();
+    for (const g of [].concat(t)) if (g) b.expandByObject(g);
+    return b.isEmpty() ? null : b;
   };
 
   // ------------------------------------------------------------ pose
@@ -219,7 +251,11 @@ export function buildBoard(cfg, R) {
       if (!r) continue;
       box3.setFromObject(r.g);
       const lines = r.lines.map((l) => l.replace('%POS%', posText(r)));
-      return {info: {title: r.name, lines, where: `${r.tag}${r.module >= 0 ? ' · module ' + (r.module + 1) : ''}`}, box: box3.clone(), field: r.field, module: r.module};
+      // an operable part names its action; the ETU face reports where on its drawing the ray hit
+      let action = null;
+      for (let p = o; p && p !== root && !action; p = p.parent) action = p.userData.part?.action || null;
+      const etu = o.userData.etu && h.uv ? {st: o.userData.etu, hits: o.userData.hits, x: h.uv.x * 240, y: (1 - h.uv.y) * 600} : null;
+      return {info: {title: r.name, lines, where: `${r.tag}${r.module >= 0 ? ' · module ' + (r.module + 1) : ''}`}, box: box3.clone(), field: r.field, module: r.module, action, etu};
     }
     return null;
   };
@@ -227,6 +263,7 @@ export function buildBoard(cfg, R) {
   // ------------------------------------------------------------ callouts
   const wp = new THREE.Vector3();
   const callouts = (S, project) => {
+    if (solo.mode) return [];
     if (layers.labels === false) return [];
     const s = S.x * NSTAGE;
     const used = new Set();
@@ -297,5 +334,5 @@ export function buildBoard(cfg, R) {
     made.forEach((g) => g.dispose());
     hw.dispose();
   };
-  return {root, reg, hw, fields, pose, pick, setLayers, callouts, fieldCentre, fieldBox, bbox, dispose, M};
+  return {root, reg, hw, fields, pose, pick, setLayers, setSolo, wlCenter, targetBox, wlStates, callouts, fieldCentre, fieldBox, bbox, dispose, M};
 }

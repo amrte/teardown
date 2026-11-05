@@ -13,6 +13,7 @@ import {NSTAGE} from './registry.js';
 import {createStage} from './stage.js';
 import {TOUR, TOUR_LEN} from './tour.js';
 import {NMAINT, settingsFor} from './wl.js';
+import {etuKey, injectFault, noteChange, PROCS, posAt, RACK, resetStates, startProc, step as simStep, TURNS} from './wl_sim.js';
 
 const W = 1600;
 const H = 900;
@@ -73,6 +74,8 @@ export function runLive() {
     doors: 0,
     doorsT: 0,
     wlx: 0,
+    solo: 0, // 0 off · 1 the 3WL with its guide frame · 2 the breaker alone
+    etuOpen: false,
   };
   let R = layout(S.cfg);
   let board = null;
@@ -93,6 +96,10 @@ export function runLive() {
   const selBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineDashedMaterial({color: C.red, dashSize: 0.03, gapSize: 0.02, transparent: true, opacity: 0.55, depthTest: false}));
   selBox.renderOrder = 9;
   st.scene.add(selBox);
+  const procBox = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({color: '#e7c11e', transparent: true, opacity: 1, depthTest: false}));
+  procBox.renderOrder = 11;
+  procBox.visible = false;
+  st.scene.add(procBox);
 
   const rebuild = (keepCam = true) => {
     S.cfg = normalise(S.cfg);
@@ -108,11 +115,91 @@ export function runLive() {
     st.scene.add(board.root);
     st.fitShadow(board.bbox);
     board.setLayers(S.layers);
+    if (S.solo) board.setSolo(S.sel, S.solo);
     pinned = null;
     hover = null;
     ui.refresh(S, R);
     if (!AP.on) history.replaceState(null, '', '#' + enc(S.cfg));
     if (!keepCam) S.viewAt = T - 9;
+  };
+
+  // ------------------------------------------------------------ the 3WL as a machine (wl_sim.js)
+  const wlOf = (fi = S.sel) => {
+    const fd = S.cfg.fields[fi];
+    return fd && board ? board.wlStates.find((w) => w.key.startsWith(fd.tag + ':')) || null : null;
+  };
+  // the procedures that take the breaker from where it is to a target position
+  const planTo = (ws, target) => {
+    const removed = ws.rack >= RACK.removed - 1;
+    let cur = removed ? 'removed' : posAt(ws.rack);
+    const names = [];
+    if (cur === target) return names;
+    if (ws.closed) names.push('open');
+    if (cur === 'removed') {
+      names.push('insert');
+      cur = 'disconnected';
+    }
+    if (target === 'connected') names.push('rackIn');
+    else if (target === 'test') names.push('rackTest');
+    else if (target === 'disconnected') {
+      if (cur !== 'disconnected') names.push('rackOut');
+    } else if (target === 'removed') {
+      if (cur !== 'disconnected') names.push('rackOut');
+      names.push('withdraw');
+    }
+    return names;
+  };
+  const planFor = (ws, name) => {
+    if (name.startsWith('to:')) return planTo(ws, name.slice(3));
+    const p = ws.rack >= RACK.removed - 1 ? 'removed' : posAt(ws.rack);
+    return planTo(ws, {connected: 'test', test: 'disconnected', disconnected: 'connected', removed: 'disconnected', between: 'disconnected'}[p]);
+  };
+  const runPlan = (ws, names) => {
+    if (!names.length) return;
+    ws.queue = names.slice(1);
+    const why = startProc(ws, names[0]);
+    if (why) {
+      ws.queue = [];
+      ui.say(why);
+    }
+  };
+  const wlAction = (ws, name, fd) => {
+    if (!ws) return;
+    if (fd.opts.wlMount === 'fixed' && /^to:|rack|withdraw|insert/.test(name)) return ui.say('Fixed-mounted breaker: no racking');
+    // a new target while the breaker is moving: it follows once the running procedure ends
+    if (ws.proc && (name.startsWith('to:') || name === 'rackNext')) {
+      ws.queue = [];
+      ws.pendingTo = name;
+      return ui.say(`Next: ${name.startsWith('to:') ? 'rack to ' + name.slice(3) : 'next position'}, after ${ws.proc.label.toLowerCase()}`);
+    }
+    if (name.startsWith('to:') || name === 'rackNext') return runPlan(ws, planFor(ws, name));
+    if (name === 'reset' && !ws.tripped) {
+      ws.resetPress = 1;
+      setTimeout(() => (ws.resetPress = 0), 200);
+      return;
+    }
+    runPlan(ws, [name]);
+  };
+  // a press on the trip unit, from the replica or from the 3D model
+  const etuHit = (ws, id, dir, fd) => {
+    if (!ws || !id) return;
+    const o = fd.opts;
+    const setOpt = (k, v) => act('optset', `${k}:${v}`);
+    if (['up', 'down', 'esc', 'enter', 'test', 'query', 'clear'].includes(id)) return etuKey(ws, id, setOpt);
+    if (id === 'reset') return wlAction(ws, 'reset', fd);
+    if (id.startsWith('knob:')) {
+      const k = id.slice(5);
+      const s = settingsFor(o).find((x) => x.key === k);
+      if (!s) return;
+      const i = s.steps.map(String).indexOf(String(o[k]));
+      const v = s.steps[(i + dir + s.steps.length) % s.steps.length];
+      noteChange(ws, s.label, `${v}${s.unit ? ' ' + s.unit : ''}`, typeof v === 'number' && s.unit === '× In' ? `= ${Math.round(v * o.wlIn)} A` : '');
+      return setOpt(k, v);
+    }
+    if (id === 'slide:INon') return setOpt('wlIN', o.wlIN === 'OFF' ? 1 : 'OFF');
+    if (id === 'slide:INval') return o.wlIN !== 'OFF' && setOpt('wlIN', o.wlIN === 1 ? 0.5 : 1);
+    if (id === 'slide:mem') ws.etu.mem = ws.etu.mem === false;
+    if (id === 'slide:i4t') ws.etu.i4t = !ws.etu.i4t;
   };
 
   // ------------------------------------------------------------ actions: every button, the tour and the keys call this
@@ -160,6 +247,14 @@ export function runLive() {
         S.sel = Number(arg);
         S.mod = -1;
         S.wlx = 0;
+        if (S.solo) {
+          if (String(S.cfg.fields[S.sel].opts?.acb || '').startsWith('3WL')) board.setSolo(S.sel, S.solo);
+          else {
+            S.solo = 0;
+            board.setSolo(S.sel, 0);
+            S.view = 'field';
+          }
+        }
         if (S.view === 'field') S.viewAt = T;
         ui.refresh(S, R);
         break;
@@ -245,11 +340,70 @@ export function runLive() {
         S.wlx = t / NMAINT;
         const fixed = f.opts.wlMount === 'fixed';
         for (const m of f.modules) if (m.kind === 'acb' && !fixed) m.pos = t >= 2 ? 'removed' : t >= 1 ? 'disconnected' : 'connected';
+        const ws = wlOf();
+        if (ws) {
+          ws.proc = null;
+          ws.queue = [];
+          ws.pendingTo = null;
+          if (t >= 1) {
+            ws.closed = false;
+            ws.charged = false;
+          } else {
+            ws.closed = true;
+            ws.charged = f.opts.wlMech === 'motor';
+            ws.tripped = false;
+          }
+          if (!fixed) {
+            ws.rack = t >= 2 ? RACK.removed : t >= 1 ? RACK.disconnected : RACK.connected;
+            ws.turns = t >= 1 ? 0 : TURNS.connected;
+            ws.door = t >= 2 ? 1 : 0;
+            ws.rails = t >= 2 ? 1 : 0;
+          }
+        }
         if (S.view !== 'field' && t > 0) {
           S.view = 'field';
           S.viewAt = T;
         }
         ui.refresh(S, R);
+        break;
+      }
+      case 'optset': {
+        const v = a1 === 'OFF' || a1 === 'MAX' || isNaN(Number(a1)) ? a1 : Number(a1);
+        f.opts = {...f.opts, [a0]: v};
+        rb = true;
+        break;
+      }
+      case 'wlproc':
+        wlAction(wlOf(), arg, f);
+        break;
+      case 'wlsolo':
+        S.solo = arg === '' || arg === undefined ? (S.solo + 1) % 3 : Number(arg);
+        board.setSolo(S.sel, S.solo);
+        S.view = S.solo ? 'solo' : 'field';
+        S.viewAt = T;
+        if (S.solo) S.xT = 0;
+        Object.assign(off, {az: 0, el: 0, k: 1, px: 0, py: 0});
+        ui.refresh(S, R);
+        break;
+      case 'wletu':
+        S.etuOpen = !S.etuOpen;
+        ui.refresh(S, R);
+        break;
+      case 'wlfault': {
+        const why = injectFault(wlOf(), arg);
+        if (why) ui.say(why);
+        break;
+      }
+      case 'wlload': {
+        const ws = wlOf();
+        if (ws) ws.load = clamp(Math.round((ws.load + Number(arg)) * 100) / 100, 0, 1.3);
+        break;
+      }
+      case 'etuhit': {
+        // id may itself contain ':' (knob:wlIr); the direction is the last field
+        const parts = String(arg).split(':');
+        const dir = Number(parts.pop());
+        etuHit(wlOf(), parts.join(':'), dir || 1, f);
         break;
       }
       case 'optstep': {
@@ -310,6 +464,13 @@ export function runLive() {
         rb = true;
         break;
       case 'modpos':
+        if (f.type === 'acb' && String(f.opts.acb).startsWith('3WL') && f.modules[S.mod]?.kind === 'acb') {
+          // the 3WL moves the way the manual says: switch off, handle out, crank, handle in (wl_sim.js)
+          wlAction(wlOf(), `to:${arg}`, f);
+          f.modules[S.mod].pos = arg;
+          ui.refresh(S, R);
+          break;
+        }
         f.modules[S.mod].pos = arg;
         ui.refresh(S, R);
         history.replaceState(null, '', '#' + enc(S.cfg));
@@ -346,6 +507,9 @@ export function runLive() {
     S.x = S.xT = 0;
     S.scope = 'field';
     S.wlx = 0;
+    S.solo = 0;
+    S.etuOpen = false;
+    resetStates();
     S.view = 'iso';
     S.viewAt = T;
     S.layers = {enclosure: 'solid', doors: true, busbar: true, units: true, hardware: true, labels: true};
@@ -396,6 +560,11 @@ export function runLive() {
     rear: () => ({tx: R.length / 2000, ty: 1.12, tz: 0, az: 180, el: 6, d: Math.max(4.4, (R.length / 1000) * 1.65 + 2.2)}),
     side: () => ({tx: 0, ty: 1.12, tz: 0, az: -90, el: 5, d: 4.4}),
     top: () => ({tx: R.length / 2000, ty: 1.2, tz: 0, az: 0.01, el: 84, d: Math.max(4.4, (R.length / 1000) * 1.7 + 2)}),
+    solo: () => {
+      const c = board?.wlCenter(S.sel);
+      if (!c) return VIEW.field();
+      return {tx: c.x, ty: c.y + 0.04, tz: c.z, az: 32, el: 14, d: 1.75 + 1.3 * (S.wlx || 0)};
+    },
     field: () => {
       const fx = board?.fieldCentre(S.sel) ?? 0.5;
       const k = S.wlx || 0;
@@ -477,6 +646,19 @@ export function runLive() {
     if (hit.field >= 0 && hit.field !== S.sel) {
       S.sel = hit.field;
       S.mod = -1;
+    }
+    // a press on the 3D trip unit or on an operable part (buttons, lever, racking handle, RESET)
+    const fd = S.cfg.fields[S.sel];
+    if (hit.etu) {
+      const z = hit.etu.hits?.find((h) => hit.etu.x >= h.x && hit.etu.x <= h.x + h.w && hit.etu.y >= h.y && hit.etu.y <= h.y + h.h);
+      if (z) {
+        etuHit(hit.etu.st, z.id, e.button === 2 || e.shiftKey ? -1 : 1, fd);
+        return;
+      }
+    }
+    if (hit.action) {
+      wlAction(wlOf(), hit.action, fd);
+      return;
     }
     if (hit.module >= 0) {
       const dbl = T - lastClick.t < 0.4 && lastClick.id === hit.module;
@@ -589,6 +771,21 @@ export function runLive() {
     S.x += (S.xT - S.x) * (1 - Math.exp(-dt / 0.42));
     if (Math.abs(S.xT - S.x) < 1e-4) S.x = S.xT;
     S.doors += (S.doorsT - S.doors) * (1 - Math.exp(-dt / 0.3));
+    // the 3WL machines run, their queued procedures follow each other
+    for (const ws of board.wlStates) {
+      simStep(ws, dt);
+      if (!ws.proc && ws.queue?.length) {
+        const why = startProc(ws, ws.queue.shift());
+        if (why) {
+          ws.queue = [];
+          ui.say(why);
+        }
+      } else if (!ws.proc && ws.pendingTo) {
+        const n = ws.pendingTo;
+        ws.pendingTo = null;
+        runPlan(ws, planFor(ws, n));
+      }
+    }
     board.pose(S, dt);
 
     // camera eases toward the view plus the visitor's offsets
@@ -625,13 +822,30 @@ export function runLive() {
       fb.getCenter(selBox.position);
       fb.getSize(v3);
       selBox.scale.copy(v3);
-      selBox.visible = S.cfg.fields.length > 1;
+      selBox.visible = S.cfg.fields.length > 1 && !S.solo;
     }
+
+    // the part the current procedure step needs, outlined and pulsing
+    const ws = wlOf();
+    const tb = ws ? board.targetBox(ws) : null;
+    if (tb) {
+      procBox.visible = true;
+      tb.getCenter(procBox.position);
+      tb.getSize(v3);
+      procBox.scale.set(Math.max(v3.x, 0.01) * 1.08, Math.max(v3.y, 0.01) * 1.08, Math.max(v3.z, 0.01) * 1.08);
+      procBox.material.opacity = 0.55 + 0.45 * Math.sin(T * 8);
+    } else procBox.visible = false;
 
     st.frame({...cam, az: cam.az * D2R, el: cam.el * D2R});
 
     const card = showP ? {...showP.info, pinned: !hover && !!pinned} : null;
-    ui.frame(S, {card, callouts: board.callouts(S, st.project, T), cursor});
+    const calls = S.solo ? [] : board.callouts(S, st.project, T);
+    if (tb && ws.caption) {
+      const c = tb.getCenter(new THREE.Vector3());
+      const p = st.project(c.x, c.y, c.z);
+      if (p) calls.push({anchor: p, at: [Math.min(1000, p[0] + 110), Math.max(110, p[1] - 70)], title: ws.caption, sub: ws.proc?.label || '', proc: true});
+    }
+    ui.frame(S, {card, callouts: calls, cursor, wl: ws});
     if (tourChip.classList.contains('on') !== AP.on || !tourChip.firstChild) {
       tourChip.classList.toggle('on', AP.on);
       tourChip.innerHTML = AP.on ? '<i></i>AUTO TOUR · CLICK TO TAKE OVER' : '▶ RESUME TOUR';
