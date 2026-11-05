@@ -11,7 +11,7 @@ import {BK_SPEC, buildBreaker} from './breaker.js';
 import {LV_PARTS, buildLV} from './lv.js';
 import {PartBuilder} from './geom.js';
 PartBuilder.keepGeo = true;
-import {JOINTS, WIDTHS} from './data.js';
+import {DEPTHS, JOINTS, WIDTHS} from './data.js';
 
 const TOL = 2; // mm of penetration tolerated on the smallest axis
 const args = process.argv.slice(2);
@@ -27,7 +27,16 @@ const ALLOW = [
   [/^connBars:Cable connection bar/, /^cts:Block-type current transformer/, 'primary conductor passes through the CT window'],
   [/^busbars:Main busbar/, /^transPart:Transverse partition plate/, 'busbars pass through the openings (12 mm clearance)'],
   [/^bushL:Lower bushing/, /^partition:Vertical partition/, 'bushing passes through the partition hole (r spoutRo + 3)'],
-  [/^lvPlug(#[^:]*)?:LV plug cable/, /^mech:LV plug carrier|^lvPlug:LV plug \(64-pole/, 'cable is clamped in the carrier and moulded into the plug'],
+  [/^lvPlug(#[^:]*)?:LV plug cable/, /^bkX0plug:-X0 cable gland|^lvPlug:LV plug \(64-pole/, 'cable leaves the -X0 gland on the breaker and is moulded into the plug'],
+  [/^bk(Tulips|Arms|Sleeves):/, /^(partition:Vertical partition|shellB:Bushing plate)/, 'arms pass through the bushing holes of the partition / plate (radial check below)'],
+  [/^bolt:cbTulip/, /^bush[UL]:/, 'contact-system joint inside the bushing bore in service'],
+  [/^bk(Tulips|Arms|Sleeves):/, /^bush[UL]:/, 'contact systems, arms and separating shells inside the bushing bore: verified radially below'],
+  [/^bkTulips:Contact finger|^bkTulips:Ring spring|^bkTulips:Contact system cage/, /^bush[UL]:Fixed contact/, 'the fingers grip the fixed contact (radial check below)'],
+  [/^bush[UL]:/, /^(shellB:Bushing plate|partition:Vertical partition)/, 'bushing passes through its hole in the plate / partition (r spoutRo + 3)'],
+  [/^bush[UL]:.*rear terminal/, /^(feeders:Feeder bar|connBars:Cable connection bar)/, 'bar bolted to the rear terminal of the bushing'],
+  [/^connBars:Cable connection bar/, /^cts:Block-type current transformer/, 'primary conductor passes through the CT window'],
+  [/^bkTruck:Wheel/, /^shelf:Guide rail/, 'wheels run on the guide rails'],
+  [/^bkTruck:Sliding earthing contact/, /^shelf:Truck earthing contact rail/, 'sliding earthing contact on its rail'],
   [/^hvdoor:Operating slide/, /^hvdoor:Actuating opening/, 'the slide covers the actuating opening (it is the shutter of that opening)'],
   [/^breaker:(Tulip|Contact system)/, /^bush[UL]:/, 'tulip inside the bushing bore: verified radially below'],
   [/^rails:/, /^base:/, 'frame stands on the rails'],
@@ -94,6 +103,16 @@ function collect(root) {
   return out;
 }
 
+// the LV cable is bent: its box covers the top of the breaker. Judge it by its horizontal run instead (lvRun: y of the
+// run's underside, z range), which must pass above the part.
+let lvRun = null;
+const cableClear = (cab, part) => {
+  if (!lvRun) return false;
+  const b = part.box;
+  const offRun = b.max.y < lvRun.y - 1 || b.max.z < lvRun.z0 || b.min.z > lvRun.zDown + 10; // under or beside the run
+  const offDrop = b.max.z < lvRun.zDown - 10 || b.min.z > lvRun.zDown + 10 || b.max.y < lvRun.y1 - 24; // clear of the drop
+  return offRun && offDrop;
+};
 function clashes(list, sameKeyOk = true) {
   const res = [];
   for (let i = 0; i < list.length; i++) {
@@ -103,12 +122,15 @@ function clashes(list, sameKeyOk = true) {
       if (a.part === b.part && a.label === b.label && sameKeyOk) continue;
       if (a.part === b.part) continue; // within one assembly the builder places parts deliberately; checked visually
       if ((a.part === 'bolt' && a.own === b.part) || (b.part === 'bolt' && b.own === a.part)) continue; // a bolt in its own part
+      if ((a.part === 'bolt' && /^(truck|mech|breaker)$/.test(a.own) && /^bk/.test(b.pkey)) || (b.part === 'bolt' && /^(truck|mech|breaker)$/.test(b.own) && /^bk/.test(a.pkey))) continue; // joint markers of the breaker
       const ix = Math.min(a.box.max.x, b.box.max.x) - Math.max(a.box.min.x, b.box.min.x);
       const iy = Math.min(a.box.max.y, b.box.max.y) - Math.max(a.box.min.y, b.box.min.y);
       const iz = Math.min(a.box.max.z, b.box.max.z) - Math.max(a.box.min.z, b.box.min.z);
       const pen = Math.min(ix, iy, iz);
       if (pen <= TOL) continue;
       if (allowed(a.pkey, b.pkey)) continue;
+      if (/^bk/.test(a.pkey) && /^bk/.test(b.pkey)) continue; // inside the breaker: checked on its own below
+      if ((/^lvPlug#LV plug cable/.test(a.key) || /^lvPlug#LV plug cable/.test(b.key)) && /^bk/.test(/^bk/.test(a.pkey) ? a.pkey : b.pkey) && cableClear(null, /^bk/.test(a.pkey) ? a : b)) continue; // box of a bent cable
       res.push({a: a.key, b: b.key, pa: a.pkey, pb: b.pkey, pen: Math.round(pen), at: [Math.round((Math.max(a.box.min.x, b.box.min.x) + Math.min(a.box.max.x, b.box.max.x)) / 2), Math.round((Math.max(a.box.min.y, b.box.min.y) + Math.min(a.box.max.y, b.box.max.y)) / 2), Math.round((Math.max(a.box.min.z, b.box.min.z) + Math.min(a.box.max.z, b.box.max.z)) / 2)]});
     }
   }
@@ -121,6 +143,8 @@ function radial(panel) {
   if (d.tulipIn < d.contactR - 0.01) out.push(`tulip fingers cut into the fixed contact (${d.tulipIn} < ${d.contactR})`);
   if (d.tulipOut > d.spoutRi - 3) out.push(`tulip/garter (${d.tulipOut}) touches the bushing bore (${d.spoutRi})`);
   if (d.armR > d.spoutRi - 3) out.push(`contact arm (${d.armR}) touches the bushing bore`);
+  if (d.sleeveOut > d.spoutRi - 3) out.push(`separating shell (${d.sleeveOut}) touches the bushing bore`);
+  if (d.zTulip0 > d.zFC1 - 20) out.push(`contact fingers overlap the fixed contact by less than 20 mm (${d.zFC1 - d.zTulip0})`);
   return out;
 }
 // breaker: assemblies that are mounted into each other in the real breaker
@@ -164,13 +188,13 @@ const BK_ALLOW = [
 const mats = makeMaterials([]);
 let total = 0;
 for (const W of widths) {
-  for (const D of [1350, 1500, 1650]) for (const bus of [1250, 2500, 4000]) {
-    if (W === 600 && bus === 4000 && D === 1350) continue;
+  for (const D of DEPTHS) for (const bus of [1250, 2500, 4000]) {
     const panel = buildPanel(mats, {W, D, bus, ur: 17.5});
     for (const r of radial(panel)) { console.log(`W${W} D${D}: ${r}`); total++; }
     for (const [truck, z] of [['service', 0], ['test', TRAVEL]]) for (const esw of [0, 1]) {
       for (const k of ['truck', 'mech', 'breaker']) for (const g of panel.parts[k] || []) g.position.z = z;
       for (const g of panel.parts.shutters || []) for (const c of g.children) if (c.userData.shut) { c.userData.y0 ??= c.position.y; c.position.y = c.userData.y0 + c.userData.shut * c.userData.travel * (truck === 'service' ? 1 : 0); }
+      { const L = panel.lvCable, pr = panel.root.position; lvRun = {y: L.y0 - 3 - 8 + pr.y, z0: L.z0 + pr.z, z1: L.z1 + z + 30 + pr.z, zDown: L.z1 + z + 31 + pr.z, y1: L.y1 + 24 + pr.y}; }
       panel.parts.lvPlug[0].traverse((c) => { if (c.userData.lvCable) { c.geometry = lvCableGeometry(panel.lvCable, z); c.geometry.computeBoundingBox(); c.userData.prims = [{label: 'LV plug cable (64-pole)', box: c.geometry.boundingBox.clone()}]; } });
       for (const g of panel.parts.esw || []) for (const c of g.children) if (c.userData.blade) c.rotation.x = -c.userData.closedAngle + (c.userData.openDelta ?? 1.25) * (1 - esw);
       if (truck === 'service' && esw === 1) continue; // interlocked, cannot exist
@@ -196,15 +220,17 @@ if (total) process.exitCode = 1;
 // ------------------------------------------------------------------------------------------------ breaker tab
 if (args.includes('--breaker') || args.includes('--all')) {
   let bt = 0;
-  for (const W of ['3AE5 12 kV 1250 A 31.5 kA']) {
-    const bk = buildBreaker(mats, BK_SPEC);
+  // the Breaker-tab breaker, then the versions built into the 600 / 800 / 1000 mm panels (fewer poses)
+  for (const [W, spec, full] of [['3AE5 12 kV 1250 A 31.5 kA', BK_SPEC, true], ['panel 600', {P: 150, TD: 275, armD: 40, fingers: 13}], ['panel 800', {P: 210, TD: 275, armD: 60, fingers: 26}], ['panel 1000', {P: 275, TD: 310, armD: 79, fingers: 32}]]) {
+    const bk = buildBreaker(mats, spec);
     const dd = bk.dims;
     if (dd.viR >= dd.shellIn) { console.log(`breaker W${W}: interrupter (${dd.viR}) touches the pole shell (${dd.shellIn})`); bt++; }
     if (dd.viFront >= dd.shellFrontIn) { console.log(`breaker W${W}: interrupter touches the front wall of the pole shell`); bt++; }
     if (dd.sleeveIn <= dd.armR) { console.log(`breaker W${W}: separating shell bore touches the contact arm`); bt++; }
     if (dd.torsionIn <= dd.mainShaftR) { console.log(`breaker W${W}: torsion spring bore touches the main shaft`); bt++; }
     const EQ = [{}, {s1: '12', slot2: 'Y4', slot3: 'Y6', lv: 'strip', y8e: true, key: false}, {slot2: 'Y7', slot3: 'Y2', y8e: true, key: true}, {slot2: 'none', slot3: 'Y4', heater: false, s12: false}];
-    for (const [c, s, crank, ei, pClose = 0] of [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [0, 0, 200], [0, 0, 245], [0, 0, 275], [0, 0, 300], [0, 0, 330], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3], [1, 0, 170, 0, 1], [1, 0, 175, 0, 0.5], [0.95, 0, 185, 1, 1]]) {
+    const POSES = [[0, 0], [1, 0], [0, 1], [1, 1], [0.5, 0, 85], [0, 0.5, 265], [0, 1, 360], [0, 0, 200], [0, 0, 245], [0, 0, 275], [0, 0, 300], [0, 0, 330], [1, 0, null, 1], [0, 1, null, 2], [1, 1, null, 3], [1, 0, 170, 0, 1], [1, 0, 175, 0, 0.5], [0.95, 0, 185, 1, 1]];
+    for (const [c, s, crank, ei, pClose = 0] of (full ? POSES : POSES.filter((q, k) => k < 4 || k === 6))) {
       bk.setEquip(EQ[ei || 0]);
       bk.setScene(ei === 2 ? {tool: 1, toolRot: 1.3, key: 1, y7: 0, offHeld: 1} : ei === 3 ? {cover: 1} : {tool: 0, key: 0, y7: 1, offHeld: 0, cover: 0});
       bk.pose({c, s, crank, pClose});

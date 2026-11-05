@@ -32,7 +32,7 @@ export const BK_SPEC = {P: 210, TD: 275, armD: 40, fingers: 13};
 
 const BK_BASE = [
   {id: 'bkTool', name: 'Hand crank 3AX1530-4B (for charging the closing spring)', grp: 'Tools', dir: [0, 0, 0], desc: 'Original hand crank with slip clutch and adapter. Push it with the adapter forward through the opening 57.1 onto the coupling 57.2 and turn clockwise until the spring indicator shows CHARGED, then take it out. Only with the supply voltage off: if the motor starts, a crank without slip clutch would turn with it. Use only the original crank; the adapter uncouples when the motor voltage returns.'},
-  {id: 'bkTruck', name: 'Withdrawable truck', grp: 'Truck', dir: [0, -260, 0], desc: 'NXAIR withdrawable truck under the breaker: 679 mm wide, 620 mm deep, 107 mm high, ≈ 20 kg (HG 11.02 · 2018 p. 71, pole centres 210 mm). Four wheels on the panel rails, racking spindle driven by the racking crank through the door, sliding earthing contact, two locking levers that latch it in the panel or on the service truck. Racking travel in NXAIR 200 mm.'},
+  {id: 'bkTruck', name: 'Withdrawable truck', grp: 'Truck', dir: [0, -260, 0], desc: 'NXAIR withdrawable truck under the breaker. SION catalog truck table for 210 mm pole centres: width a 679 mm, depth b 424 mm, height e 107 mm, ≈ 20 kg; wheel track d 620 mm (150 mm pole centres: 529 / 470 mm, ≈ 15 kg; 275 mm: 879 / 820 mm, ≈ 25 kg). Four wheels on the guide rails of the panel, racking spindle driven by the racking crank through the door, sliding earthing contact, two locking levers that latch it in the panel or on the service truck. Racking travel drawn 200 mm (the NXAIR value is not published).'},
   {id: 'bkFrame', name: 'Mechanism housing (20), base, earth terminal (70)', grp: 'Operating mechanism', dir: [0, 0, 0], desc: 'Sheet-steel drive housing 540 mm high and 169 mm deep with the cover, on the base frame that also carries the three poles. Inside: the vertical mechanism mounting plate that carries the charging shaft, gear unit and closing spring. Top plate with the lifting points (marked with a crane hook) and the earth terminal (70): hexagon screw M12, washer, ring lug of the earth conductor, contact washer SN 70093 with its teeth towards the housing, 105 Nm. Earth conductor for 30 A with ≤ 3 V drop (IEC 62271-200); not needed when the breaker sits on an earthed frame with external-tooth lock washers under the screw heads.'},
   {id: 'bkCover', name: 'Cover (20.1) + operating panel', grp: 'Operating mechanism', dir: [0, 0, 360], desc: 'Plastic cover 20.1 (or metal cover 20.2) with openings for the operating panel: push button OFF (56.2), push button ON (56.1), position indicator ON-OFF (56.3), spring state indicator (55.1), operating cycle counter (58, one cycle = one closing + one opening), hand-crank opening (57.1) to the coupling 57.2, optional key lock 59.3, rating plate (21). Plastic cover: pull both snap hooks at the same time, swing forward, lift off; fit from above into the guide and let both hooks snap in. Metal cover: 2 upper M6 loosened, 4 lower M6 with contact washers out; refit teeth towards the cover, 12 Nm. Operate the breaker in the panel only with the cover fitted.'},
   {id: 'bkClosingSpring', name: 'Closing spring (55), charging shaft, crank, closing cam', grp: 'Operating mechanism', dir: [280, 40, 170], desc: 'Helical extension spring hanging from a bracket at the top right of the mechanism plate. The charging shaft turns the crank, which stretches the spring through a link until the crank is just past dead centre and the closing latch holds it: spring indicator CHARGED, -S3 and -S4 open. ON (56.1 or -Y9) frees the latch, the spring pulls the crank round and the closing cam on the same shaft drives the roller lever of the main shaft. The motor recharges the spring at once, so OFF – ON – OFF is stored. Discharging: supply off, then OFF, ON, OFF by hand.'},
@@ -140,11 +140,16 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   root.add(body);
   const parts = {};
   const rig = {};
-  const half = P + 72; // overall half-width (HG c = 2a + 145: 565 at a = 210)
+  // overall half-width (HG c = 2a + 145: 565 at a = 210). The devices are laid out for the 565 mm drive, so the 150 mm
+  // version is drawn with that drive width too (catalog: 445 mm)
+  const half = Math.max(P + 72, 282);
   const hh = half - 12; // drive housing half-width
   const H = 540; // housing / pole height above the base
   const ZF = 150, ZC = 169; // front frame of the housing, cover face (HG q = 169)
   const ZT = ZC - 371; // terminal contact face (HG l = 371)
+  // truck: a × b × e = 679 × 424 × 107 mm for 210 mm pole centres (529 / 879 for 150 / 275), wheel track d 620 (470 / 820)
+  const TRUCK = P <= 160 ? {a: 529, d: 470} : P <= 210 ? {a: 679, d: 620} : {a: 879, d: 820};
+  TRUCK.z1 = ZC - 9; TRUCK.z0 = TRUCK.z1 - 424;
   const zPole = ZT + 88; // pole axis
   const yLo = 217.5, yUp = yLo + TD; // terminal centres above the base (HG e = 217.5)
   const yVI0 = yLo + 40.5, yVI1 = yUp - 46.5; // interrupter flanges
@@ -217,24 +222,25 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
 
   // ------------------------------------------------------------ truck (root coordinates, y 0 .. YB)
   {
+    // SION catalog, withdrawable truck table: a width, b depth, d wheel track, e height (c, f not drawn)
     const p = part('bkTruck', root);
-    const w = 679 / 2, z0 = -330, z1 = 290;
+    const w = TRUCK.a / 2, z0 = TRUCK.z0, z1 = TRUCK.z1, wt = TRUCK.d / 2;
     for (const s of [-1, 1]) {
       p.add(B(s * w - (s > 0 ? 22 : 0), s * w + (s < 0 ? 22 : 0), 20, YB, z0, z1), 'galvDark', 'Side member');
       for (const z of [z0 + 50, z1 - 50]) {
-        p.add(C(30, 30, 20, 'x', s * (w + 12), 30, z, 24), 'black', 'Wheel');
-        p.add(C(8, 8, 26, 'x', s * (w + 1), 30, z, 12), 'steel', 'Wheel axle');
+        p.add(C(30, 30, 20, 'x', s * wt, 30, z, 24), 'black', 'Wheel');
+        p.add(C(8, 8, w - wt - 10, 'x', s * (wt + 10 + (w - wt - 10) / 2), 30, z, 12), 'steel', 'Wheel axle');
       }
-      p.add(RB(s * 250 - 30, s * 250 + 30, 70, 100, z1 + 6, z1 + 40, 4), 'red', 'Locking lever (latches the truck in the panel / on the service truck)');
+      p.add(RB(s * (w - 70) - 30, s * (w - 70) + 30, 70, 100, z1 - 14, z1 - 2, 4), 'red', 'Locking lever (latches the truck in the panel / on the service truck)');
     }
-    for (const z of [-150, 60]) p.add(B(-w + 22, w - 22, YB - 27, YB, z - 18, z + 18), 'galvDark', 'Cross member (breaker fixing, 4 × M10 8.8, 48 ±4 Nm greased)');
+    for (const z of [ZT + 40, 60]) p.add(B(-w + 22, w - 22, YB - 27, YB, z - 18, z + 18), 'galvDark', 'Cross member (breaker fixing, 4 × M10 8.8, 48 ±4 Nm greased)');
     p.add(B(-w + 22, w - 22, 20, 60, z1 - 30, z1), 'galvDark', 'Front cross member');
     p.add(B(-w + 22, w - 22, 20, 60, z0, z0 + 30), 'galvDark', 'Rear cross member');
-    p.add(B(-300, 300, 20, YB, z1, z1 + 6), 'galv', 'Front plate');
+    p.add(B(-w + 22, w - 22, 20, YB - 27, z1 - 6, z1), 'galv', 'Front plate');
     p.add(C(11, 11, z1 - z0 - 40, 'z', 0, 45, (z0 + z1) / 2, 16), 'steel', 'Racking spindle');
-    p.add(C(13, 13, 14, 'z', 0, 45, z1 + 13, 6), 'steel', 'Racking crank coupling');
-    p.add(RB(-45, 45, 24, 66, -200, -140, 4), 'black', 'Spindle nut (held by the panel)');
-    p.add(B(-30, 30, 2, 20, -280, -120), 'copper', 'Sliding earthing contact');
+    p.add(C(13, 13, 14, 'z', 0, 45, z1 - 13, 6), 'steel', 'Racking crank coupling');
+    p.add(RB(-45, 45, 24, 66, z0 + 60, z0 + 120, 4), 'black', 'Spindle nut (held by the panel)');
+    p.add(B(-30, 30, 2, 20, z0 + 40, z0 + 200), 'copper', 'Sliding earthing contact');
     p.finish();
   }
 
@@ -546,19 +552,19 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
     parts.bkRods.add(cps);
     (rig.cpSprings ||= []).push(cps);
     // contact arms (22) on threaded bolts (22.1), contact systems (23) with arm adapter (22.2), sleeves (47)
-    const ar = armD / 2;
+    const ar = armD / 2, CAGE_IN = ar + 14, SLV_IN = Math.max(30, ar + 5);
     for (const [y, lab] of [[yUp, 'Upper'], [yLo, 'Lower']]) {
-      arms.add(C(6, 6, 265, 'z', x, y, ZT + 20 - 265 / 2, 12), 'zinc', 'Threaded bolt (22.1), M12, 20 ±1 mm deep, 40 ±4 Nm greased');
+      arms.add(C(6, 6, 255, 'z', x, y, ZT + 20 - 255 / 2, 12), 'zinc', 'Threaded bolt (22.1), M12, 20 ±1 mm deep, 40 ±4 Nm greased');
       arms.add(L([[ar - 7, 0], [ar, 0], [ar, 235], [ar - 7, 235]], 'z', x, y, ZT - 235, 28), 'silver', `${lab} contact arm (22), hollow, Ø ${armD}`);
-      tulips.add(L([[34, 0], [38, 0], [38, 80], [34, 80]], 'z', x, y, ZT - 274, 32), 'tinned', 'Contact system cage (23)');
-      tulips.add(L([[ar + 0.5, 0], [34, 0], [34, 10], [ar + 0.5, 10]], 'z', x, y, ZT - 204, 28), 'steel', 'Contact arm adapter (22.2)');
+      tulips.add(L([[CAGE_IN, 0], [CAGE_IN + 4, 0], [CAGE_IN + 4, 80], [CAGE_IN, 80]], 'z', x, y, ZT - 274, 32), 'tinned', 'Contact system cage (23)');
+      if (armD === 40) tulips.add(L([[ar + 0.5, 0], [CAGE_IN, 0], [CAGE_IN, 10], [ar + 0.5, 10]], 'z', x, y, ZT - 204, 28), 'steel', 'Contact arm adapter (22.2)');
       for (let f = 0; f < fingers; f++) {
         const a = (f / fingers) * Math.PI * 2, rr = ar + 3.5;
         tulips.add(RB(x + Math.cos(a) * rr - 3.4, x + Math.cos(a) * rr + 3.4, y + Math.sin(a) * rr - 3.4, y + Math.sin(a) * rr + 3.4, ZT - 272, ZT - 214, 1.4, 1), 'silver', 'Contact finger (23.1)');
       }
       for (const z of [ZT - 262, ZT - 226]) tulips.add(T(ar + 9.5, 2.2, 'z', x, y, z), 'spring', 'Ring spring');
-      tulips.add(C(10, 10, 10, 'z', x, y, ZT - 245, 6), 'zinc', 'Nut on the threaded bolt');
-      sleeves.add(L([[30, 0], [36, 0], [36, 182], [30, 182]], 'z', x, y, ZT - 185, 32), 'plastic', `Separating shell to the panel side (47), ${lab.toLowerCase()} conductor`);
+      tulips.add(C(10, 10, 10, 'z', x, y, ZT - 238, 6), 'zinc', 'Nut on the threaded bolt');
+      sleeves.add(L([[SLV_IN, 0], [SLV_IN + 6, 0], [SLV_IN + 6, 182], [SLV_IN, 182]], 'z', x, y, ZT - 185, 32), 'plastic', `Separating shell to the panel side (47), ${lab.toLowerCase()} conductor`);
     }
   }
   for (const pb of [shell, sep, upper, lower, vi, viIn, rods, arms, tulips, sleeves]) pb.finish();
@@ -703,5 +709,5 @@ export function buildBreaker(mats, {P = 210, TD = 275, armD = 40, fingers = 13} 
   };
   pose({});
   applyScene();
-  return {root, parts, pose, setScene, scene, setEquip: rig.setEquip, sAtCrank: (deg) => { const dep = camDep(180 - deg); if (dep <= 0) return 0; let lo = 0, hi = 1; for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; ((ARM_R * dzOf(phiAt(m))) / ARM_Q < dep ? (lo = m) : (hi = m)); } return hi; }, touchS: 1 / 1.15, STROKE, OVER, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: 30, armR: armD / 2}};
+  return {root, parts, pose, setScene, scene, setEquip: rig.setEquip, sAtCrank: (deg) => { const dep = camDep(180 - deg); if (dep <= 0) return 0; let lo = 0, hi = 1; for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; ((ARM_R * dzOf(phiAt(m))) / ARM_Q < dep ? (lo = m) : (hi = m)); } return hi; }, touchS: 1 / 1.15, STROKE, OVER, dims: {P, TD, armD, fingers, STROKE, ZC, ZT, zPole, yUp: yUp + YB, yLo: yLo + YB, yGap: yGap + YB, viR: 52, shellIn: 66, viFront: zPole + 52, shellFrontIn: zS1 - 6, torsionIn: 26, mainShaftR: 18, sleeveIn: Math.max(30, armD / 2 + 5), armR: armD / 2, cageOut: armD / 2 + 18, fixedFace: ZT - 245, truck: TRUCK, half}};
 }

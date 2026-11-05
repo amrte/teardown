@@ -234,7 +234,16 @@ function build() {
   applyFocus();
   applyGlass();
   applyCut();
+  syncPanelCb();
   applyPose(true);
+}
+// the 3AE5 in the panel shows the state and equipment of the Breaker tab
+function syncPanelCb() {
+  for (const p of [world?.subject, ...(world?.neighbors || [])]) {
+    if (!p?.cb) continue;
+    p.cb.setEquip(state.bk.equip);
+    p.cb.pose({c: state.bk.c, s: state.bk.s, count: state.bk.count});
+  }
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
@@ -832,7 +841,7 @@ function renderSources() {
       <li>Counts, sizes, washers and torques are copied from the manuals; the section reference sits on every row.</li>
       <li>Bolt positions in 3D are representative. The counts per joint match the manual. Bolt heads are drawn ${VIS}× life size so they can be seen.</li>
       <li>Geometry is checked by <code>node sims/nxair/check.mjs --all --bolts</code>: no part or bolt penetrates another in any width, depth, busbar rating, truck position or earthing-switch state, except listed real contacts (conductors through bushings and CTs, cables through sleeves, coaxial fits verified radially).</li>
-      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. Breaker geometry uses the 3AE manual (pole centres, terminal distance, contact arm Ø, 13 / 26 tulip fingers); racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). Shapes of poles, CTs, VTs and mechanisms are simplified.</li>
+      <li>The panel geometry follows the dimension drawing 110-2300.9 (internal split, compartment heights, LV box, floor cut-outs) and the catalog section. The breaker in the panel is the SION 3AE5 of the Breaker tab, built for the panel width (pole centres, terminal distance, contact arm Ø, 13 / 26 contact fingers, truck per the SION truck table) and placed from the CBP section of the dimension drawing: front just behind the door in test position, contact systems just in front of the shutters, so the fixed contacts sit inside recessed bushings. Racking travel drawn 200 mm (3AE offers 180 / 200 / 220 mm, the NXAIR value is not published). The circuit-breaker panel is 1500 mm deep (1350 mm is for the other panel types). Shapes of CTs and VTs are simplified.</li>
       <li>Two torque regimes exist: panel joints with dry threads (M8 30 / 25, M12 70, M16 110 Nm) and breaker contact-arm joints with greased threads (M12 40 ±4, M16 100 ±10 Nm). Each row says which.</li>
       <li>A badge marks how each torque is known. "Maker of part" and "Not stated" rows need the part supplier's figure.</li>
       <li>LV tab: the SIPROTEC 5 7SJ82 is drawn and described from the SIPROTEC 5 hardware and operation manuals and catalog; the 3AE plug pins from the 3AE sample circuit diagrams. The equipment of the LV compartment, the device tags, the I/O allocation and the settings are a typical cable-feeder example, not a Siemens drawing. Trip-circuit supervision and breaker-control rules are quoted from the SIPROTEC 5 7SY82 manual, which shares the SIPROTEC 5 function text (the 7SJ82 device manual could not be retrieved).</li>
@@ -1311,6 +1320,7 @@ function bkTick(now, dt) {
     if (bkCur.kind === 'hand') bkLast = 'Closing spring charged by hand; take the crank out.';
     world.bk.pose({c, s: sv, crank: c > 0.99 ? 170 : 0, count: state.bk.count});
     bkCur = null;
+    syncPanelCb();
     renderBreakerReadout();
     if (bkDrill) drillBkNote();
     return;
@@ -1389,8 +1399,8 @@ function bkDrillAct(cmd, id) {
   if (!st) return;
   // the drill needs the option fitted
   const eq = state.bk.equip;
-  if (bkDrill.i === 0 && d.need === 'key' && !eq.key) { eq.key = true; world.bk.setEquip(eq); toast('Key lock 3AX1437 fitted for this drill.', 'ok'); renderBreaker(); }
-  if (bkDrill.i === 0 && d.need === 'y7' && !hasY7()) { eq.slot2 = 'Y7'; world.bk.setEquip(eq); toast('Undervoltage release -Y7 fitted in position 51.2 for this drill.', 'ok'); renderBreaker(); }
+  if (bkDrill.i === 0 && d.need === 'key' && !eq.key) { eq.key = true; world.bk.setEquip(eq); syncPanelCb(); toast('Key lock 3AX1437 fitted for this drill.', 'ok'); renderBreaker(); }
+  if (bkDrill.i === 0 && d.need === 'y7' && !hasY7()) { eq.slot2 = 'Y7'; world.bk.setEquip(eq); syncPanelCb(); toast('Undervoltage release -Y7 fitted in position 51.2 for this drill.', 'ok'); renderBreaker(); }
   if (state.mode === 'breaker') goView(st.view);
   const r = st.act() || {};
   if (r.block) { bkDrill.note = r.block; drillBkNote(); return; }
@@ -1443,6 +1453,7 @@ function wire() {
     if (k) {
       state.bk.equip[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
       world.bk.setEquip(state.bk.equip);
+      syncPanelCb();
       if (bkSel && world.bk.parts[bkSel]?.visible === false) { bkSel = null; state.selPart = null; }
       applyGlass(); applyFocus(); renderBreaker();
     }

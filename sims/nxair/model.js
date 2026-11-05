@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {BUSBAR, WIDTHS} from './data.js';
+import {YB as BK_YB, buildBreaker} from './breaker.js';
 import {B, BAR, C, EX, EY, EZ, L, PartBuilder, RB, T, TU, circleHole, rect, rectHole, slotHole, spread} from './geom.js';
 
 export const H = 2300;
@@ -59,8 +60,10 @@ export function makeMaterials(planes) {
 // The LV plug cable between the static plug under the LV compartment and the carrier on the breaker, which moves
 // with the truck. Rebuilt whenever the truck moves.
 export function lvCableGeometry(L0, dz) {
-  const {x, y, z0, z1} = L0;
-  return TU([[x, y, z0], [x, y + 4, z0 + 6], [x, y + 8, (z0 + z1 + dz) / 2], [x, y + 4, z1 + dz - 6], [x, y, z1 + dz]], 9, 24, 10);
+  const {x, y0, z0, y1, z1} = L0;
+  const ze = z1 + dz; // the gland end moves with the truck
+  // out of the front face of the plug, forward above the breaker, down in front of the gland and into it
+  return TU([[x, y0, z0], [x, y0 - 1, z0 + 24], [x, y0 - 3, ze + 30], [x, y1 + 24, ze + 32], [x, y1, ze]], 8, 28, 10);
 }
 
 // ---------------------------------------------------------------------------------------------- the panel
@@ -77,36 +80,42 @@ export function buildPanel(mats, opts) {
   const LVTOP = yLV + 630;
   const TD = W === 1000 ? 310 : 275; // terminal distance upper-lower (3AE p. 32)
   const yU = 1170, yL = yU - TD; // contact axes
-  const yShelf = 560; // withdrawable-part shelf
   const pitch = WIDTHS[W].pitch;
   const xs = [-pitch, 0, pitch]; // L1 L2 L3
   const BB = BUSBAR[bus];
-  const zPh = [zP * 0.74, zP * 0.5, zP * 0.26]; // busbar stacks L1 front, L2 middle, L3 rear (I Fig. 61)
-  const yPh = [1520, 1610, 1520];
-  const contactR = (WIDTHS[W].contact || 79) / 2; // fixed contact radius in the bushings
-  const armR = WIDTHS[W].contact === 40 ? 20 : 30; // contact arm Ø 40 / 60 (3AE p. 54)
-  const nf = WIDTHS[W].contact === 40 ? 13 : 26; // tulip fingers (HG p. 36)
-  const fw = nf === 26 ? 3.5 : 5; // finger half-width
-  // switching-device compartment, front to back
+  // ----- the withdrawable SION 3AE5 (breaker.js), built for this panel: pole centres = phase pitch, terminal distance
+  // TD, contact arms Ø = fixed contacts of the bushings (Ø 40 at 600, Ø 60 at 800 mm; Ø 79 drawn for 1000 mm)
+  const CB_SPEC = {600: {P: 150, TD, armD: 40, fingers: 13}, 800: {P: 210, TD, armD: 60, fingers: 26}, 1000: {P: 275, TD, armD: 79, fingers: 32}}[W];
+  const cb = buildBreaker(mats, CB_SPEC);
+  const cbd = cb.dims;
+  const yBk = yU - cbd.yUp; // truck bottom = top of the guide rails, so the arms meet the bushing axes
+  const yShelf = yBk - 4; // withdrawable-part shelf
+  const yTruck0 = yBk;
+  const yFront = yBk + BK_YB; // y of the breaker body origin (its operating panel is drawn from here)
+  const contactR = cbd.armR; // fixed contact radius = contact arm radius (the fingers bridge both)
+  const armR = cbd.armR;
+  // switching-device compartment, front to back. Dimension drawing 110-0250.9 (CBP, test position): breaker front just
+  // behind the door, contact systems just in front of the closed shutters; in service the 3AE5 (645 mm from contact
+  // system to cover) puts the contacts about 145 mm behind the partition, inside the bushings.
   const zDoorIn = D - 40; // inner face of the HV door reinforcement
-  const zFront = zDoorIn - 15 - TRAVEL - 15; // breaker front plate in service position (test: 15 mm behind the door)
-  const SP = 100; // bushing spout length into A
-  const spoutRi = contactR + 22, spoutRo = contactR + 45;
-  const zTulip0 = zP + 35, zTulip1 = zP + 115; // tulip fingers in service position (overlap the fixed contact 60 mm)
-  const zSh = zP + 125; // shutter plane
-  const zPole = zP + 230; // pole centre
-  const zMech0 = zPole + 70; // rear of the mechanism housing
-  const yTruck0 = yShelf + 4; // top of the guide rails
-  const yMech0 = yTruck0 + 76; // underside of the mechanism housing (640)
-  const yMech1 = 1300;
+  const zBk = zDoorIn - 15 - TRAVEL - (cbd.ZC + 9); // breaker origin in service position (test: front 15 mm behind the door)
+  const zFront = zBk + cbd.ZC; // breaker cover face in service position
+  const zFC1 = zBk + cbd.fixedFace, zFC0 = zFC1 - 75; // fixed contact: 27 mm inside the contact fingers in service
+  const zBot = zFC0 - 12; // closed end of the bushing
+  const zTerm = zBot - 30; // rear terminal of the bushing: feeder bar (B) / cable connection bar (C)
+  const spoutRi = cbd.cageOut + 6, spoutRo = spoutRi + 16; // bushing bore and outer radius
+  const zTulip0 = zBk + cbd.ZT - 274, zTulip1 = zTulip0 + 80; // contact systems in service position
+  const zSh = zP + 14; // shutter plane, just in front of the bushing mouths
+  const zPh = [zTerm - 70, (zTerm - 70 + 120) / 2, 120]; // busbar stacks L1 front, L2 middle, L3 rear (I Fig. 61)
+  const yPh = [1520, 1610, 1520];
   // connection compartment
-  const zC = zP - 320; // cable connection bars
+  const zC = zTerm - 180; // cable connection bars (behind the block-type CTs)
   const yBarLow = 610; // lower end of the connection bars
   const yLug = 640; // cable lug bolt
   const cz = zC - 11; // cable axis (lug on the rear face of the bar)
   const ySE1 = 548, ySE0 = ySE1 - 280; // sealing end
   const yClamp = 200;
-  const yS = 740, zS = zC - 130; // earthing switch shaft
+  const yS = 740, zS = zC - 115; // earthing switch shaft
   const xE = pitch / 2; // earthing drive path between L2 and L3
   const flangeH = Math.min(90, pitch / 2 - 3);
 
@@ -231,7 +240,7 @@ export function buildPanel(mats, opts) {
     const p = part('busCover', V(0, 120, 320));
     const y0 = 1360, y1 = yPRC;
     p.add(B(-(hw - 22), hw - 22, y0, y1, zP - 2, zP), 'galv', 'Busbar cover');
-    p.add(B(-(hw - 22), hw - 22, y0, y0 + 3, zP, zP + 20), 'galv', 'Busbar cover fold');
+    p.add(B(-(hw - 22), hw - 22, y0, y0 + 3, zP - 22, zP - 2), 'galv', 'Busbar cover fold'); // folded into B, clear of the shutters
     p.add(TU([[-60, 1560, zP], [-60, 1560, zP + 30], [60, 1560, zP + 30], [60, 1560, zP]], 5), 'black', 'Handle');
     const pts = [];
     for (const x of spread(-hw + 50, hw - 50, 5)) pts.push(N(x, y1 - 25, zP), N(x, y0 + 30, zP));
@@ -293,25 +302,27 @@ export function buildPanel(mats, opts) {
     const p = part('feeders', V(0, 320, 0));
     for (let k = 0; k < 3; k++) {
       const zb = stackZ(k, 0) - t / 2 - t / 2; // feeder flag against the rear face of the busbar stack
-      for (const g of BAR([[xs[k], yU, zP - 60], [xs[k], yU, zb], [xs[k], yPh[k] + 30, zb]], 60, 10)) p.add(g, 'copper', `Feeder bar L${k + 1}`);
+      for (const g of BAR([[xs[k], yU, zTerm + 10], [xs[k], yU, zb], [xs[k], yPh[k] + 30, zb]], 60, 10)) p.add(g, 'copper', `Feeder bar L${k + 1}`);
       // support insulator under the horizontal leg
       const h = yU - 5 - (yBC + 2);
-      p.add(L([[26, 0], [26, 8], [18, 8], [22, h * 0.3], [16, h * 0.4], [22, h * 0.6], [16, h * 0.7], [20, h - 8], [26, h - 8], [26, h]], 'y', xs[k], yBC, (zb + zP - 60) / 2), 'resin', 'Support insulator');
+      p.add(L([[26, 0], [26, 8], [18, 8], [22, h * 0.3], [16, h * 0.4], [22, h * 0.6], [16, h * 0.7], [20, h - 8], [26, h - 8], [26, h]], 'y', xs[k], yBC, (zb + zTerm) / 2), 'resin', 'Support insulator');
     }
     p.finish();
   }
 
-  // ================================================================ BUSHINGS (hollow spouts; the tulip enters the spout)
+  // ================================================================ BUSHINGS (recessed: the contact system enters the bore)
+  // cast-resin tube through the partition with the mouth 6 mm in front of it; the silver-plated fixed contact sits at
+  // the closed end, the rear terminal carries the feeder bar (B) or the cable connection bar (C)
   const bushing = (p, y, label) => {
+    const len = zP + 6 - zBot;
     for (const x of xs) {
-      p.add(L([[spoutRi, SP], [spoutRo - 8, SP], [spoutRo, SP - 10], [spoutRo, 0], [spoutRo - 4, 0]], 'z', x, y, zP + 0.01), 'resin', label);
-      p.add(L([[spoutRi, 0], [spoutRi, SP]], 'z', x, y, zP), 'resin', label + ' (bore)');
-      for (const h of [30, 60]) p.add(T(spoutRo + 4, 5, 'z', x, y, zP + h), 'resin', label + ' shed');
-      p.add(RB(x - flangeH, x + flangeH, y - flangeH, y + flangeH, zP + 4, zP + 20, 8, 2), 'resin', label + ' flange');
-      p.add(C(contactR, contactR, 75, 'z', x, y, zP + 57.5), 'silver', 'Fixed contact (silver-plated)');
-      p.add(C(contactR - 6, contactR, 6, 'z', x, y, zP + 98), 'silver', 'Fixed contact (silver-plated)');
-      p.add(L([[30, 0], [44, 10], [40, 45], [30, 90]], '-z', x, y, zP), 'resin', label + ' tail');
-      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) p.add(C(6, 6, 4, 'z', x + dx * (flangeH - 12), y + dy * (flangeH - 12), zP + 22), 'zinc', 'Flange bolt');
+      p.add(L([[0.5, 0], [spoutRo - 6, 0], [spoutRo, 6], [spoutRo, len - 4], [spoutRo - 4, len], [spoutRi, len], [spoutRi, 12], [0.5, 12]], 'z', x, y, zBot), 'resin', label);
+      for (const z of spread(zBot + 30, zP - 40, 3)) p.add(T(spoutRo + 4, 5, 'z', x, y, z), 'resin', label + ' shed');
+      p.add(RB(x - flangeH, x + flangeH, y - flangeH, y + flangeH, zP - 20, zP - 3, 8, 2), 'resin', label + ' flange');
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) p.add(C(6, 6, 4, 'z', x + dx * (flangeH - 12), y + dy * (flangeH - 12), zP - 22), 'zinc', 'Flange bolt');
+      p.add(C(contactR, contactR, 71, 'z', x, y, zFC0 + 35.5), 'silver', 'Fixed contact (silver-plated)');
+      p.add(C(contactR - 4, contactR, 4, 'z', x, y, zFC1 - 2), 'silver', 'Fixed contact (silver-plated)');
+      p.add(RB(x - 30, x + 30, y - 30, y + 30, zTerm, zBot, 3, 1), 'copper', label + ' rear terminal');
     }
   };
   {
@@ -344,15 +355,17 @@ export function buildPanel(mats, opts) {
       parts.shutters[0].add(m);
     }
     const lk = part('shutterMech', V(0, 0, 420));
+    const xSM = Math.max(hw - 55, cbd.truck.a / 2 + 12);
     for (const s of [-1, 1]) {
-      const x = s * (hw - 55);
-      lk.add(B(x - 5, x + 5, yShelf + 40, yShelf + 200, zSh + 15, zSh + 165), 'steel', 'Drive slide');
-      lk.add(TU([[x, yShelf + 190, zSh + 150], [x, yL - 30, zSh + 60], [x, yL + 40, zSh + 20]], 6), 'steel', 'Shutter lever');
-      lk.add(TU([[x, yShelf + 190, zSh + 120], [x, yU - 80, zSh + 70], [x, yU + 60, zSh + 20]], 6), 'steel', 'Shutter lever');
-      lk.add(C(12, 12, 10, 'x', x, yL - 30, zSh + 60), 'steel', 'Pivot');
-      lk.add(C(12, 12, 10, 'x', x, yU - 80, zSh + 70), 'steel', 'Pivot');
-      const xc = s * (hw - 50);
-      lk.add(B(Math.min(xc, xc + s * 3), Math.max(xc, xc + s * 3), yShelf + 30, yU + 320, zSh + 12, Math.min(zSh + 175, zLV - 5)), 'galv', 'Shutter mechanism cover');
+      const x = s * xSM;
+      // drive slide beside the truck (pushed by it in the last part of the travel), levers between shutters and breaker
+      lk.add(B(x - 5, x + 5, yShelf + 20, yShelf + 150, zP + 24, zP + 88), 'steel', 'Drive slide');
+      lk.add(TU([[x, yShelf + 140, zP + 80], [x, yL - 30, zP + 55], [x, yL + 40, zP + 24]], 6), 'steel', 'Shutter lever');
+      lk.add(TU([[x, yShelf + 140, zP + 70], [x, yU - 80, zP + 50], [x, yU + 60, zP + 24]], 6), 'steel', 'Shutter lever');
+      lk.add(C(12, 12, 10, 'x', x, yL - 30, zP + 55), 'steel', 'Pivot');
+      lk.add(C(12, 12, 10, 'x', x, yU - 80, zP + 50), 'steel', 'Pivot');
+      const xc = x + s * 8;
+      lk.add(B(Math.min(xc, xc + s * 3), Math.max(xc, xc + s * 3), yShelf + 10, yU + 320, zP + 18, zP + 92), 'galv', 'Shutter mechanism cover');
     }
     lk.finish();
   }
@@ -362,11 +375,11 @@ export function buildPanel(mats, opts) {
     const p = part('shelf', V(0, -120, 120));
     p.add(EY(rect(-hw + 80, zP + 30, hw - 10, D - 45), yShelf - 3, yShelf), 'galv', 'Withdrawable-part shelf');
     for (const s of [-1, 1]) {
-      const x = s * (hw - 110);
-      p.add(B(x - 15, x + 15, yShelf, yTruck0, zP + 150, D - 60), 'steel', 'Guide rail (ISOFLEX TOPAS L 32)');
+      const x = s * cbd.truck.d / 2; // under the truck wheels (wheel track d)
+      p.add(B(x - 15, x + 15, yShelf, yTruck0, zP + 30, D - 60), 'steel', 'Guide rail (ISOFLEX TOPAS L 32)');
       p.add(B(x - 15, x + 15, yTruck0, yShelf + 30, D - 60, D - 45), 'steel', 'Guide rail end stop');
-      const xf = s * (hw - 128);
-      p.add(B(xf - 3, xf + 3, yShelf, yShelf + 20, zP + 150, D - 60), 'steel', 'Guide rail flank');
+      const xf = x - s * 18;
+      p.add(B(xf - 3, xf + 3, yShelf, yShelf + 20, zP + 30, D - 60), 'steel', 'Guide rail flank');
     }
     p.add(RB(-150, -20, yShelf - 80, yShelf - 3, D - 150, D - 50, 6), 'black', 'Operating and interlocking unit (racking)');
     p.add(RB(xE - 35, xE + 35, 430, 510, D - 150, D - 50, 6), 'black', 'Earthing switch operating unit');
@@ -402,13 +415,17 @@ export function buildPanel(mats, opts) {
   // ================================================================ WIRING DUCT + FRONT LINK
   {
     const p = part('wiringDuct', V(-300, 0, 120));
-    const x0 = -hw + 8, x1 = -hw + 72;
+    // on the left side wall, as deep as the room beside the truck and the drive housing allows
+    const dd = Math.min(64, Math.max(12, hw - 2 - Math.max(cbd.truck.a / 2, cbd.half) - 4));
+    const x0 = -hw + 2, x1 = x0 + dd;
     p.add(B(x0, x1, YB + 60, yLV - 40, D - 200, D - 198), 'galvDark', 'Wiring duct back');
     p.add(B(x0, x1, YB + 60, yLV - 40, D - 92, D - 90), 'galvDark', 'Wiring duct side');
     p.add(B(x1, x1 + 2, YB + 80, 840, D - 200, D - 90), 'galv', 'Lower wiring duct cover');
     p.add(B(x1, x1 + 2, 870, yLV - 60, D - 200, D - 90), 'galv', 'Upper wiring duct cover');
-    for (let i = 0; i < 6; i++) p.add(C(3, 3, yLV - 40 - (YB + 80), 'y', x0 + 12 + i * 8, (yLV - 40 + YB + 80) / 2, D - 180 + i * 12, 6), i % 2 ? 'black' : 'grey', 'Control cables');
-    anchor('wdc', p, [N(x1 + 2, 160, D - 145), N(x1 + 2, 780, D - 145), N(x1 + 2, 940, D - 145), N(x1 + 2, yLV - 120, D - 145)].map((q) => ({p: q, n: N(1, 0, 0)})));
+    for (let i = 0; i < 6; i++) p.add(C(3, 3, yLV - 40 - (YB + 80), 'y', x0 + 8 + ((dd - 12) * (i % 3)) / 2, (yLV - 40 + YB + 80) / 2, D - 192 + i * 11, 6), i % 2 ? 'black' : 'grey', 'Control cables');
+    // cover screws: on the side of the cover where there is room, on its front edge in the narrow 600 mm duct
+    if (dd >= 30) anchor('wdc', p, [N(x1 + 2, 160, D - 145), N(x1 + 2, 780, D - 145), N(x1 + 2, 940, D - 145), N(x1 + 2, yLV - 120, D - 145)].map((q) => ({p: q, n: N(1, 0, 0)})));
+    else anchor('wdc', p, [N(x1 + 1, 160, D - 90), N(x1 + 1, 780, D - 90), N(x1 + 1, 940, D - 90), N(x1 + 1, yLV - 120, D - 90)].map((q) => ({p: q, n: N(0, 0, 1)})));
     p.finish();
     const l = part('link', V(-140, 0, 320));
     l.add(B(-hw + 2, -hw + 10, 300, 1300, D - 70, D - 52), 'galvDark', 'Panel connection link');
@@ -418,20 +435,21 @@ export function buildPanel(mats, opts) {
   // ================================================================ CONNECTION COMPARTMENT
   {
     const p = part('cts', V(0, 0, -260));
+    const zCT0 = zTerm - 155, zCT1 = zTerm - 15; // on the cable side of the lower bushings, the connection bar passes through
     for (const x of xs) {
-      p.add(RB(x - 70, x + 70, yL - 95, yL + 95, zP - 270, zP - 110, 10, 2), 'resin', 'Block-type current transformer');
-      p.add(RB(x - 75, x + 75, yL - 100, yL - 95, zP - 280, zP - 100, 2, 1), 'resinLight', 'CT foot');
-      p.add(RB(x - 40, x + 40, yL + 95, yL + 125, zP - 230, zP - 150, 4, 1), 'black', 'Secondary terminal box');
-      p.add(B(x - 35, x + 35, yL + 10, yL + 50, zP - 271, zP - 270), 'white', 'CT rating plate');
-      for (const dz of [-210, -170]) p.add(C(5, 5, 14, 'y', x - 20, yL + 132, zP + dz), 'zinc', 'Secondary terminal');
+      p.add(RB(x - 70, x + 70, yL - 95, yL + 95, zCT0, zCT1, 10, 2), 'resin', 'Block-type current transformer');
+      p.add(RB(x - 75, x + 75, yL - 100, yL - 95, zCT0 - 10, zCT1 + 10, 2, 1), 'resinLight', 'CT foot');
+      p.add(RB(x - 40, x + 40, yL + 95, yL + 125, zCT0 + 30, zCT1 - 30, 4, 1), 'black', 'Secondary terminal box');
+      p.add(B(x - 35, x + 35, yL + 10, yL + 50, zCT0 - 1, zCT0), 'white', 'CT rating plate');
+      for (const dz of [45, 85]) p.add(C(5, 5, 14, 'y', x - 20, yL + 132, zCT0 + dz), 'zinc', 'Secondary terminal');
     }
-    p.add(B(-(hw - 22), hw - 22, yL - 115, yL - 100, zP - 280, zP - 100), 'galvDark', 'CT mounting frame');
+    p.add(B(-(hw - 22), hw - 22, yL - 115, yL - 100, zCT0 - 10, zCT1 + 10), 'galvDark', 'CT mounting frame');
     p.finish();
   }
   {
     const p = part('connBars', V(0, 0, -400));
     for (const x of xs) {
-      for (const g of BAR([[x, yL, zP - 50], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar');
+      for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar');
       p.add(B(x - 22, x + 22, yS - 25, yS + 25, zC - 22, zC - 5), 'silver', 'Earthing switch fixed contact');
     }
     anchor('lugM12', p, xs.map((x) => ({p: N(x, yLug, zC - 17), n: N(0, 0, -1)})), {nut: 22});
@@ -525,7 +543,7 @@ export function buildPanel(mats, opts) {
       p.add(L([[26, 0], [32, 15], [24, 25], [32, 40], [24, 50], [20, 70]], 'y', x, 960, 100), 'resin', 'VT primary terminal');
       p.add(B(x - 45, x + 45, 800, 840, 175, 177), 'white', 'VT rating plate');
       cyl(p, 5, [x, 1030, 100], [x, 1060, 100], 'copper', 'VT primary lead');
-      p.add(TU([[x, 1060, 100], [x, 1062, 106], [x, yL + 10, zP - 290]], 5, 12, 8), 'copper', 'VT primary lead');
+      p.add(TU([[x, 1060, 100], [x, 1062, 106], [x, yL + 10, zC + 8]], 5, 12, 8), 'copper', 'VT primary lead');
     }
     p.add(EY(rect(-(hw - 20), 14, hw - 20, 175), 745, 760), 'galvDark', 'VT support');
     anchor('vtPrim', p, xs.map((x) => ({p: N(x, 1030, 100), n: N(0, 1, 0)})));
@@ -606,22 +624,27 @@ export function buildPanel(mats, opts) {
     p.add(RB(-hw + 4, hw - 4, YB + 5, yLV - 6, z, D, 5, 1), 'ral', 'High-voltage door (pressure-resistant)');
     p.add(RB(-hw + 30, hw - 30, YB + 30, yLV - 30, zDoorIn, z, 4, 1), 'ralDark', 'Door inner reinforcement');
     for (const y of [YB + 150, 700, yLV - 150]) p.add(C(6, 6, 80, 'y', -hw + 10, y, D + 5), 'steel', 'Door hinge');
-    p.add(B(-125, 125, 1000, 1200, D - 1, D + 1), 'glass', 'Inspection window (CB indicators, counter)');
-    p.add(B(-135, 135, 990, 1000, D, D + 3), 'black', 'Window frame');
-    p.add(B(-135, 135, 1200, 1210, D, D + 3), 'black', 'Window frame');
-    p.add(B(-hw + 70, hw - 70, 480, 950, D, D + 2), 'white', 'Mimic diagram');
-    p.add(B(-hw + 100, hw - 100, 912, 920, D + 2, D + 3), 'black', 'Mimic: busbar');
-    p.add(B(-3, 3, 690, 912, D + 2, D + 3), 'black', 'Mimic: feeder');
-    p.add(B(-28, 28, 790, 850, D + 2, D + 3), 'black', 'Mimic: circuit-breaker');
-    p.add(C(26, 26, 5, 'z', 0, 870, D + 4.5), 'black', 'Position indicator withdrawable part');
+    // inspection window over the indicators and the counter of the 3AE5, push-rod openings over its ON / OFF buttons,
+    // hand-crank opening over its charging coupling (all at the breaker's own heights)
+    const wy0 = yFront + 135, wy1 = yFront + 196;
+    p.add(B(-110, 90, wy0, wy1, D - 1, D + 1), 'glass', 'Inspection window (position and spring indicators, operations counter)');
+    p.add(B(-120, 100, wy0 - 8, wy0, D, D + 3), 'black', 'Window frame');
+    p.add(B(-120, 100, wy1, wy1 + 4, D, D + 3), 'black', 'Window frame');
+    const mt = wy0 - 18; // top of the mimic diagram
+    p.add(B(-hw + 70, hw - 70, 470, mt, D, D + 2), 'white', 'Mimic diagram');
+    p.add(B(-hw + 100, hw - 100, mt - 14, mt - 6, D + 2, D + 3), 'black', 'Mimic: busbar');
+    p.add(B(-3, 3, mt - 50, mt - 14, D + 2, D + 3), 'black', 'Mimic: feeder');
+    p.add(B(-3, 3, 560, mt - 110, D + 2, D + 3), 'black', 'Mimic: feeder');
+    p.add(C(26, 26, 5, 'z', 0, mt - 80, D + 4.5), 'black', 'Position indicator withdrawable part (in the circuit-breaker symbol)');
     p.add(C(20, 20, 5, 'z', xE, 610, D + 4.5), 'black', 'Position indicator feeder earthing switch');
     p.add(C(14, 14, 6, 'z', 0, 614, D + 5), 'steel', 'Actuating opening: racking');
     p.add(RB(-30, 30, 574, 654, D + 2, D + 7, 3), 'zinc', 'Operating slide (racking)');
     p.add(C(7, 7, 6, 'z', -55, 614, D + 5), 'steel', 'Double-bit key opening (5 mm)');
     p.add(C(14, 14, 6, 'z', xE, 520, D + 5), 'steel', 'Actuating opening: earthing switch');
-    p.add(C(9, 9, 6, 'z', -60, 1250, D + 5), 'green', 'Actuating opening: CLOSE');
-    p.add(C(9, 9, 6, 'z', 60, 1250, D + 5), 'red', 'Actuating opening: OPEN');
-    p.add(C(14, 14, 8, 'z', 0, 1300, D + 6), 'black', 'Rotary button / spring charging opening');
+    p.add(C(9, 9, 6, 'z', -35, yFront + 215, D + 5), 'green', 'Actuating opening: CLOSE (push rod onto the ON button)');
+    p.add(C(9, 9, 6, 'z', -75, yFront + 215, D + 5), 'red', 'Actuating opening: OPEN (push rod onto the OFF button)');
+    p.add(C(12, 12, 8, 'z', -120, yFront + 215, D + 6), 'black', 'Rotary button: swings the cover of the push-rod openings aside');
+    p.add(C(16, 16, 8, 'z', 0, yFront + 360, D + 6), 'black', 'Hand-crank opening (charging the closing spring)');
     p.add(RB(hw - 55, hw - 30, 620, 940, D, D + 40, 6), 'black', 'Door handle');
     p.add(C(14, 14, 20, 'z', hw - 42, 940, D + 10), 'steel', 'Handle pivot');
     p.add(B(-hw + 80, -hw + 260, 1230, 1280, D, D + 1), 'yellow', 'Instruction label');
@@ -640,7 +663,7 @@ export function buildPanel(mats, opts) {
     };
     mk('eswSlide', 'Operating slide (earthing switch)', (b) => b.add(RB(-30, 30, -40, 40, 0, 5, 3), 'zinc', 'Operating slide (earthing switch)'), V(xE, 520, D + 2));
     mk('eswInd', 'Position indicator feeder earthing switch (vertical I = earthed)', (b) => b.add(B(-4, 4, -18, 18, 0, 1), 'white', 'Indicator bar'), V(xE, 610, D + 7));
-    mk('truckInd', 'Position indicator withdrawable part (vertical = service, horizontal = test)', (b) => b.add(B(-4, 4, -22, 22, 0, 1), 'white', 'Indicator bar'), V(0, 870, D + 7));
+    mk('truckInd', 'Position indicator withdrawable part (vertical = service, horizontal = test)', (b) => b.add(B(-4, 4, -22, 22, 0, 1), 'white', 'Indicator bar'), V(0, mt - 80, D + 7));
     const lev = mk('eswLever', 'Operating lever, feeder earthing switch (180°)', (b) => {
       b.add(C(9, 9, 160, 'z', 0, 0, 80), 'steel', 'Lever shaft');
       b.add(B(-14, 14, -3, 3, -6, 6).translate(0, 0, 4), 'steel', 'Coupling pins');
@@ -650,98 +673,55 @@ export function buildPanel(mats, opts) {
     lev.visible = false;
   }
 
-  // ================================================================ WITHDRAWABLE 3AE CIRCUIT-BREAKER (service position)
-  // truck, mech and breaker move together by the racking travel; the LV plug stays in its socket.
-  {
-    const p = part('truck', V(0, 0, 0));
-    p.group.userData.truck = true;
-    const y0 = yTruck0;
-    p.add(RB(-(hw - 125), hw - 125, y0 + 25, y0 + 75, zP + 150, zFront, 4), 'galvDark', 'Truck chassis');
-    for (const s of [-1, 1]) {
-      p.add(B(Math.min(s * (hw - 98), s * (hw - 88)), Math.max(s * (hw - 98), s * (hw - 88)), y0 + 36, y0 + 75, zP + 150, zFront), 'steel', 'Truck side member');
-      for (const z of [zP + 200, zFront - 60]) {
-        p.add(C(28, 28, 20, 'x', s * (hw - 108), y0 + 28, z, 20), 'black', 'Truck wheel');
-      }
-      p.add(RB(Math.min(s * (hw - 160), s * (hw - 100)), Math.max(s * (hw - 160), s * (hw - 100)), y0 + 30, y0 + 70, zFront, zFront + 15, 4), 'red', 'Unlocking lever (service truck)');
-    }
-    p.add(C(11, 11, zFront - zP - 260, 'z', 0, y0 + 50, (zFront + zP + 260) / 2), 'steel', 'Racking spindle');
-    p.add(RB(-45, 45, y0 + 30, y0 + 72, zP + 300, zP + 360, 4), 'black', 'Spindle nut');
-    p.add(B(-25, 25, yShelf + 8, y0 + 25, zP + 220, zP + 300), 'copper', 'Earthing contact (sliding)');
-    p.finish();
+  // ================================================================ WITHDRAWABLE SION 3AE5 (service position)
+  // The breaker of the Breaker tab, built for this panel. Its part groups go into three panel parts that move together
+  // by the racking travel (truck / operating mechanism with the secondary devices / poles and contacts); the LV plug
+  // stays in its socket.
+  const cbGroups = {};
+  for (const id of ['truck', 'mech', 'breaker']) {
+    const pb = part(id, V(0, 0, 0));
+    pb.group.userData.truck = true;
+    pb.finish();
+    const off = new THREE.Group();
+    off.position.set(0, yBk, zBk);
+    pb.group.add(off);
+    cbGroups[id] = off;
   }
-  {
-    const p = part('mech', V(0, 0, 0));
-    p.group.userData.truck = true;
-    const y0 = yMech0, y1 = yMech1;
-    p.add(RB(-(hw - 85), hw - 85, y0, y1, zMech0, zFront, 8, 2), 'housing', 'Operating mechanism housing');
-    p.add(B(-(hw - 100), hw - 100, y0 + 20, y1 - 20, zFront, zFront + 3), 'housing', 'Front cover');
-    p.add(RB(-30, 30, 1080, 1115, zFront + 3, zFront + 10, 4), 'green', 'CLOSE push button');
-    p.add(RB(-30, 30, 1020, 1055, zFront + 3, zFront + 10, 4), 'red', 'OPEN push button');
-    p.add(B(40, 120, 1130, 1180, zFront + 3, zFront + 4), 'white', 'CLOSED/OPEN indicator');
-    p.add(B(40, 120, 1070, 1110, zFront + 3, zFront + 4), 'yellow', 'Spring state indicator (CHARGED)');
-    p.add(B(-120, -50, 1140, 1170, zFront + 3, zFront + 4), 'black', 'Operations counter');
-    p.add(C(14, 14, 8, 'z', 0, 1240, zFront + 7), 'steel', 'Hand-crank shaft (≈ 50 turns)');
-    p.add(B(-80, 80, 860, 940, zFront + 3, zFront + 4), 'white', 'Rating plate');
-    p.add(RB(-(hw - 120), -(hw - 190), 960, 1020, zFront + 3, zFront + 8, 3), 'black', 'Racking interlock / coding');
-    // internals (visible in the section)
-    const zi = (zMech0 + zFront) / 2, dz = (zFront - zMech0) / 2 - 12;
-    const coil = (x, yb, len, r, label) => {
-      const pts = [];
-      for (let i = 0; i <= 120; i++) { const a = i / 120 * Math.PI * 2 * 9; pts.push([x + Math.cos(a) * r, yb + (i / 120) * len, zi + Math.sin(a) * Math.min(r, dz - 5)]); }
-      p.add(TU(pts, 4, 240, 6), 'spring', label);
-    };
-    coil(-(hw - 150), y0 + 60, 380, 32, 'Closing spring');
-    coil(hw - 150, y0 + 60, 260, 22, 'Opening spring');
-    p.add(C(Math.min(45, dz), Math.min(45, dz), 2 * dz, 'z', -40, y0 + 130, zi), 'blue', 'Spring charging motor');
-    p.add(C(26, 26, W - 260, 'x', 0, 1000, zi), 'steel', 'Main shaft (camshaft)');
-    p.add(C(Math.min(60, dz), Math.min(60, dz), 18, 'x', -60, 1000, zi), 'steel', 'Closing cam');
-    p.add(RB(40, 120, 1120, 1190, zi - dz, zi + dz, 4), 'black', 'Shunt closing release');
-    p.add(RB(140, 220, 1120, 1190, zi - dz, zi + dz, 4), 'black', 'Shunt opening release');
-    p.add(RB(-(hw - 110), -(hw - 170), y0 + 450, y0 + 620, zi - dz, zi + dz, 4), 'grey', 'Auxiliary switch');
-    p.add(RB(-50, 50, y1, y1 + 25, zLV + 65, zLV + 115, 4), 'black', 'LV plug carrier');
-    p.finish();
+  const cbPanelPart = (id) => (id === 'bkTruck' ? 'truck' : /^bk(Shell|Sep|Upper|Lower|Rods|VI|VIin|Arms|Tulips|Sleeves)$/.test(id) ? 'breaker' : 'mech');
+  for (const [id, g] of Object.entries(cb.parts)) {
+    const hold = new THREE.Group();
+    hold.position.copy(g.parent.position); // the breaker body sits YB above the truck bottom
+    hold.add(g);
+    cbGroups[cbPanelPart(id)].add(hold);
   }
-  // static LV plug under the LV compartment + cable to the carrier (rebuilt as the truck moves)
-  const lvCable = {x: 0, y: yMech1 + 14, z0: zLV + 55, z1: zLV + 65};
+  cb.parts.bkTool.visible = false;
+  // the stub of the -X0 control cable is replaced by the panel's LV plug cable
+  let gland = V(0, 700, 127);
+  cb.parts.bkX0plug.traverse((c) => {
+    if (!c.isMesh) return;
+    if (c.userData.label === 'Control cable to the panel LV socket') c.visible = false;
+    if (c.userData.label === '-X0 cable gland') { c.geometry.computeBoundingBox(); gland = c.geometry.boundingBox.getCenter(V(0, 0, 0)); }
+  });
+  cb.parts.bkX0plug.userData.prims = (cb.parts.bkX0plug.userData.prims || []).filter((q) => q.label !== 'Control cable to the panel LV socket');
+  cb.pose({c: 1, s: 0});
+  {
+    const xs3 = xs.flatMap((x) => [yU, yL].map((y) => [x, y]));
+    const pb = {group: cbGroups.breaker.parent};
+    anchor('cbArm', pb, xs3.map(([x, y]) => ({p: N(x, y + armR, zBk + cbd.ZT - 60), n: N(0, 1, 0)})));
+    anchor('cbTulip', pb, xs3.map(([x, y]) => ({p: N(x, y, zBk + cbd.ZT - 238), n: N(0, 0, 1)})));
+  }
+  // static LV plug in the socket under the LV compartment + cable to the -X0 gland on the breaker (rebuilt as it moves)
+  const yPlug0 = 1300;
+  const lvCable = {x: 0, y0: yPlug0 + 16, z0: zLV + 55, y1: yFront + gland.y, z1: zBk + gland.z + 11};
   {
     const plug = part('lvPlug', V(0, 0, 0));
-    plug.add(RB(-80, 80, yMech1 + 2, yLV - 38, zLV + 5, zLV + 55, 4), 'black', 'LV plug (64-pole, coded)');
+    plug.add(RB(-80, 80, yPlug0 + 2, yLV - 38, zLV + 5, zLV + 55, 4), 'black', 'LV plug (64-pole, coded)');
     plug.finish();
     const cable = new THREE.Mesh(lvCableGeometry(lvCable, 0), mats.black);
     cable.userData.label = 'LV plug cable (64-pole)';
     cable.userData.lvCable = true;
     cable.userData.noEdges = true;
     parts.lvPlug[0].add(cable);
-  }
-  {
-    const p = part('breaker', V(0, 0, 0));
-    p.group.userData.truck = true;
-    const ym = (yU + yL) / 2;
-    for (let k = 0; k < 3; k++) {
-      const x = xs[k];
-      p.add(RB(x - 55, x + 55, yL - 110, yU + 120, zPole - 60, zPole + 60, 20, 3), 'epoxy', `Embedded pole L${k + 1}`);
-      for (const y of spread(yL - 60, yU + 70, 6)) p.add(RB(x - 60, x + 60, y - 4, y + 4, zPole - 64, zPole + 64, 4, 1), 'epoxy', `Embedded pole L${k + 1}`);
-      p.add(C(38, 38, 210, 'y', x, ym + 10, zPole), 'silver', 'Vacuum interrupter (inside the pole)');
-      for (const [y, lab] of [[yU, 'Upper contact arm'], [yL, 'Lower contact arm']]) {
-        const z0 = zTulip1 + 10, z1 = zPole - 64;
-        p.add(C(armR, armR, z1 - z0, 'z', x, y, (z0 + z1) / 2, 20), 'silver', lab);
-        // tulip contact: fingers whose inner faces rest on the fixed contact, garter springs, carrier
-        const rr = contactR + fw;
-        for (let f = 0; f < nf; f++) {
-          const a = (f / nf) * Math.PI * 2;
-          p.add(RB(x + Math.cos(a) * rr - fw, x + Math.cos(a) * rr + fw, y + Math.sin(a) * rr - fw, y + Math.sin(a) * rr + fw, zTulip0, zTulip1, 1.5, 1), 'silver', 'Tulip contact finger');
-        }
-        for (const zz of [zTulip0 + 20, zTulip1 - 20]) p.add(T(rr + fw + 2.5, 2.5, 'z', x, y, zz), 'spring', 'Tulip garter spring');
-        p.add(C(rr + fw + 4, rr + fw + 4, 10, 'z', x, y, zTulip1 + 5), 'steel', 'Contact system carrier');
-      }
-      p.add(C(16, 16, yL - 110 - (yMech0 + 20), 'y', x, (yL - 110 + yMech0 + 20) / 2, zPole + 40), 'epoxy', 'Insulating coupling rod');
-      p.add(B(x - 22, x + 22, yMech0 + 20, yMech0 + 60, zPole + 40, zMech0), 'steel', 'Lever + contact pressure spring');
-    }
-    anchor('cbArm', p, xs.flatMap((x) => [yU, yL].map((y) => ({p: N(x, y + armR, zPole - 80), n: N(0, 1, 0)}))));
-    anchor('cbTulip', p, xs.flatMap((x) => [yU, yL].map((y) => ({p: N(x, y, zTulip1 + 10), n: N(0, 0, 1)}))));
-    p.add(B(-(hw - 85), hw - 85, yMech0, yMech0 + 20, zPole - 65, zMech0), 'steel', 'Pole frame');
-    for (const s of [-1, 1]) p.add(B(Math.min(s * (hw - 100), s * (hw - 85)), Math.max(s * (hw - 100), s * (hw - 85)), yMech0 + 20, yU + 140, zMech0 - 30, zMech0), 'steel', 'Pole frame');
-    p.finish();
   }
 
   // ================================================================ SERVICE TRUCK
@@ -752,7 +732,7 @@ export function buildPanel(mats, opts) {
     const z0 = D + 10, yT = yShelf;
     p.add(B(-hw + 40, hw - 40, yT - 6, yT, z0, z0 + 900), 'steel', 'Service truck platform');
     for (const s of [-1, 1]) {
-      const x = s * (hw - 110);
+      const x = s * cbd.truck.d / 2;
       p.add(B(x - 15, x + 15, yT, yTruck0, z0, z0 + 900), 'steel', 'Service truck rails');
       for (const z of [z0 + 60, z0 + 840]) p.add(B(s * (hw - 70) - 15, s * (hw - 70) + 15, 60, yT - 6, z - 15, z + 15), 'steel', 'Service truck column');
       for (const z of [z0 + 60, z0 + 840]) p.add(C(30, 30, 30, 'x', s * (hw - 70), 30, z, 16), 'black', 'Castor');
@@ -788,7 +768,7 @@ export function buildPanel(mats, opts) {
 
   const dirs = {};
   for (const [id, gs] of Object.entries(parts)) dirs[id] = gs[0].userData.dir;
-  return {root, parts, anchors, dirs, shellIds, lvCable, dims: {W, D, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: contactR + 2 * fw + 5, armR, zTulip0, zTulip1, SP}};
+  return {root, parts, anchors, dirs, shellIds, lvCable, cb, dims: {W, D, zP, zLV, yLV, yU, yL, zC, yShelf, zFront, contactR, spoutRi, spoutRo, tulipIn: contactR, tulipOut: cbd.cageOut, sleeveOut: cbd.sleeveIn + 6, armR, zTulip0, zTulip1, zFC1}};
 }
 
 // ------------------------------------------------------------------------------------------------- bolts
