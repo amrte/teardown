@@ -7,7 +7,7 @@
 // tool opening, the position indicator (green 0 · blue TEST · red I) and the swing-out instrument panel. In HFD units
 // the body stays latched and only the contact systems travel; SFD units slide as a whole.
 import * as THREE from 'three';
-import {BREAKERS, MODULE_KINDS, UNIT_W} from './catalog.js';
+import {BREAKERS, DOOR_T, MODULE_KINDS, UNIT_W} from './catalog.js';
 import {bb, buildDoor, bx, cy, label, mk, part} from './cabinet.js';
 import {faceTex, plateGeo, cableGeo} from './parts.js';
 
@@ -40,7 +40,7 @@ const indMat = (pos) => {
 // the position indicator: a little window whose colour follows the module's position, set every frame
 const indicator = (ctx, g, m, x, y, z) => {
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), indMat(posOf(m)));
-  mesh.position.set(x, y, z);
+  mesh.position.set(x, y, z + 0.8);
   mesh.userData.keep = true;
   g.add(mesh);
   ctx.ticks.push(() => (mesh.material = indMat(posOf(m))));
@@ -113,7 +113,7 @@ export function unitWithdrawable(ctx, m, j, box, out) {
     // the swing-out instrument panel
     const ip = part(ctx, {parent: g, sub: true, name: 'Instrument panel (swing-out)', layer: 'unit', stage: 'units', module: j, at: [0, 0, ud / 2 - 2], lines: [`Usable ${small ? (uh > 120 ? '94 × 88' : '94 × 38') : uh > 100 ? '190 × 96' : '190 × 51.5'} mm`, 'Opens up-left, then swings', 'Max device depth 60–70 mm']});
     mk(ip, plateGeo(uw - 6, uh - 4, 3, 2, [[-uw * 0.18, 0, Math.min(70, uw * 0.24), Math.min(uh - 30, 60), 0]]), M.zinc, 0, 0, 0);
-    label(ip, [loc, m.label || K.label], Math.min(uw - 30, 150), Math.min(24, uh * 0.22), uw * 0.18, uh / 2 - Math.min(24, uh * 0.22) / 2 - 6, 1.8, {pw: 300, ph: 56, size: 22, bg: '#ffffff'});
+    label(ip, [loc, m.label || K.label], Math.min(uw - 30, 150), Math.min(24, uh * 0.22), uw * 0.18, uh / 2 - Math.min(24, uh * 0.22) / 2 - 6, 2.4, {pw: 300, ph: 56, size: 22, bg: '#ffffff'});
     // the main switch actuator (rotary handle, door-coupled through the compartment door)
     const hx = -uw * 0.18;
     const hr = Math.min(24, uh * 0.22);
@@ -382,9 +382,15 @@ export function breaker(ctx, m, j, box, out) {
   const yb = box.y0 + Math.max(20, (h - br.h) / 2 - 30);
   const pos = () => posOf(m);
   const gw = br.w + 60;
-  const gd = Math.min(br.d + 40, -ctx.zSep - 40);
+  // the breaker front sits in the door cut-out, flush behind the door face; the body is as deep as the compartment
+  // allows (a 3WA12 is deeper than the 400 mm device compartment of a 600 mm field with rear busbar)
+  const zf = DOOR_T - 4;
+  // the guide frame runs from just behind the door to 15 mm in front of the separation plate
+  const gd = Math.min(br.d + 20, zf - 30 - (ctx.zSep + 15));
+  const bd = gd - 20;
+  const gz = zf - 30 - gd / 2;
   // the guide frame (fixed part): side walls with rails, the rear main terminals
-  const gf = part(ctx, {name: `Guide frame ${br.tag} · ${loc}`, layer: 'unit', stage: 'devices', module: j, at: [cx, yb, -gd / 2 - 10], dir: [0, 0, 1], dist: 700, lines: [br.fixed ? 'Fixed-mounted MCCB, mounting plate' : 'Withdrawable guide frame (cradle)', 'Main terminals at the rear, horizontal', 'Shutters close over the isolating contacts']});
+  const gf = part(ctx, {name: `Guide frame ${br.tag} · ${loc}`, layer: 'unit', stage: 'devices', module: j, at: [cx, yb, gz], dir: [0, 0, 1], dist: 700, lines: [br.fixed ? 'Fixed-mounted MCCB, mounting plate' : 'Withdrawable guide frame (cradle)', 'Main terminals at the rear, horizontal', 'Shutters close over the isolating contacts']});
   if (!br.fixed) {
     for (const sx of [-1, 1]) {
       bx(gf, 3, br.h + 40, gd, M.zinc, sx * gw / 2, (br.h + 40) / 2, 0);
@@ -397,8 +403,15 @@ export function breaker(ctx, m, j, box, out) {
         bx(gf, br.w * 0.18, 30, 60, M.copperTin, (p - 1) * br.w * 0.3, yy, -gd / 2 + 20);
         hw.bolt(gf, [(p - 1) * br.w * 0.3, yy + 15, -gd / 2 + 20], [0, -1, 0], 12, 30, {nut: true, what: 'ACB main terminal'});
       }
-    // the shutters over the contacts (grey, close when the breaker leaves)
-    bx(gf, br.w * 0.95, br.h * 0.9, 2, M.insul, 0, br.h * 0.55, -gd / 2 + 55);
+    // the shutters over the contacts: slid up out of the way while the breaker is in TEST or CONNECTED, closed in
+    // front of the isolating contacts once it is DISCONNECTED or out
+    const sh = bx(gf, br.w * 0.95, br.h * 0.42, 2, M.insul, 0, br.h * 0.55, -gd / 2 + 56, 0, {keep: true});
+    const sh2 = bx(gf, br.w * 0.95, br.h * 0.42, 2, M.insul, 0, br.h * 0.55, -gd / 2 + 59, 0, {keep: true});
+    ctx.ticks.push(() => {
+      const shut = pos() === 'disconnected' || pos() === 'removed';
+      sh.position.y = shut ? br.h * 0.78 : br.h + 8;
+      sh2.position.y = shut ? br.h * 0.32 : br.h + 8;
+    });
   } else {
     bx(gf, gw, br.h + 80, 3, M.zincPerf, 0, (br.h + 80) / 2, -gd / 2 + 10, 10);
   }
@@ -407,7 +420,7 @@ export function breaker(ctx, m, j, box, out) {
     layer: 'unit',
     stage: 'units',
     module: j,
-    at: [cx, yb + br.h / 2 + 8, -gd / 2 - 10 + 20],
+    at: [cx, yb + br.h / 2 + 8, zf - bd / 2],
     dir: [0, 0.05, 1],
     dist: 1100,
     draw: br.fixed ? null : () => (pos() === 'removed' ? 620 : ACB[pos()]),
@@ -415,28 +428,31 @@ export function breaker(ctx, m, j, box, out) {
   });
   g.userData.part.posOf = pos;
   // the body, the arc chute cover on top, the front panel with the trip unit and the push buttons
-  bx(g, br.w, br.h, br.d, M.dev, 0, 0, 0);
-  bx(g, br.w - 20, 30, br.d - 60, M.devDark, 0, br.h / 2 + 15, -20);
-  for (let k = 0; k < 6; k++) bx(g, br.w - 40, 3, 4, M.black, 0, br.h / 2 + 31, -br.d / 2 + 60 + k * 40);
+  // every face that touches another is offset by at least 0.6 mm: coplanar faces z-fight (the flicker)
+  bx(g, br.w, br.h, bd, M.dev, 0, 0, 0);
+  bx(g, br.w - 20, 30, bd - 60, M.devDark, 0, br.h / 2 + 14.4, -20);
+  for (let k = 0; k < Math.floor((bd - 80) / 40); k++) bx(g, br.w - 40, 3, 4, M.black, 0, br.h / 2 + 30.9, -bd / 2 + 60 + k * 40);
+  // the front panel (3 mm, light grey) and its printed face 0.6 mm in front of it
+  bx(g, br.w - 10, br.h - 10, 3, M.devLight, 0, 0, bd / 2 + 1.5);
   const ft = breakerFace(br);
-  const face = new THREE.Mesh(new THREE.PlaneGeometry(br.w - 16, br.h - 16), new THREE.MeshStandardMaterial({map: ft, roughness: 0.55}));
-  face.position.set(0, 0, br.d / 2 + 1.5);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(br.w - 16, br.h - 16), new THREE.MeshStandardMaterial({map: ft, roughness: 0.55, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2}));
+  face.position.set(0, 0, bd / 2 + 3.6);
   face.userData.keep = true;
   g.add(face);
-  bx(g, br.w - 10, br.h - 10, 3, M.devLight, 0, 0, br.d / 2);
   // the charging lever and the racking crank shaft
-  bx(g, 40, 90, 22, M.black, br.w * 0.3, -br.h * 0.28, br.d / 2 + 12);
+  bx(g, 40, 90, 22, M.black, br.w * 0.3, -br.h * 0.28, bd / 2 + 14);
   if (!br.fixed) {
-    cy(g, 9, 30, M.bolt, 0, -br.h / 2 + 30, br.d / 2 + 15, {rx: Math.PI / 2});
+    cy(g, 9, 30, M.bolt, 0, -br.h / 2 + 30, bd / 2 + 16, {rx: Math.PI / 2});
     // isolating contact fingers at the rear of the breaker
     for (let p = 0; p < 3; p++)
       for (const yy of [br.h * 0.28, -br.h * 0.18])
-        hw.fingers(g, [(p - 1) * br.w * 0.3, yy, -br.d / 2 - 14], 4, 12, [8, 26, 28], {title: 'ACB isolating contact', lines: ['Silver-plated finger cluster', 'Mates with the guide frame terminal']});
-    for (const sx of [-1, 1]) bx(g, 8, 18, br.d - 40, M.zinc, sx * (br.w / 2 + 4), -br.h / 2 + 22, 0);
+        hw.fingers(g, [(p - 1) * br.w * 0.3, yy, -bd / 2 - 14], 4, 12, [8, 26, 28], {title: 'ACB isolating contact', lines: ['Silver-plated finger cluster', 'Mates with the guide frame terminal']});
+    for (const sx of [-1, 1]) bx(g, 8, 18, bd - 40, M.zinc, sx * (br.w / 2 + 4.6), -br.h / 2 + 22, 0);
   }
-  for (const sx of [-1, 1]) hw.screw(g, [sx * (br.w / 2 - 14), br.h / 2 - 14, br.d / 2 + 2], [0, 0, 1], 6, 'Front cover');
+  for (const sx of [-1, 1]) hw.screw(g, [sx * (br.w / 2 - 14), br.h / 2 - 14, bd / 2 + 3.2], [0, 0, 1], 6, 'Front cover');
   out.push({j, y: yb + 40, h: 120, amps: Number((m.label.match(/(\d+) A/) || [0, 1600])[1]), label: m.label, loc, acb: true});
-  return {yb, gd, br};
+  // world z of the rear faces of the guide frame's main terminals, where the connection bars start
+  return {yb, gd, br, zTerm: gz - gd / 2 + 20 - 30};
 }
 
 const faceCache = {};

@@ -45,7 +45,7 @@ export function createStage({canvas, lo = false}) {
     tex.colorSpace = THREE.SRGBColorSpace;
     scene.background = tex;
   }
-  const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.05, 120);
+  const camera = new THREE.PerspectiveCamera(30, 16 / 9, 0.15, 80);
   const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(4, 4, {type: THREE.HalfFloatType, samples: lo ? 0 : 4}));
   composer.addPass(new RenderPass(scene, camera));
   const gtao = new GTAOPass(scene, camera, 4, 4);

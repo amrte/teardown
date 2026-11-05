@@ -146,7 +146,7 @@ export function buildBase(ctx) {
     for (let zz = 400; zz < D - 100; zz += 400) for (const sx of [-1, 1]) bx(g, t, B, 80, M.plinth, sx * (W / 2 - 1), 0, D / 2 - zz);
   }
   // the U50 foundation channels in the screed (OI Aufstellung p.8) and the floor fixing (TIP p.105)
-  const fd = part(ctx, {name: 'Foundation frame U50', layer: 'frame', stage: 'frame', at: [W / 2, -25, -D / 2], dir: [0, -1, 0], dist: 650, lines: ['U-profile DIN 1026 U50 (max U100) in screed', 'Levelled on shims to 1 mm / m', 'Heavy-duty dowels, DIN 434 tapered washers']});
+  const fd = part(ctx, {name: 'Foundation frame U50', layer: 'frame', stage: 'frame', at: [W / 2, -26.5, -D / 2], dir: [0, -1, 0], dist: 650, lines: ['U-profile DIN 1026 U50 (max U100) in screed', 'Levelled on shims to 1 mm / m', 'Heavy-duty dowels, DIN 434 tapered washers']});
   const U = (zc) => {
     bx(fd, W, 5, 50, M.zinc, 0, 22.5, zc);
     bx(fd, W, 50, 5, M.zinc, 0, 0, zc - 22.5);
@@ -210,7 +210,7 @@ export function buildEnclosure(ctx) {
     bx(g, t, 2, D + REAR_T + DOOR_T, mat, 0, H / 2 - 1, (DOOR_T - REAR_T) / 2);
     if (cfg.designStrip) {
       // the vertical name strip
-      label(g, 'SIVACON', 1800 * 0.25, 46, sx * (t / 2 + 0.5), 300, (DOOR_T - REAR_T) / 2 + D * 0.25, {pw: 512, ph: 52, bg: '#1d4b52', fg: '#e8eeee', size: 34, ry: sx * Math.PI / 2}).rotation.z = Math.PI / 2;
+      label(g, 'SIVACON', 1800 * 0.25, 46, sx * (t / 2 + 1), 300, (DOOR_T - REAR_T) / 2 + D * 0.25, {pw: 512, ph: 52, bg: '#1d4b52', fg: '#e8eeee', size: 34, ry: sx * Math.PI / 2}).rotation.z = Math.PI / 2;
     }
     for (let yy = -H / 2 + 200; yy < H / 2; yy += 600) hw.screw(g, [sx * t / 2, yy, D / 2 - 60], [sx, 0, 0], 6, 'Side wall');
   };
@@ -437,7 +437,7 @@ export function buildDoor(ctx, o) {
     bx(g, 3, 14, 2, M.bolt, w / 2 - 30, ly, DOOR_T / 2 + 8.5);
     hw.screw(g, [w / 2 - 30, ly - 22, DOOR_T / 2 + 0.5], [0, 0, 1], 4, 'Lock insert retainer');
   }
-  if (o.label) label(g, o.label, Math.min(w - 80, 150), 26, o.labelX ?? 0, o.labelY ?? h / 2 - 40, DOOR_T / 2 + 0.3, {pw: 300, ph: 52, size: 28});
+  if (o.label) label(g, o.label, Math.min(w - 80, 150), 26, o.labelX ?? 0, o.labelY ?? h / 2 - 40, DOOR_T / 2 + 0.9, {pw: 300, ph: 52, size: 28});
   if (o.extra) o.extra(g);
   return g;
 }

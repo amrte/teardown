@@ -17,8 +17,9 @@ const CSS = `
 .pn{position:absolute;background:${C.panel};border:1px solid ${C.line};box-shadow:0 1px 2px rgba(20,22,26,.04);pointer-events:auto}
 .cp{font-size:9.6px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;white-space:nowrap}
 .mu{color:${C.mute}}
-.hd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
-.hd .cp:first-child{font-weight:700}
+.hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:7px;min-width:0}
+.hd .cp:first-child{font-weight:700;flex:none}
+.hd .cp:last-child:not(:first-child){min-width:0;overflow:hidden;text-overflow:ellipsis}
 .tb{height:19px;padding:0 7px;display:inline-flex;align-items:center;justify-content:center;font-size:8.6px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;border:1px solid ${C.line};background:#fff;color:${C.ink};white-space:nowrap;cursor:pointer;pointer-events:auto;user-select:none}
 .tb:hover{border-color:${C.faint};filter:brightness(.97)}
 .tb.on{background:${C.ink};color:#fff;border-color:${C.ink}}
@@ -51,13 +52,18 @@ const CSS = `
 .call span{display:block;font-size:8.4px;font-weight:500;letter-spacing:1.3px;color:${C.mute};text-transform:uppercase;margin-top:2px}
 .cur{position:absolute;left:0;top:0;z-index:50;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3));pointer-events:none}
 .ring{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;border:1.5px solid ${C.red};opacity:0;z-index:49;pointer-events:none}
-.stg{position:absolute;top:0;font-size:7.6px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:${C.mute};transform:translateX(-50%);white-space:nowrap}
-.stg.on{color:${C.red}}
-.tick{position:absolute;top:13px;width:1px;height:6px;background:${C.faint}}
+.tick{position:absolute;top:13px;width:1px;height:7px;background:${C.faint}}
 .toast{position:absolute;left:800px;top:92px;transform:translateX(-50%);padding:5px 12px;background:${C.ink};color:#fff;font-size:10px;font-weight:600;letter-spacing:.5px;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
 .scroll{overflow-y:auto;overflow-x:hidden;scrollbar-width:thin}
-.sys .tb{height:17px;padding:0 5px;font-size:8.2px}
-.sys .row{gap:3px}
+/* every button row is a grid with a fixed column count: labels never wrap or spill out of a panel */
+.gr{display:grid;gap:3px}
+.gr .tb{width:100%;min-width:0;padding:0 2px;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis}
+.lb{font-size:8.2px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:${C.mute};margin:8px 0 4px;white-space:nowrap}
+.srow{display:grid;grid-template-columns:52px minmax(0,1fr);gap:4px;align-items:start;margin-top:3px}
+.srow .lb{margin:0;padding-top:4px;font-size:7.8px;letter-spacing:1px}
+.sys .tb,.vw .tb{height:17px;font-size:8px}
+.stg{position:absolute;top:0;font-size:7.6px;font-weight:600;color:${C.mute};transform:translateX(-50%)}
+.stg.on{color:${C.red}}
 `;
 
 const el = (h) => {
@@ -65,6 +71,8 @@ const el = (h) => {
   d.innerHTML = h.trim();
   return d.firstElementChild;
 };
+// a row of buttons on a grid of n equal columns
+const gr = (n, html) => `<div class="gr" style="grid-template-columns:repeat(${n},minmax(0,1fr))">${html}</div>`;
 const fmt = (n, d = 0) => Number(n).toLocaleString('en-US', {minimumFractionDigits: d, maximumFractionDigits: d});
 
 // a small front-view glyph of a field type for the type list and the lineup strip (SVG, 1 px = 1/scale mm)
@@ -145,46 +153,46 @@ export function createConsole(app, act) {
 
   // ------------------------------------------------------------ right column: part card, bill of materials
   const card = add(`<div class="pn" style="left:1303px;top:28px;width:262px;height:172px;padding:10px 11px"></div>`);
-  const sysp = add(`<div class="pn sys" style="left:1303px;top:208px;width:262px;height:262px;padding:9px 11px"></div>`);
-  const bom = add(`<div class="pn scroll" style="left:1303px;top:478px;width:262px;height:284px;padding:10px 11px"></div>`);
+  const sysp = add(`<div class="pn sys" style="left:1303px;top:208px;width:262px;height:286px;padding:9px 11px"></div>`);
+  const bom = add(`<div class="pn scroll" style="left:1303px;top:502px;width:262px;height:260px;padding:10px 11px"></div>`);
 
   // ------------------------------------------------------------ bottom: lineup strip, teardown, views, layers
   const strip = add(`<div class="pn" style="left:305px;top:770px;width:990px;height:112px;padding:8px 11px"></div>`);
   const stripHd = add(`<div class="hd"><span class="cp">LINEUP · FRONT VIEW</span><span class="cp mu"></span></div>`, strip);
   const lineup = add(`<div style="position:relative;height:74px"></div>`, strip);
   const tdp = add(`<div class="pn" style="left:35px;top:770px;width:262px;height:112px;padding:8px 11px"></div>`);
-  const viewp = add(`<div class="pn" style="left:1303px;top:770px;width:262px;height:112px;padding:8px 11px"></div>`);
+  const viewp = add(`<div class="pn vw" style="left:1303px;top:770px;width:262px;height:112px;padding:8px 11px"></div>`);
 
   // teardown slider
-  add(`<div class="hd"><span class="cp">TEARDOWN</span><span class="cp mu" data-k="tdv"></span></div>`, tdp);
-  const track = add(`<div style="position:relative;height:30px;margin:0 4px;cursor:ew-resize;pointer-events:auto"></div>`, tdp);
+  add(`<div class="hd" style="margin-bottom:3px"><span class="cp">TEARDOWN</span><span class="cp mu" data-k="tdv"></span></div>`, tdp);
+  const stgName = add(`<div style="font-size:9.2px;height:13px;color:${C.mute};white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>`, tdp);
+  const track = add(`<div style="position:relative;height:24px;margin:2px 6px 0;cursor:ew-resize;pointer-events:auto"></div>`, tdp);
   const stgLbl = [];
   STAGES.forEach((s, i) => {
-    const k = (i + 0.5) / STAGES.length;
     add(`<div class="tick" style="left:${(i / STAGES.length) * 100}%"></div>`, track);
-    if (i % 2 === 0) stgLbl.push(add(`<div class="stg" style="left:${k * 100}%">${s.label.split(' ')[0]}</div>`, track));
-    else stgLbl.push(add(`<div class="stg" style="left:${k * 100}%;top:22px">${s.label.split(' ')[0]}</div>`, track));
+    stgLbl.push(add(`<div class="stg" style="left:${((i + 0.5) / STAGES.length) * 100}%" title="${s.label}">${i + 1}</div>`, track));
   });
   add(`<div class="tick" style="left:100%"></div>`, track);
   add(`<div style="position:absolute;left:0;right:0;top:15px;height:3px;background:#e6e7e9"></div>`, track);
   const tdFill = add(`<div style="position:absolute;left:0;top:15px;height:3px;background:${C.red}"></div>`, track);
   const tdKnob = add(`<div style="position:absolute;top:10px;width:13px;height:13px;margin-left:-6.5px;border-radius:50%;background:#fff;border:2px solid ${C.red}"></div>`, track);
-  const tdRow = add(`<div class="row" style="margin-top:6px"></div>`, tdp);
+  const tdRow = add(gr(4, ''), tdp);
+  tdRow.style.marginTop = '4px';
+  const tdv = tdp.querySelector('[data-k=tdv]');
   const tdBtns = {
-    assemble: add(`<div class="tb" data-a="td:0">Assemble</div>`, tdRow),
-    step: add(`<div class="tb" data-a="td:step">Next stage ▸</div>`, tdRow),
-    full: add(`<div class="tb" data-a="td:1">Explode</div>`, tdRow),
-    scope: add(`<div class="tb" data-a="scope"></div>`, tdRow),
+    assemble: add(`<div class="tb" data-a="td:0" title="Put everything back">Assemble</div>`, tdRow),
+    step: add(`<div class="tb" data-a="td:step" title="Next teardown stage (E)">Next ▸</div>`, tdRow),
+    full: add(`<div class="tb" data-a="td:1" title="All eight stages (X)">Explode</div>`, tdRow),
+    scope: add(`<div class="tb" data-a="scope" title="Take apart the selected field or the whole lineup"></div>`, tdRow),
   };
-  const stgName = add(`<div style="font-size:9.4px;margin-top:5px;color:${C.mute};white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>`, tdp);
 
   // views and layers
-  add(`<div class="hd"><span class="cp">VIEW</span><span class="cp mu">DRAG · WHEEL · RIGHT-DRAG</span></div>`, viewp);
-  const vrow = add(`<div class="row"></div>`, viewp);
+  add(`<div class="hd" style="margin-bottom:5px"><span class="cp">VIEW</span><span class="cp mu">DRAG · WHEEL · RIGHT-DRAG</span></div>`, viewp);
+  const vrow = add(gr(VIEWS.length, ''), viewp);
   const vb = {};
-  for (const v of VIEWS) vb[v] = add(`<div class="tb" data-a="view:${v}">${v}</div>`, vrow);
-  add(`<div class="cp" style="margin:7px 0 4px;font-weight:700">LAYERS</div>`, viewp);
-  const lrow = add(`<div class="row"></div>`, viewp);
+  VIEWS.forEach((v, i) => (vb[v] = add(`<div class="tb" data-a="view:${v}" title="View ${v} (${i + 1})">${v}</div>`, vrow)));
+  add(`<div class="cp" style="margin:6px 0 3px;font-weight:700">LAYERS</div>`, viewp);
+  const lrow = add(gr(3, ''), viewp);
   const lb = {};
   for (const l of LAYERS) lb[l] = add(`<div class="tb" data-a="layer:${l}">${l}</div>`, lrow);
 
@@ -200,6 +208,11 @@ export function createConsole(app, act) {
     if (!n || !ui.contains(n)) return;
     e.stopPropagation();
     const [verb, ...rest] = n.dataset.a.split(':');
+    if (verb === 'addkind') {
+      addKind = rest[0];
+      if (last) refresh(...last);
+      return;
+    }
     act(verb, rest.join(':'), n);
   });
   // the teardown track drags
@@ -223,7 +236,11 @@ export function createConsole(app, act) {
 
   // ------------------------------------------------------------ refresh: rebuild panels from the configuration
   let lastSel = -1;
+  let lastType = '';
+  let addKind = '';
+  let last = null;
   const refresh = (S, R) => {
+    last = [S, R];
     const cfg = S.cfg;
     const f = cfg.fields[S.sel];
     // readouts
@@ -251,7 +268,7 @@ export function createConsole(app, act) {
             `<div class="ty ${k === f.type ? 'on' : ''}" data-a="type:${k}"><i>${glyph(k, 16, 22, k === f.type ? f.modules : t.demo || [], -1, k === f.type ? R.cap[S.sel] : 0)}</i><div>${t.name}<small>${t.short}</small></div></div>`,
         )
         .join('');
-      const widths = T.widths.map((w) => `<div class="tb ${w === f.width ? 'on' : ''}" data-a="width:${w}">${w}</div>`).join('');
+      const widths = gr(Math.min(6, Math.max(3, T.widths.length)), T.widths.map((w) => `<div class="tb ${w === f.width ? 'on' : ''}" data-a="width:${w}">${w}</div>`).join(''));
       let modHtml = '';
       if (T.modular) {
         const cap = R.cap[S.sel];
@@ -270,59 +287,53 @@ export function createConsole(app, act) {
           .join('');
         const free = cap - used;
         const freeRow = free > 0 ? `<div class="md free" style="top:${y}px;height:${Math.max(9, free * sc)}px">free ${free} mm<em></em></div>` : '';
-        const pal = (T.locked ? [] : T.modules)
-          .map((k) => {
-            const K = MODULE_KINDS[k];
-            return K.heights
-              .filter((h) => h <= free)
-              .map((h) => `<div class="tb" data-a="addmod:${k}:${h}" title="${K.name} ${h} mm">${K.short} ${h}</div>`)
-              .join('');
-          })
-          .join('');
+        // add a module in two steps: the kind, then one of its heights that still fits
+        if (f.type !== lastType || !T.modules?.includes(addKind)) addKind = T.modules?.[0] || '';
+        lastType = f.type;
+        const AK = MODULE_KINDS[addKind];
+        const pal = T.locked
+          ? ''
+          : gr(Math.min(6, T.modules.length), T.modules.map((k) => `<div class="tb ${k === addKind ? 'on' : ''}" data-a="addkind:${k}" title="${MODULE_KINDS[k].name}">${MODULE_KINDS[k].short}</div>`).join('')) +
+            `<div style="height:3px"></div>` +
+            (AK && AK.heights.some((h) => h <= free)
+              ? gr(5, AK.heights.map((h) => `<div class="tb ${h > free ? 'dis' : ''}" data-a="addmod:${addKind}:${h}" title="Add ${AK.name}, ${h} mm">+ ${h}</div>`).join(''))
+              : `<span class="mu" style="font-size:9.4px">No room for a ${AK?.short || ''} module: remove or shrink one</span>`);
         const m = f.modules[S.mod];
         const MK = m && MODULE_KINDS[m.kind];
         const modTools = m && T.locked
           ? `<div class="sep"></div><div class="hd"><span class="cp">MODULE ${S.mod + 1}</span><span class="cp mu">${MK.name}</span></div>
-            ${MK.positions ? `<div class="row">${MK.positions.map((p) => `<div class="tb ${p === (m.pos || 'connected') ? 'on' : ''}" data-a="modpos:${p}">${p}</div>`).join('')}</div>` : '<span class="mu" style="font-size:9.4px">Fixed part of the breaker field</span>'}`
+            ${MK.positions ? gr(2, MK.positions.map((p) => `<div class="tb ${p === (m.pos || 'connected') ? 'on' : ''}" data-a="modpos:${p}">${p}</div>`).join('')) : '<span class="mu" style="font-size:9.4px">Fixed part of the breaker field</span>'}`
           : m
           ? `<div class="sep"></div><div class="hd"><span class="cp">MODULE ${S.mod + 1}</span><span class="cp mu">${MK.name}</span></div>
-            <div class="row">
-              <div class="tb" data-a="modmove:-1">▲ up</div><div class="tb" data-a="modmove:1">▼ down</div>
-              <div class="tb" data-a="moddup">duplicate</div><div class="tb acc" data-a="moddel">remove</div>
-            </div>
-            <div class="row" style="margin-top:4px">${T.modules
-              .map((k) => `<div class="tb ${k === m.kind ? 'on' : ''}" data-a="modkind:${k}">${MODULE_KINDS[k].short}</div>`)
-              .join('')}</div>
-            <div class="row" style="margin-top:4px">${MK.heights.map((h) => `<div class="tb ${h === m.h ? 'on' : ''} ${h - m.h > free ? 'dis' : ''}" data-a="modh:${h}">${h} mm</div>`).join('')}</div>
-            ${MK.cols ? `<div class="row" style="margin-top:4px">${MK.cols.map((c) => `<div class="tb ${c === (m.cols || 1) ? 'on' : ''}" data-a="modcols:${c}">${c === 1 ? '1/1' : '1/' + c} width</div>`).join('')}</div>` : ''}
-            ${MK.positions ? `<div class="row" style="margin-top:4px">${MK.positions.map((p) => `<div class="tb ${p === (m.pos || 'connected') ? 'on' : ''}" data-a="modpos:${p}">${p}</div>`).join('')}</div>` : ''}`
+            ${gr(4, `<div class="tb" data-a="modmove:-1">▲ up</div><div class="tb" data-a="modmove:1">▼ down</div><div class="tb" data-a="moddup">duplicate</div><div class="tb acc" data-a="moddel">remove</div>`)}
+            <div class="lb">REPLACE WITH</div>
+            ${gr(Math.min(6, T.modules.length), T.modules.map((k) => `<div class="tb ${k === m.kind ? 'on' : ''}" data-a="modkind:${k}" title="${MODULE_KINDS[k].name}">${MODULE_KINDS[k].short}</div>`).join(''))}
+            ${MK.heights.length > 1 ? `<div class="lb">HEIGHT MM</div>${gr(5, MK.heights.map((h) => `<div class="tb ${h === m.h ? 'on' : ''} ${h - m.h > free ? 'dis' : ''}" data-a="modh:${h}">${h}</div>`).join(''))}` : ''}
+            ${MK.cols ? `<div class="lb">WIDTH</div>${gr(MK.cols.length, MK.cols.map((c) => `<div class="tb ${c === (m.cols || 1) ? 'on' : ''}" data-a="modcols:${c}">1/${c} · ${c} units</div>`).join(''))}` : ''}
+            ${MK.positions ? `<div class="lb">POSITION</div>${gr(2, MK.positions.map((p) => `<div class="tb ${p === (m.pos || 'connected') ? 'on' : ''}" data-a="modpos:${p}">${p}</div>`).join(''))}` : ''}`
           : '';
         modHtml = `<div class="sep"></div>
           <div class="hd"><span class="cp">${T.compartment || 'DEVICE COMPARTMENT'}</span><span class="cp mu">${used} / ${cap} MM</span></div>
           <div class="mods" style="height:${H + 2}px">${rows}${freeRow}</div>
           <div class="gauge"><b style="width:${Math.min(100, (used / cap) * 100)}%"></b></div>
-          ${T.locked ? '' : `<div class="cp" style="margin:8px 0 4px;font-weight:700">ADD MODULE</div>
-          <div class="row">${pal || `<span class="mu" style="font-size:9.4px">Compartment full: remove or shrink a module</span>`}</div>`}
+          ${T.locked ? '' : `<div class="lb" style="color:${C.ink};font-weight:700">ADD MODULE</div>${pal}`}
           ${modTools}`;
       }
       const opts = (T.options || [])
         .map(
           (o) =>
-            `<div class="cp mu" style="margin:7px 0 4px;font-size:8.6px">${o.label}</div><div class="row">${o.values
+            `<div class="lb">${o.label}</div>${gr(Math.max(3, o.values.length), o.values
               .map((v) => `<div class="tb ${String(f.opts?.[o.key] ?? o.values[0]) === String(v) ? 'on' : ''}" data-a="opt:${o.key}:${v}">${v}</div>`)
-              .join('')}</div>`,
+              .join(''))}`,
         )
         .join('');
       insp.innerHTML = `
         <div class="hd"><span class="cp">FIELD ${f.tag}</span><span class="cp mu">${T.short}</span></div>
-        <div class="row" style="margin-bottom:7px">
-          <div class="tb" data-a="fieldmove:-1">◀ move</div><div class="tb" data-a="fieldmove:1">move ▶</div>
-          <div class="tb" data-a="fielddup">duplicate</div><div class="tb acc ${cfg.fields.length < 2 ? 'dis' : ''}" data-a="fielddel">remove</div>
-        </div>
-        <div class="cp mu" style="margin:2px 0 3px;font-size:8.6px">REPLACE WITH</div>
+        ${gr(4, `<div class="tb ${S.sel === 0 ? 'dis' : ''}" data-a="fieldmove:-1">◀ move</div><div class="tb ${S.sel === cfg.fields.length - 1 ? 'dis' : ''}" data-a="fieldmove:1">move ▶</div><div class="tb" data-a="fielddup">duplicate</div><div class="tb acc ${cfg.fields.length < 2 ? 'dis' : ''}" data-a="fielddel">remove</div>`)}
+        <div class="lb">REPLACE WITH</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px">${types}</div>
-        <div class="cp mu" style="margin:8px 0 4px;font-size:8.6px">FIELD WIDTH MM</div>
-        <div class="row">${widths}</div>
+        <div class="lb">FIELD WIDTH MM</div>
+        ${widths}
         ${opts}
         ${modHtml}`;
       // a selected module brings its tools into view
@@ -334,15 +345,15 @@ export function createConsole(app, act) {
     const sys = SYSTEM.options
       .map(
         (o) =>
-          `<div style="display:flex;align-items:center;gap:4px;margin-top:3px"><span class="cp mu" style="width:58px;font-size:8px;flex:none">${o.label}</span><div class="row">${(typeof o.values === 'function' ? o.values(cfg) : o.values)
+          `<div class="srow"><span class="lb">${o.label}</span>${gr(o.cols || 4, (typeof o.values === 'function' ? o.values(cfg) : o.values)
             .map((v) => `<div class="tb ${String(cfg[o.key]) === String(v) ? 'on' : ''}" data-a="sys:${o.key}:${v}">${o.fmt ? o.fmt(v) : v}</div>`)
-            .join('')}</div></div>`,
+            .join(''))}</div>`,
       )
       .join('');
     sysp.innerHTML = `<div class="hd"><span class="cp">SYSTEM</span><span class="cp mu">ALL FIELDS</span></div>${sys}
-      <div class="sep"></div>
-      <div class="row"><div class="tb" data-a="preset:standard">preset · standard</div><div class="tb" data-a="preset:mcc">preset · MCC</div><div class="tb" data-a="preset:small">preset · small</div></div>
-      <div class="row" style="margin-top:4px"><div class="tb" data-a="export">export JSON</div><div class="tb" data-a="link">copy link</div></div>`;
+      <div class="sep" style="margin:6px 0 3px"></div>
+      <div class="srow"><span class="lb">PRESET</span>${gr(3, `<div class="tb" data-a="preset:standard">standard</div><div class="tb" data-a="preset:mcc">MCC</div><div class="tb" data-a="preset:small">small</div>`)}</div>
+      <div class="srow"><span class="lb">SHARE</span>${gr(2, `<div class="tb" data-a="export">export JSON</div><div class="tb" data-a="link">copy link</div>`)}</div>`;
     // bill of materials
     bom.innerHTML = `<div class="hd"><span class="cp">BILL OF MATERIALS</span><span class="cp mu">${fmt(R.parts)} PARTS</span></div>
       ${R.bom.map(([k, v, sub]) => (k === '—' ? '<div class="sep"></div>' : `<div class="kv"><span>${k}${sub ? ` <span class="mu" style="font-size:9px">${sub}</span>` : ''}</span><b>${v}</b></div>`)).join('')}`;
@@ -368,9 +379,10 @@ export function createConsole(app, act) {
     for (const l of LAYERS) {
       const on = S.layers[l];
       lb[l].classList.toggle('on', l === 'enclosure' ? on !== 'off' : !!on);
-      lb[l].textContent = l === 'enclosure' ? `enclosure · ${on}` : l;
+      lb[l].textContent = l === 'enclosure' ? `encl. ${on}` : l;
     }
-    tdBtns.scope.textContent = S.scope === 'all' ? 'scope · lineup' : 'scope · field';
+    tdBtns.scope.textContent = S.scope === 'all' ? 'lineup' : 'one field';
+    tdBtns.scope.classList.toggle('on', S.scope === 'all');
   };
 
   // ------------------------------------------------------------ the hovered/pinned part card
@@ -396,8 +408,13 @@ export function createConsole(app, act) {
     tdKnob.style.left = `${k * 100}%`;
     const st = Math.min(STAGES.length - 1, Math.floor(k * STAGES.length - 1e-6));
     stgLbl.forEach((n, i) => n.classList.toggle('on', k > 0.001 && i === st));
-    tdp.querySelector('[data-k=tdv]').textContent = k < 0.001 ? 'ASSEMBLED' : `STAGE ${st + 1} / ${STAGES.length} · ${Math.round(k * 100)}%`;
-    stgName.textContent = k < 0.001 ? 'Drag the track or step through the eight stages' : `${STAGES[st].label} — ${STAGES[st].sub}`;
+    const tdText = k < 0.001 ? 'ASSEMBLED' : `STAGE ${st + 1} / ${STAGES.length} · ${Math.round(k * 100)}%`;
+    const nameText = k < 0.001 ? 'Drag the track or step through 8 stages' : `${STAGES[st].label} — ${STAGES[st].sub}`;
+    if (tdv.textContent !== tdText) tdv.textContent = tdText;
+    if (stgName.textContent !== nameText) {
+      stgName.textContent = nameText;
+      stgName.title = nameText;
+    }
     setCard(live.card);
     // callouts with leaders
     let html = '';

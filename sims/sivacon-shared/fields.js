@@ -43,7 +43,7 @@ function busDuct(ctx, yb, yt, main) {
   const uv = pg.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (h / 50));
   const face = new THREE.Mesh(pg, ductMat(M));
-  face.position.set(0, 0, 18.2);
+  face.position.set(0, 0, 18.9);
   face.userData.keep = true;
   cover.add(face);
   // the vertical bars themselves: profile bars 650 mm² (1100 A) [TIP Tab. 4/2]
@@ -83,7 +83,7 @@ function feedLinks(ctx, pxs, zb, main, ys) {
 function head(ctx) {
   const {W, M, hw, yt, f, i} = ctx;
   const hd = buildDoor(ctx, {name: `Head-room door ${f.tag}`, x: 0, y: yt - HEAD, w: W, h: HEAD, lock: 'quarter', label: [f.tag, ctx.T.name], labelY: 30, dist: 1150, lines: ['Kopfraumtür', 'Cross-wiring compartment behind it', 'Field designation plate']});
-  if (i === 0) label(hd, 'SIVACON S8', 140, 22, -W / 2 + 120, -30, DOOR_T / 2 + 0.3, {pw: 280, ph: 44, size: 28, bg: '#d4d6d3', fg: '#1d4b52'});
+  if (i === 0) label(hd, 'SIVACON S8', 140, 22, -W / 2 + 120, -30, DOOR_T / 2 + 0.9, {pw: 280, ph: 44, size: 28, bg: '#d4d6d3', fg: '#1d4b52'});
   const cw = part(ctx, {name: 'Cross-wiring compartment', layer: 'inner', stage: 'inner', at: [W / 2, yt - HEAD + 2, -140], dir: [0, 1, 0.3], dist: 520, lines: ['Querverdrahtungsraum', 'Terminal blocks, wiring duct, control buses', 'Row A of the height grid (225 mm)']});
   bx(cw, W - 2 * POST, 2, 260, M.zinc, 0, 0, 0);
   bx(cw, W - 2 * POST - 40, 35, 7, M.zinc, 0, 60, -60);
@@ -390,8 +390,7 @@ export const BUILD = {
     // connection bars: from the upper (busbar side) terminals to the main busbar, from the lower to the cable side
     const a = acbs[0];
     if (a) {
-      const {br: B, yb, gd} = a;
-      const zt = -gd - 10 - 25;
+      const {br: B, yb, zTerm} = a;
       const cx = W / 2;
       const order = ['L1', 'L2', 'L3'];
       const g = part(ctx, {name: 'Connection bars, busbar side', layer: 'busbar', stage: 'devices', at: [0, 0, 0], dir: [0, 0.3, -1], dist: 420, lines: [`${main.packT > 30 ? '2 × 100 × 10' : '2 × 60 × 10'} Cu per phase`, 'From the guide frame to the main busbar', 'M12 · 70 Nm · DIN 6796']});
@@ -399,7 +398,7 @@ export const BUILD = {
         const ph = main.phases.find((q) => q.n === n);
         const px = cx + (p - 1) * B.w * 0.3;
         const yA = yb + B.h * 0.78;
-        const zA = -gd / 2 - 10 - gd / 2 + 20;
+        const zA = zTerm;
         if (ctx.rear) {
           const zf = ph.zc + main.packT / 2 + 12;
           const ys = cfg.busbar === 'rear-top' ? ph.yc : ph.yc;
@@ -421,21 +420,24 @@ export const BUILD = {
       order.forEach((n, p) => {
         const px = cx + (p - 1) * B.w * 0.3;
         const yB = yb + B.h * 0.32;
-        const zA = -gd + 30;
+        // down behind the breaker, forward under the guide frame, down the front of the connection compartment
+        const zA = zTerm + 6;
+        const zC = -190;
+        const yU = yb - 45;
         const yE = ctx.y0 + 260;
-        const pts = [[-zA, yB], [-(zA - 50), yB], [-(zA - 50), yE]];
+        const pts = [[-zA, yB], [-zA, yU], [-zC, yU], [-zC, yE]];
         const mm = mk(cg, bentBarGeo(pts, 10, 60), M.copper, px, 0, 0);
         mm.rotation.y = Math.PI / 2;
-        // current transformer around the vertical leg
-        const ct = mk(cg, plateGeo(110, 110, 50, 12, [[0, 0, 30, 76, 0]]), M.devDark, px, (yB + yE) / 2, zA - 50, {rx: Math.PI / 2});
+        // current transformer around the front vertical leg
+        const ct = mk(cg, plateGeo(110, 110, 50, 12, [[0, 0, 76, 30, 0]]), M.devDark, px, (yU + yE) / 2 + 60, zC, {rx: Math.PI / 2});
         ct.castShadow = true;
-        // cable lugs with M12 bolts at the bottom, and the cables down
+        // cable lugs with M12 bolts on the front leg, and the cables down to the floor opening
         for (let k = 0; k < 3; k++) {
           const yy = yE + 30 + k * 60;
-          hw.bolt(cg, [px + 8, yy, zA - 50], [-1, 0, 0], 12, 30, {what: 'Cable lug on connection bar'});
-          bx(cg, 34, 50, 14, M.copperTin, px + 14, yy, zA - 50);
+          hw.bolt(cg, [px + 8, yy, zC], [-1, 0, 0], 12, 30, {what: 'Cable lug on connection bar'});
+          bx(cg, 34, 50, 14, M.copperTin, px + 14, yy, zC);
         }
-        for (const dz of [-25, 25]) mk(cg, bentBarGeo([[px + 34, yE + 30], [px + 34, -40]], 34, 34), M.cable, 0, 0, zA - 50 + dz, {shadow: false});
+        for (const dz of [-25, 25]) mk(cg, bentBarGeo([[px + 34, yE + 30], [px + 34, -40]], 34, 34), M.cable, 0, 0, zC + dz, {shadow: false});
       });
     }
     head(ctx);

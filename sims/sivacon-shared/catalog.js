@@ -70,13 +70,13 @@ export const FLOOR = {hole: 14.8, bolt: 12, edge: 25, mid: 350};
 export const SYSTEM = {
   tagline: 'LOW-VOLTAGE SWITCHBOARD • IEC 61439-2 • ≤ 690 V • ≤ 7010 A • ≤ 150 kA 1 s',
   options: [
-    {key: 'height', label: 'FRAME H', values: [2000, 2200]},
-    {key: 'base', label: 'PLINTH', values: [0, 100, 200]},
-    {key: 'busbar', label: 'MAIN BB', values: ['top', 'rear-top', 'rear-bottom'], fmt: (v) => v.replace('rear-', 'rear ')},
-    {key: 'In', label: 'RATED In', values: (cfg) => (cfg.busbar === 'top' ? BUSBAR.top : BUSBAR.rear).map((r) => r[0]).filter((v, i, a) => a.length < 8 || i % 2 === 0 || i === a.length - 1), fmt: (v) => `${v}`},
-    {key: 'depth', label: 'DEPTH', values: (cfg) => depthsFor(cfg.busbar, cfg.In)},
-    {key: 'form', label: 'FORM', values: ['1', '2b', '3b', '4b']},
-    {key: 'ip', label: 'IP', values: ['IP31', 'IP43', 'IP54']},
+    {key: 'height', label: 'FRAME H', values: [2000, 2200], cols: 4},
+    {key: 'base', label: 'PLINTH', values: [0, 100, 200], cols: 4},
+    {key: 'busbar', label: 'MAIN BB', values: ['top', 'rear-top', 'rear-bottom'], cols: 3, fmt: (v) => ({top: 'top', 'rear-top': 'rear top', 'rear-bottom': 'rear btm'})[v]},
+    {key: 'In', label: 'RATED In A', values: (cfg) => (cfg.busbar === 'top' ? BUSBAR.top : BUSBAR.rear).map((r) => r[0]), cols: 6},
+    {key: 'depth', label: 'DEPTH', values: (cfg) => depthsFor(cfg.busbar, cfg.In), cols: 4},
+    {key: 'form', label: 'FORM', values: ['1', '2b', '3b', '4b'], cols: 4},
+    {key: 'ip', label: 'IP', values: ['IP31', 'IP43', 'IP54'], cols: 4},
   ],
 };
 
