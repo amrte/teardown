@@ -31,7 +31,7 @@ const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 // ------------------------------------------------------------------------------------------------- state
 const state = {
   W: 800, D: 1500, bus: 2500, ur: 12,
-  mode: 'panel', gas: false, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
+  mode: 'panel', gas: false, door: 0, bkFocus: [], bkEx: 0, bkCut: false, lvFocus: [], lvEx: 0, lvCut: false, lvDoor: 1, bk: {c: 0, s: 0, count: 0, aux: true, mcb: true, equip: {...EQUIP_DEFAULT}, chart: 'close', keyLocked: false, scene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}}, eswT: 0, slide: 0, lever: 0,
   step: 0, ex: 0, truck: 'service', row: true, cut: false, glass: true, isolate: false, bolts: 'step', labels: true,
   focus: [], joints: [], selJoint: null, selPart: null, crane: false,
   ...store.get('variant', {}),
@@ -249,7 +249,7 @@ function syncPanelCb() {
 }
 
 // ------------------------------------------------------------------------------------------- pose + looks
-const anim = {ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
+const anim = {door: 0, ex: 0, truck: 0, bkEx: 0, lvEx: 0, lvDoor: 1, esw: 0, slide: 0, lever: 0, bkScene: {tool: 0, cover: 0, key: 0, keyOut: false, y7: 1, offHeld: 0}};
 const truckZ = (t) => (t === 'service' ? 0 : t === 'test' ? TRAVEL : 1150); // racking travel drawn 200 mm (3AE options 180/200/220, CB p.57)
 
 function applyPose(force) {
@@ -287,6 +287,14 @@ function applyPose(force) {
     if (c.userData.eswInd) c.rotation.z = (1 - anim.esw) * Math.PI / 2;
     if (c.userData.truckInd) c.rotation.z = anim.truck > 110 ? Math.PI / 2 : 0;
     if (c.userData.eswLever) { c.visible = anim.lever > 0.02; c.userData.z0 ??= c.position.z; c.position.z = c.userData.z0 + 120 * (1 - anim.lever); c.rotation.z = -Math.PI * anim.esw; }
+  }
+  // HV door: swings outward about its hinges on the left edge (x = -W/2, z = D)
+  {
+    const hx = -state.W / 2, hz = state.D, a = -1.65 * anim.door, c = Math.cos(a), sn = Math.sin(a);
+    for (const g of subject.parts.hvdoor || []) {
+      g.rotation.y = a;
+      g.position.set(hx - (hx * c + hz * sn), 0, hz - (-hx * sn + hz * c)).addScaledVector(g.userData.dir, anim.ex);
+    }
   }
   if (world.bk) for (const g of Object.values(world.bk.parts)) { g.position.copy(g.userData.dir).multiplyScalar(anim.bkEx); if (g.userData.extra) g.position.add(g.userData.extra); }
   if (world.lv) world.lv.pose({ex: anim.lvEx, door: anim.lvDoor});
@@ -591,6 +599,8 @@ function frame(now) {
   // drill + breaker animations
   const kd = reduced ? 1 : 1 - Math.exp(-dt * 4);
   let moved = false;
+  const doorT = state.truck === 'out' ? 1 : state.door;
+  if (Math.abs(anim.door - doorT) > 1e-3) { anim.door += (doorT - anim.door) * (reduced ? 1 : 1 - Math.exp(-dt * 3)); moved = true; }
   for (const [a, b] of [['bkEx', 'bkEx'], ['lvEx', 'lvEx'], ['lvDoor', 'lvDoor'], ['esw', 'eswT'], ['slide', 'slide'], ['lever', 'lever']]) {
     if (Math.abs(anim[a] - state[b]) > 1e-3) { anim[a] += (state[b] - anim[a]) * (a === 'esw' ? (reduced ? 1 : 1 - Math.exp(-dt * 2.2)) : kd); moved = true; }
   }
