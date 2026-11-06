@@ -147,7 +147,12 @@ export function buildPanel(mats, opts) {
   const cz = zC - 11; // cable axis (lug on the rear face of the bar)
   const ySE1 = 548, ySE0 = ySE1 - 280; // sealing end
   const yClamp = 200;
-  const yS = 740, zS = zC - 115; // earthing switch shaft
+  // feeder earthing switch at the front of the connection compartment, beside the vertical partition (catalog HA 25.71
+  // p. 10 item 19, O Fig. 27 (4), its drive coupled in the switching-device compartment, O Fig. 129): shaft just behind
+  // the partition, blades closing rearwards onto fixed contacts at the side of the connection bars, below the CTs and
+  // level with the cable lugs; open, they hang down towards the floor. Contact shape and blade length are drawn.
+  const yS = 628, zS = zP - 70; // earthing switch shaft
+  const xK = 41; // knife pair offset from the bar centre: the fixed contact sits on the side face of the bar
   const xE = pitch / 2; // earthing drive path between L2 and L3
   const flangeH = Math.min(90, pitch / 2 - 3);
 
@@ -686,7 +691,7 @@ export function buildPanel(mats, opts) {
         for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zTerm - 15 - 50]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (bushing to CT P1)');
         for (const g of BAR([[x, yL, zTerm - 155 + 50], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (CT P2 to the cables)');
       } else for (const g of BAR([[x, yL, zTerm + 10], [x, yL, zC], [x, yBarLow, zC]], 60, 10)) p.add(g, 'copper', 'Cable connection bar (no current transformers)');
-      p.add(B(x - 22, x + 22, yS - 25, yS + 25, zC - 22, zC - 5), 'silver', 'Earthing switch fixed contact');
+      p.add(B(x + 30, x + 30 + 22, yS - 11, yS + 11, zC - 5, zC + 40), 'silver', 'Earthing switch fixed contact on the side of the connection bar (laminated; grease at maintenance, O §31)');
     }
     anchor('lugM12', p, xs.map((x) => ({p: N(x, yLug, zC - 17), n: N(0, 0, -1)})), {nut: 22});
     p.finish();
@@ -777,8 +782,8 @@ export function buildPanel(mats, opts) {
     p.finish();
   }
   if (hasFeeder) {
-    // make-proof feeder earthing switch behind the connection bars: knife blades close horizontally onto the fixed
-    // contacts on the rear face of the bars and open by swinging 60° upwards into free space.
+    // make-proof feeder earthing switch at the front of the connection compartment (see yS / zS): the knife pairs close
+    // horizontally rearwards onto the fixed contacts at the side of the bars and open by swinging ≈ 57° down.
     const p = part('esw', V(0, -40, -460));
     p.add(C(15, 15, W - 70, 'x', 0, yS, zS), 'steel', 'Earthing switch shaft');
     for (const s of [-1, 1]) p.add(RB(s * (hw - 45) - 10, s * (hw - 45) + 10, yS - 50, yS + 40, zS - 25, zS + 25, 4), 'galvDark', 'Shaft bearing');
@@ -789,15 +794,16 @@ export function buildPanel(mats, opts) {
     const xb = -(hw - 60);
     cyl(p, 5, [xb, 210, zS], [xb, yS - 15, zS], 'copper', 'Earthing braid to earth bar');
     cyl(p, 5, [xb, 210, 72], [xb, 210, zS], 'copper', 'Earthing braid to earth bar');
-    const len = zC - 22 - zS;
+    const len = zS - (zC + 14); // knife tip just past the fixed-contact base
     for (const x of xs) {
       const bl = new THREE.Group();
-      bl.position.set(x, yS, zS);
+      bl.position.set(x + xK, yS, zS);
       bl.userData.blade = true;
       bl.userData.closedAngle = 0;
-      bl.userData.openDelta = -1.05; // 60° up when open
+      bl.userData.openDelta = -1.0; // ≈ 57° down when open
       const pb = new PartBuilder(bl, mats);
-      for (const o of [-14, 14]) pb.add(B(o - 3, o + 3, -12, 12, 0, len), 'copper', 'Earthing knife');
+      for (const o of [-14, 14]) pb.add(B(o - 3, o + 3, -12, 12, -len, 0), 'copper', 'Earthing knife');
+      pb.add(B(-17, 17, -12, 12, -20, -8), 'steel', 'Knife pair cross-piece');
       pb.add(C(18, 18, 44, 'x', 0, 0, 0), 'steel', 'Blade hub');
       pb.finish();
       bl.rotation.x = 0;

@@ -34,6 +34,7 @@ const ALLOW = [
   [/^feeders:Feeder bar/, /^ltriSwitch:Upper fixed contact/, 'feeder bar bolted to the upper fixed contact'],
   [/^cts:Primary terminal/, /^(connBars:|ltriSwitch:Connection)/, 'bar bolted to the CT primary terminal'],
   [/^ltriSwitch:Earthing-switch fixed contact/, /^esw:Earthing knife/, 'closed earthing knife on its fixed contact'],
+  [/^esw:Earthing knife/, /^wvt:VT bushing through the partition/, 'only the axis box of the open (tilted) knife: the knife itself passes ≈ 260 mm above the bushing'],
   [/^bkArms:Threaded bolt/, /^breaker:Insulating body of the disconnector link/, 'threaded bolt screwed into the metal insert of the link body'],
   [/^breaker:(Contact arm|Contact finger|Ring spring|Contact system cage)/, /^(bush[UL]:|shellB:Bushing plate|partition:Vertical partition)/, 'contact arm of the metering part in the bushing bore (radial check below)'],
   [/^wvt:VT bushing/, /^partition:Vertical partition/, 'VT bushing through its hole in the partition'],

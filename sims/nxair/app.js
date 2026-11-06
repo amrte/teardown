@@ -497,7 +497,7 @@ VIEWS.siq = {p: [-1.7, 3.0, 0.9], t: [0, 1.95, -0.35]}; // SIQuench box over the
 VIEWS.lrm = {p: [-0.1, 1.45, 1.55], t: [-0.2, 1.41, 0.75]};
 VIEWS.connFront = {p: [0.9, 1.0, 1.9], t: [0, 0.7, -0.15]};
 VIEWS.gas = {p: [-4.4, 3.5, 3.9], t: [-0.55, 1.45, -0.1]};
-VIEWS.eswCut = {p: [-2.3, 1.0, -0.55], t: [0, 0.72, -0.42]};
+VIEWS.eswCut = {p: [-2.2, 0.95, -0.3], t: [0, 0.6, -0.22]}; // feeder earthing switch at the front of the connection compartment
 const VIEW_BUTTONS = [['iso', '3/4'], ['front', 'Front'], ['side', 'Side'], ['rear', 'Rear'], ['top', 'Top']];
 let camTween = null;
 function goView(name, instant) {
