@@ -806,28 +806,43 @@ export function buildPanel(mats, opts) {
     p.finish();
   }
   if (hasFeeder && !isWVT && EQ.vt) {
+    // Fixed single-pole cast-resin VTs 4MR (block type, narrow design to DIN 42600-9, without primary fuse, secondary
+    // screw terminals; catalog HA 25.73 p. 24, "factory-assembled, in the connection compartment"). Arrangement after
+    // the catalog section HA 25.71 p. 10 (item 17) and O Fig. 27 (6): each VT lies on the rear wall of the connection
+    // compartment, HV terminal pointing forward, joined by a short flat copper strip to the rear face of its phase's
+    // cable connection bar, below the block-type CT. Primary connections M8, checked at 20 Nm (I report 2.4).
+    // Body sizes, strip section and bracket are drawn (no dimension drawing of the 4MR in the documents).
     const p = part('vt', V(0, 140, -700));
-    for (const x of xs) {
-      // single-pole cast-resin VT, fixed-mounted (catalog HA 25.71 p. 23 photo): base plate with feet, body tapering to the
-      // HV terminal head, secondary terminal box with transparent cover at the front foot. Sizes drawn.
-      const hv = Math.min(58, pitch / 2 - 8);
-      p.add(RB(x - hv - 8, x + hv + 8, 760, 766, 22, 178, 2, 1), 'galvDark', 'VT base plate');
-      for (const dx of [-(hv - 4), hv - 4]) for (const z of [32, 168]) p.add(B(x + dx - 4, x + dx + 4, 765.5, 766.2, z - 5, z + 5), 'black', 'VT fixing slot');
-      p.add(RB(x - hv, x + hv, 766, 880, 30, 170, 10, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
-      p.add(RB(x - hv + 10, x + hv - 10, 876, 950, 40, 160, 12, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
-      p.add(RB(x - 30, x + 30, 946, 962, 70, 130, 8, 2), 'resin', 'Voltage transformer (cast resin, single-pole)');
-      p.add(L([[26, 0], [32, 15], [24, 25], [32, 40], [24, 50], [20, 70]], 'y', x, 960, 100), 'resin', 'VT primary terminal (A)');
-      p.add(C(9, 9, 8, 'y', x, 1034, 100, 6), 'zinc', 'VT primary terminal nut');
-      p.add(RB(x - 46, x + 46, 768, 808, 170, 186, 3, 1), 'black', 'VT secondary terminal box (a, n, da, dn)');
-      p.add(B(x - 42, x + 42, 772, 804, 186, 187), 'glass', 'VT secondary terminal cover (transparent)');
-      for (let k = 0; k < 4; k++) p.add(C(3.5, 3.5, 6, 'z', x - 30 + k * 20, 788, 183), 'zinc', `VT secondary terminal ${['a', 'n', 'da', 'dn'][k]}`);
-      p.add(C(4, 4, 10, 'x', x - hv - 4, 763, 160, 8), 'zinc', 'VT earthing terminal (base plate)');
-      p.add(B(x - 40, x + 40, 820, 860, 170, 171), 'white', 'VT rating plate');
-      cyl(p, 5, [x, 1030, 100], [x, 1060, 100], 'copper', 'VT primary lead');
-      p.add(TU([[x, 1060, 100], [x, 1062, 106], [x, yL + 10, zC + 8]], 5, 12, 8), 'copper', 'VT primary lead');
-    }
-    p.add(EY(rect(-(hw - 20), 14, hw - 20, 175), 745, 760), 'galvDark', 'VT support');
-    anchor('vtPrim', p, xs.map((x) => ({p: N(x, 1030, 100), n: N(0, 1, 0)})));
+    const yV = 930, hv = Math.min(58, pitch / 2 - 8), hh = 62; // axis height, half width (x) and half height (y)
+    const zB0 = 8, zB1 = 14, zBody = 168, zHead = 186; // base plate, body, head (along +z from the rear wall)
+    const zIns = zHead + 62, zStud = zIns + 14, zBar = zC - 5; // terminal insulator end, stud end, rear face of the bar
+    const yJ = Math.min(yL - 55, 860); // where the strip is bolted to the connection bar
+    p.add(B(-(hw - 30), hw - 30, yV - hh - 18, yV - hh - 6, 2, 60), 'galvDark', 'VT mounting angle on the rear wall (horizontal leg)');
+    p.add(B(-(hw - 30), hw - 30, yV - hh - 18, yV + hh + 18, 2, 8), 'galvDark', 'VT mounting angle on the rear wall (vertical leg)');
+    for (const x of spread(-(hw - 60), hw - 60, 4)) p.add(C(7, 7, 6, 'z', x, yV + hh + 8, 11, 6), 'zinc', 'Fixing bolt of the VT mounting angle (rear wall)');
+    xs.forEach((x, k) => {
+      const ph = `L${k + 1}`;
+      p.add(RB(x - hv - 8, x + hv + 8, yV - hh - 6, yV + hh + 6, zB0, zB1, 2, 1), 'galvDark', `VT ${ph} base plate`);
+      for (const dx of [-(hv + 1), hv + 1]) for (const dy of [-(hh), hh]) p.add(C(5.5, 5.5, 7, 'z', x + dx, yV + dy, zB1 + 3, 6), 'zinc', `VT ${ph} fixing bolt (base plate to the mounting angle)`);
+      p.add(RB(x - hv, x + hv, yV - hh, yV + hh, zB1, zBody - 30, 10, 2), 'resin', `Voltage transformer 4MR ${ph} (cast resin, single-pole, block type, insulation class E)`);
+      p.add(RB(x - hv + 10, x + hv - 10, yV - hh + 10, yV + hh - 10, zBody - 32, zBody, 12, 2), 'resin', `Voltage transformer 4MR ${ph} (cast resin, single-pole, block type, insulation class E)`);
+      p.add(RB(x - 30, x + 30, yV - 30, yV + 30, zBody - 2, zHead, 8, 2), 'resin', `Voltage transformer 4MR ${ph}: head`);
+      p.add(L([[26, 0], [32, 12], [24, 22], [32, 34], [24, 44], [20, 62]], 'z', x, yV, zHead), 'resin', `VT ${ph} primary terminal insulator (A)`);
+      p.add(C(9, 9, zStud - zIns, 'z', x, yV, (zIns + zStud) / 2, 6), 'silver', `VT ${ph} primary terminal stud A (M8)`);
+      // flat strip: lug on the stud, forward, down, lug on the rear face of the connection bar
+      const t = 5, w = 30, zS0 = zIns + 2, zS1 = zIns + 2 + t;
+      p.add(B(x - w / 2, x + w / 2, yV - 18, yV + 18, zS0, zS1), 'copper', `VT ${ph} primary connection strip (lug on the terminal stud)`);
+      p.add(B(x - w / 2, x + w / 2, yV - 18, yV - 18 + t, zS1, zBar - t), 'copper', `VT ${ph} primary connection strip`);
+      p.add(B(x - w / 2, x + w / 2, yJ - 18, yV - 18 + t, zBar - t, zBar), 'copper', `VT ${ph} primary connection strip (lug on the connection bar)`);
+      p.add(C(8, 8, 6.5, 'z', x, yV, zS1 + 3.25, 6), 'zinc', `VT ${ph} terminal nut M8 with washer (20 Nm check)`);
+      p.add(C(4, 4, 12, 'z', x, yV, zS1 + 6, 8), 'silver', `VT ${ph} primary terminal stud A (M8)`);
+      // secondary side: terminal box under the body near the base, cover, terminals, wire to the wiring duct
+      p.add(RB(x - 46, x + 46, yV - hh - 4, yV - hh + 0.5, zB1 + 12, zB1 + 62, 3, 1), 'black', `VT ${ph} secondary terminal box (a, n, da, dn)`);
+      p.add(B(x - 42, x + 42, yV - hh - 5, yV - hh - 4, zB1 + 16, zB1 + 58), 'glass', `VT ${ph} secondary terminal cover (transparent, sealable)`);
+      p.add(B(x - 40, x + 40, yV - 30, yV + 30, zBody - 26, zBody - 25), 'white', `VT ${ph} rating plate (copy inside the HV door)`);
+      p.add(C(4, 4, 10, 'x', x - hv - 13, yV - hh, zB1 - 2, 8), 'zinc', `VT ${ph} earthing terminal (base plate)`);
+    });
+    anchor('vtPrim', p, xs.map((x) => ({p: N(x, yJ, zBar - 5), n: N(0, 0, -1)})), {nut: 15}); // strip to bar: bolt + nut through the bar
     p.finish();
   }
   {
@@ -1428,10 +1443,10 @@ export function buildPanel(mats, opts) {
       v.add(L([[24, 0], [34, 0], [34, 130], [24, 130]], 'z', x, 300, zP - 90, 24), 'resin', 'VT bushing through the partition to the connection compartment');
       // lead beside the CTs (between the phases) up and back to the front face of the cable connection bar
       const xl = x + (x > 0 ? 1 : -1) * (pitch / 2 - 10); // L3 to the right, clear of the earthing-switch drive rod
-      cyl(v, 5, [Math.min(xl, x + (x > 0 ? 24 : -24)), 300, zP - 95], [Math.max(xl, x + (x > 0 ? 24 : -24)), 300, zP - 95], 'copper', 'Lead from the VT bushing to the cable connection (M8)');
-      cyl(v, 5, [xl, 300, zP - 95], [xl, 700, zP - 95], 'copper', 'Lead from the VT bushing to the cable connection (M8)');
-      cyl(v, 5, [xl, 700, zC + 9], [xl, 700, zP - 95], 'copper', 'Lead from the VT bushing to the cable connection (M8)');
-      cyl(v, 5, [xl, 700, zC + 9], [x, 700, zC + 9], 'copper', 'Lead from the VT bushing to the cable connection (M8)');
+      cyl(v, 5, [Math.min(xl, x + (x > 0 ? 24 : -24)), 300, zP - 95], [Math.max(xl, x + (x > 0 ? 24 : -24)), 300, zP - 95], 'copper', 'Connecting cable from the VT bushing to the cable connection (M8); keep ≥ 100 mm (≤ 12 kV) / 160 mm (17.5 kV) from the cable-shield earths (I p. 155)');
+      cyl(v, 5, [xl, 300, zP - 95], [xl, 700, zP - 95], 'copper', 'Connecting cable from the VT bushing to the cable connection (M8); keep ≥ 100 mm (≤ 12 kV) / 160 mm (17.5 kV) from the cable-shield earths (I p. 155)');
+      cyl(v, 5, [xl, 700, zC + 9], [xl, 700, zP - 95], 'copper', 'Connecting cable from the VT bushing to the cable connection (M8); keep ≥ 100 mm (≤ 12 kV) / 160 mm (17.5 kV) from the cable-shield earths (I p. 155)');
+      cyl(v, 5, [xl, 700, zC + 9], [x, 700, zC + 9], 'copper', 'Connecting cable from the VT bushing to the cable connection (M8); keep ≥ 100 mm (≤ 12 kV) / 160 mm (17.5 kV) from the cable-shield earths (I p. 155)');
     }
     v.add(TU([[-80, 340, z1], [-80, 340, z1 - 30], [80, 340, z1 - 30], [80, 340, z1]], 6), 'steel', 'Handle of the removable VTs');
     v.finish();
